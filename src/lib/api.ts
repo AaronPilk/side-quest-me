@@ -1,0 +1,400 @@
+import {
+  DEFAULT_PREFERENCES,
+  type Profile,
+  type Outing,
+  type Candidate,
+} from "../../shared/domain";
+import { catalog } from "../../shared/catalog";
+import { recommend } from "../../shared/recommend";
+import { accessToken, DEMO, supabase } from "./auth";
+import type { Clip, Me, Offer, Redemption, Run, Reel } from "./types";
+
+const KEY = "sidequest-demo-v1";
+type DemoData = { me: Me; runs: Run[] };
+const initial = (): DemoData => ({
+  me: {
+    profile: {
+      displayName: "",
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      locale: navigator.language,
+      summary: "",
+      preferences: DEFAULT_PREFERENCES,
+      onboardingCompleted: false,
+    },
+    wallet: { xp: 0, points: 0, version: 0 },
+    roles: [],
+  },
+  runs: [],
+});
+function read(): DemoData {
+  try {
+    const data = localStorage.getItem(KEY);
+    return data ? JSON.parse(data) : initial();
+  } catch {
+    return initial();
+  }
+}
+function write(value: DemoData) {
+  localStorage.setItem(KEY, JSON.stringify(value));
+  window.dispatchEvent(new Event("sidequest-change"));
+}
+async function transaction<T>(fn: (data: DemoData) => T): Promise<T> {
+  const execute = () => {
+    const data = read();
+    const result = fn(data);
+    write(data);
+    return result;
+  };
+  return navigator.locks ? navigator.locks.request(KEY, execute) : execute();
+}
+export async function request<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const token = await accessToken();
+  const response = await fetch(path, {
+    ...init,
+    headers: {
+      ...(init.body && typeof init.body === "string"
+        ? { "Content-Type": "application/json" }
+        : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init.headers,
+    },
+  });
+  const body = (await response.json().catch(() => null)) as {
+    error?: string | { message?: string };
+  } | null;
+  if (!response.ok)
+    throw new Error(
+      (typeof body?.error === "string" ? body.error : body?.error?.message) ||
+        `Request failed (${response.status}). Try again.`,
+    );
+  return body as T;
+}
+const mutation = <T>(
+  path: string,
+  body: unknown,
+  key: string = crypto.randomUUID(),
+) =>
+  request<T>(path, {
+    method: "POST",
+    headers: { "Idempotency-Key": key },
+    body: JSON.stringify(body),
+  });
+export const demoOffers: Offer[] = [
+  {
+    id: "demo-discount",
+    title: "A little off your next outing",
+    merchant: "Example neighborhood spot",
+    points: 20,
+    terms:
+      "Simulated example: 10% off an eligible purchase. A live offer would disclose minimum spend, discount cap, exclusions and expiry. No business agreement or redeemable code exists.",
+    demo: true,
+    available: 0,
+  },
+  {
+    id: "demo-coffee",
+    title: "Your next coffee",
+    merchant: "Example coffee counter",
+    points: 40,
+    terms:
+      "Simulated example: one regular coffee. No real merchant, stock or voucher. Viewing this example does not spend points.",
+    demo: true,
+    available: 0,
+  },
+  {
+    id: "demo-meal",
+    title: "Dinner, on your adventures",
+    merchant: "Example local kitchen",
+    points: 100,
+    terms:
+      "Simulated example: a meal. A funded live offer would specify inclusions, any extra charges, location and expiration.",
+    demo: true,
+    available: 0,
+  },
+  {
+    id: "demo-date",
+    title: "Make a date of it",
+    merchant: "Example activity partner",
+    points: 250,
+    terms:
+      "Simulated example: a date activity. No partnership is implied. This example cannot reserve stock or issue a code.",
+    demo: true,
+    available: 0,
+  },
+];
+export function eligibility(runs: Run[], familyId: string) {
+  const rewarded = runs.filter((r) => (r.rewardDecision?.xp || 0) > 0);
+  if (
+    rewarded.some(
+      (r) =>
+        r.quest.familyId === familyId &&
+        Date.now() - Date.parse(r.completedAt!) < 30 * 86400000,
+    )
+  )
+    return "family_cooldown";
+  if (
+    rewarded.filter(
+      (r) =>
+        r.completedAt?.slice(0, 10) === new Date().toISOString().slice(0, 10),
+    ).length >= 3
+  )
+    return "daily_cap";
+  return "eligible";
+}
+export const api = {
+  me: async (): Promise<Me> => (DEMO ? read().me : request("/api/me")),
+  saveProfile: async (profile: Profile) =>
+    DEMO
+      ? transaction((d) => {
+          d.me.profile = profile;
+          return d.me;
+        })
+      : request<Me>("/api/me", {
+          method: "PATCH",
+          body: JSON.stringify(profile),
+        }),
+  quests: async (outing: Outing): Promise<Candidate[]> =>
+    DEMO
+      ? recommend(outing, read().me.profile.preferences)
+      : mutation("/api/quests/recommend", { outing }),
+  runs: async (): Promise<Run[]> =>
+    DEMO ? read().runs : request("/api/quest-runs"),
+  run: async (id: string): Promise<Run> => {
+    if (!DEMO) return request(`/api/quest-runs/${id}`);
+    const run = read().runs.find((r) => r.id === id);
+    if (!run)
+      throw new Error("This quest could not be found. Return to your journal.");
+    if (run.render?.status === "processing") {
+      try {
+        const result = await request<Reel>(
+          `/api/local-media/outputs/${run.render.id}/metadata`,
+        );
+        await transaction((d) => {
+          d.runs.find((r) => r.id === id)!.render = result;
+        });
+        run.render = result;
+      } catch {
+        if (Date.now() - (run.render.startedAt || 0) > 360000) {
+          run.render = {
+            ...run.render,
+            status: "failed",
+            error:
+              "Rendering was interrupted. Your original clips are saved; retry to build your reel.",
+          };
+          await transaction((d) => {
+            d.runs.find((r) => r.id === id)!.render = run.render;
+          });
+        }
+      }
+    }
+    return run;
+  },
+  accept: async (
+    quest: Candidate,
+    outing: Outing,
+    key: string,
+  ): Promise<Run> =>
+    DEMO
+      ? transaction((d) => {
+          const active = d.runs.find((r) =>
+            ["accepted", "in_progress"].includes(r.status),
+          );
+          if (active) {
+            if (active.quest.id === quest.id) return active;
+            throw new Error(
+              "You have a quest in progress. Continue it or abandon it first.",
+            );
+          }
+          const selected = recommend(outing, d.me.profile.preferences).find(
+            (q) => q.id === quest.id,
+          );
+          if (!selected)
+            throw new Error(
+              "This quest no longer fits. Find your quests again.",
+            );
+          const run: Run = {
+            id: crypto.randomUUID(),
+            quest: structuredClone(catalog.find((q) => q.id === quest.id)!),
+            outing,
+            role: d.me.profile.preferences.role,
+            status: "accepted",
+            clips: [],
+            createdAt: new Date().toISOString(),
+          };
+          d.runs.unshift(run);
+          return run;
+        })
+      : mutation(
+          "/api/quest-runs",
+          {
+            templateId: quest.id,
+            outing,
+            expectedCampaign: quest.sponsorCampaign || null,
+          },
+          key,
+        ),
+  abandon: async (id: string): Promise<void> => {
+    if (!DEMO) {
+      await mutation(`/api/quest-runs/${id}/abandon`, {});
+      return;
+    }
+    await transaction((d) => {
+      const r = d.runs.find((r) => r.id === id)!;
+      r.status = "abandoned";
+    });
+  },
+  saveClip: async (runId: string, clip: Clip): Promise<Run> =>
+    DEMO
+      ? transaction((d) => {
+          const r = d.runs.find((r) => r.id === runId)!;
+          r.clips = [...r.clips.filter((c) => c.slot !== clip.slot), clip].sort(
+            (a, b) => a.slot - b.slot,
+          );
+          if (r.status === "accepted") r.status = "in_progress";
+          return r;
+        })
+      : mutation(`/api/quest-runs/${runId}/clips`, { clip }),
+  complete: async (
+    id: string,
+    declaration: string,
+    key: string,
+  ): Promise<Run> =>
+    DEMO
+      ? transaction((d) => {
+          const r = d.runs.find((r) => r.id === id)!;
+          if (r.status === "finalized") return r;
+          if (
+            !["accepted", "in_progress"].includes(r.status) ||
+            r.clips.length !== 3 ||
+            r.clips.some((c) => c.end - c.start < 5 || c.end - c.start > 15)
+          )
+            throw new Error(
+              "Save three usable clips before completing your quest.",
+            );
+          if (!declaration.trim())
+            throw new Error("Confirm your honest attempt first.");
+          const reason = eligibility(d.runs, r.quest.familyId);
+          r.rewardDecision = {
+            ...(reason === "eligible" ? r.quest.award : { xp: 0, points: 0 }),
+            reason,
+          };
+          r.status = "finalized";
+          r.completedAt = new Date().toISOString();
+          d.me.wallet.xp += r.rewardDecision.xp;
+          d.me.wallet.points += r.rewardDecision.points;
+          d.me.wallet.version++;
+          return r;
+        })
+      : mutation(
+          `/api/quest-runs/${id}/complete`,
+          { declaration, confirmed: true },
+          key,
+        ),
+  render: async (run: Run): Promise<Reel> => {
+    if (!DEMO) return mutation(`/api/quest-runs/${run.id}/renders`, {});
+    const previous = run.render?.status === "ready" ? run.render : undefined;
+    const pending: Reel = {
+      id: crypto.randomUUID(),
+      status: "processing",
+      startedAt: Date.now(),
+    };
+    if (!previous)
+      await transaction((d) => {
+        d.runs.find((r) => r.id === run.id)!.render = pending;
+      });
+    try {
+      const reel = await request<Reel>("/api/local-media/renders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Sidequest-Demo": "1",
+        },
+        body: JSON.stringify({
+          version: 1,
+          runId: run.id,
+          revision: 1,
+          outputId: pending.id,
+          title: run.quest.title,
+          ...(run.quest.sponsorDisclosure
+            ? { sponsorDisclosure: run.quest.sponsorDisclosure }
+            : {}),
+          clips: run.clips.map((c) => ({
+            assetId: c.id,
+            start: c.start,
+            end: c.end,
+            mute: c.mute,
+            fit: c.fit,
+            crop: c.crop,
+            label: c.caption,
+          })),
+        }),
+      });
+      await transaction((d) => {
+        d.runs.find((r) => r.id === run.id)!.render = reel;
+      });
+      return reel;
+    } catch (e) {
+      await transaction((d) => {
+        d.runs.find((r) => r.id === run.id)!.render = previous || {
+          ...pending,
+          status: "failed",
+          error:
+            "The reel could not be built. Your clips are saved. Start the local renderer and retry.",
+        };
+      });
+      throw e;
+    }
+  },
+  offers: async (): Promise<Offer[]> =>
+    DEMO ? demoOffers : request("/api/rewards"),
+  redemptions: async (): Promise<Redemption[]> =>
+    DEMO ? [] : request("/api/redemptions"),
+  redeem: async (
+    offerId: string,
+    offerVersion: number,
+    key: string,
+  ): Promise<Redemption> => {
+    if (DEMO) throw new Error("Demo offers cannot be redeemed.");
+    return mutation("/api/redemptions", { offerId, offerVersion }, key);
+  },
+  cancelRedemption: async (id: string) =>
+    mutation(`/api/redemptions/${id}/cancel`, {}),
+  redemptionToken: async (id: string) =>
+    request<{ token: string }>(`/api/redemptions/${id}/token`),
+  share: async (runId: string): Promise<{ id: string; url: string }> => {
+    if (DEMO)
+      throw new Error(
+        "Hosted links need a connected deployment. Save your actual video locally instead.",
+      );
+    return mutation(`/api/quest-runs/${runId}/share`, {});
+  },
+  revokeShare: async (id: string) =>
+    request(`/api/share-links/${id}`, { method: "DELETE" }),
+  deleteRunMedia: async (id: string) => {
+    if (!DEMO)
+      return request(`/api/quest-runs/${id}/media`, { method: "DELETE" });
+    await request(`/api/local-media/runs?runId=${id}`, {
+      method: "DELETE",
+      headers: { "X-Sidequest-Demo": "1" },
+    });
+    await transaction((d) => {
+      const run = d.runs.find((r) => r.id === id)!;
+      run.clips = [];
+      run.render = undefined;
+    });
+  },
+  deleteAccount: async () => {
+    if (DEMO) {
+      await request("/api/local-media/account", {
+        method: "DELETE",
+        headers: { "X-Sidequest-Demo": "1" },
+      });
+      localStorage.removeItem(KEY);
+      return;
+    }
+    await request("/api/me", { method: "DELETE" });
+    await supabase?.auth.signOut();
+  },
+};

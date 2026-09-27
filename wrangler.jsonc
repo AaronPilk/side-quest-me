@@ -1,0 +1,87 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sidequest",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/s/*"],
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1,
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1,
+    },
+  },
+  "vars": {
+    "APP_ENV": "development",
+    "LAUNCH_CURRENCY": "USD",
+    "LAUNCH_AREA": "",
+    "APP_ORIGIN": "http://localhost:5173",
+  },
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "sidequest-development-media",
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "RENDER_QUEUE",
+        "queue": "sidequest-development-renders",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "sidequest-development-renders",
+        "max_batch_size": 1,
+        "max_retries": 3,
+        "max_concurrency": 1,
+      },
+    ],
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"],
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RENDERER",
+        "class_name": "SidequestRenderer",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SidequestRenderer"],
+    },
+  ],
+  "containers": [
+    {
+      "class_name": "SidequestRenderer",
+      "image": "./renderer/Dockerfile",
+      "max_instances": 1,
+      "instance_type": "basic",
+      "image_build_context": ".",
+    },
+  ],
+  "ratelimits": [
+    {
+      "name": "API_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 60,
+        "period": 60,
+      },
+    },
+  ],
+  "dev": {
+    "enable_containers": false,
+  },
+}

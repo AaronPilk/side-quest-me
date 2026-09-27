@@ -1,0 +1,47 @@
+name: Deploy selected environment
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Configured GitHub environment with isolated resources
+        type: choice
+        options: [staging, production]
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint && npm run typecheck && npm test
+      - name: Configure explicit target
+        run: node scripts/configure-environment.mjs
+        env:
+          SIDEQUEST_ENV: ${{ inputs.environment }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          SIDEQUEST_WORKER: ${{ vars.SIDEQUEST_WORKER }}
+          SIDEQUEST_BUCKET: ${{ vars.SIDEQUEST_BUCKET }}
+          SIDEQUEST_QUEUE: ${{ vars.SIDEQUEST_QUEUE }}
+          SIDEQUEST_ORIGIN: ${{ vars.SIDEQUEST_ORIGIN }}
+          SIDEQUEST_AREA: ${{ vars.SIDEQUEST_AREA }}
+      - name: Build configured target
+        run: npm run build
+        env:
+          SIDEQUEST_CONFIG: .local/wrangler.target.json
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+      - name: Deploy configured bundle
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

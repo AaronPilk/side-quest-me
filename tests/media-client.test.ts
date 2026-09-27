@@ -1,0 +1,108 @@
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+vi.mock("../src/lib/auth", () => ({
+  accessToken: vi.fn(async () => "session-test-token"),
+}));
+import { accessToken } from "../src/lib/auth";
+import { fetchMediaBlob, mediaNeedsAuth } from "../src/components/PrivateMedia";
+
+beforeEach(() => {
+  vi.stubGlobal("window", {
+    location: {
+      href: "https://app.example.test/journal",
+      origin: "https://app.example.test",
+    },
+  });
+  vi.mocked(accessToken).mockResolvedValue("session-test-token");
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
+
+describe("private media transport", () => {
+  it("attaches a session only to the same-origin private media API", async () => {
+    const request = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(new Uint8Array([1, 2, 3]), {
+          headers: { "content-type": "video/mp4" },
+        }),
+    );
+    vi.stubGlobal("fetch", request);
+    const blob = await fetchMediaBlob("/api/media/asset-id");
+    expect(blob.size).toBe(3);
+    expect(request.mock.calls[0]?.[1]).toMatchObject({
+      headers: { Authorization: "Bearer session-test-token" },
+      credentials: "omit",
+      redirect: "error",
+    });
+    expect(mediaNeedsAuth("https://untrusted.example/api/media/asset-id")).toBe(
+      false,
+    );
+  });
+  it("does not leak bearer tokens to public or external media", async () => {
+    const request = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(new Uint8Array([1]), {
+          headers: { "content-type": "image/jpeg" },
+        }),
+    );
+    vi.stubGlobal("fetch", request);
+    await fetchMediaBlob("https://untrusted.example/image.jpg", "image");
+    expect(accessToken).not.toHaveBeenCalled();
+    expect(request.mock.calls[0]?.[1]).toMatchObject({
+      headers: {},
+      credentials: "omit",
+    });
+  });
+  it("requires a current session for private paths", async () => {
+    vi.mocked(accessToken).mockResolvedValue(undefined);
+    const request = vi.fn();
+    vi.stubGlobal("fetch", request);
+    await expect(fetchMediaBlob("/api/media/asset-id")).rejects.toThrow(
+      "Sign in again",
+    );
+    expect(request).not.toHaveBeenCalled();
+  });
+  it("never saves a login page as an MP4", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response("<html>Sign in</html>", {
+            headers: { "content-type": "text/html" },
+          }),
+      ),
+    );
+    await expect(fetchMediaBlob("/api/media/asset-id")).rejects.toThrow(
+      "could not be loaded",
+    );
+  });
+  it("bounds the actual stream even when content-length is missing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(new Uint8Array(2 * 1024 * 1024 + 1), {
+            headers: { "content-type": "image/jpeg" },
+          }),
+      ),
+    );
+    await expect(
+      fetchMediaBlob("/api/media/asset-id?thumbnail", "image"),
+    ).rejects.toThrow("download limit");
+  });
+  it("rejects empty media", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(new Uint8Array(), {
+            headers: { "content-type": "video/mp4" },
+          }),
+      ),
+    );
+    await expect(fetchMediaBlob("/api/media/asset-id")).rejects.toThrow(
+      "empty",
+    );
+  });
+});

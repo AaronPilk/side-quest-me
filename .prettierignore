@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.local/
+.wrangler/
+playwright-report/
+test-results/
+worker-configuration.d.ts
+shared/database.generated.ts
+package-lock.json
