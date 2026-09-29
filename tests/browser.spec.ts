@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { DEFAULT_PREFERENCES } from "../shared/domain";
 import { catalog } from "../shared/catalog";
+import { findDefaultQuests } from "./quest-wizard-helpers";
 
 const fixtures = [
   "portrait-silent.mp4",
@@ -23,6 +24,22 @@ async function assertNoOverflow(page: Page) {
       () => document.documentElement.scrollWidth <= window.innerWidth + 1,
     ),
   ).toBe(true);
+}
+async function visitYourSpace(page: Page, name: string) {
+  const desktopLink = page
+    .locator(".desktop-space")
+    .getByRole("link", { name, exact: true });
+  if (await desktopLink.isVisible()) {
+    await desktopLink.click();
+    return;
+  }
+  const menu = page.locator(".space-menu");
+  const link = menu.getByRole("link", { name, exact: true });
+  if (!(await link.isVisible()))
+    await menu.locator('summary[aria-label="Your space"]').click();
+  await expect(link).toBeVisible();
+  await link.click();
+  await expect(menu).not.toHaveAttribute("open");
 }
 
 test("ten-question onboarding works without import, preserves answers and exposes four tabs", async ({
@@ -56,7 +73,7 @@ test("ten-question onboarding works without import, preserves answers and expose
   await expect(
     page.getByRole("navigation", { name: "Primary" }).getByRole("link"),
   ).toHaveCount(4);
-  await page.getByRole("button", { name: "Find my quests" }).click();
+  await findDefaultQuests(page);
   await expect(page.locator(".quest-card")).toHaveCount(2);
   await expect(page.locator(".quest-card").first()).toContainText(
     "No purchase needed",
@@ -67,16 +84,16 @@ test("ten-question onboarding works without import, preserves answers and expose
 
 test("responsive screens, keyboard focus and demo offers stay truthful", async ({
   page,
-}) => {
+}, testInfo) => {
   await explore(page);
   for (const width of [320, 390, 768, 1280]) {
     await page.setViewportSize({ width, height: 844 });
     await assertNoOverflow(page);
     await expect(
-      page.getByRole("button", { name: "Find my quests" }),
+      page.getByRole("button", { name: "Continue", exact: true }),
     ).toBeVisible();
     await page.screenshot({
-      path: `test-results/quest-${width}.png`,
+      path: testInfo.outputPath(`quest-${width}.png`),
       fullPage: true,
     });
   }
@@ -87,16 +104,16 @@ test("responsive screens, keyboard focus and demo offers stay truthful", async (
   });
   await assertNoOverflow(page);
   await expect(
-    page.getByRole("button", { name: "Find my quests" }),
+    page.getByRole("button", { name: "Continue", exact: true }),
   ).toBeVisible();
   await page.screenshot({
-    path: "test-results/quest-large-text-320.png",
+    path: testInfo.outputPath("quest-large-text-320.png"),
     fullPage: true,
   });
   await page.evaluate(() => {
     document.documentElement.style.fontSize = "";
   });
-  await page.getByRole("link", { name: "Rewards", exact: true }).click();
+  await visitYourSpace(page, "Rewards");
   await expect(page.getByText("SIMULATED AVAILABLE POINTS")).toBeVisible();
   await page.locator(".reward-card").first().click();
   await expect(
@@ -106,7 +123,7 @@ test("responsive screens, keyboard focus and demo offers stay truthful", async (
     page.getByRole("button", { name: /Redeem.*points/ }),
   ).toHaveCount(0);
   await assertNoOverflow(page);
-  await page.getByRole("link", { name: "Profile", exact: true }).click();
+  await visitYourSpace(page, "Account settings");
   await page
     .getByRole("textbox", { name: "What should we call you?" })
     .fill("A very long display name that must wrap without hiding actions");
@@ -121,14 +138,14 @@ test("responsive screens, keyboard focus and demo offers stay truthful", async (
     await page.evaluate(() => document.activeElement !== document.body),
   ).toBe(true);
   await page.screenshot({
-    path: "test-results/operator-denied-320.png",
+    path: testInfo.outputPath("operator-denied-320.png"),
     fullPage: true,
   });
 });
 
 test("three real uploads complete once, render a portrait MP4, download, and stay in the journal", async ({
   page,
-}) => {
+}, testInfo) => {
   test.skip(
     fixtures.some((file) => !existsSync(file)),
     "Run node scripts/render-fixtures.mjs first to create synthetic videos.",
@@ -145,7 +162,7 @@ test("three real uploads complete once, render a portrait MP4, download, and sta
     });
   });
   await explore(page);
-  await page.getByRole("button", { name: "Find my quests" }).click();
+  await findDefaultQuests(page);
   await page.locator(".quest-card").first().click();
   await page.getByRole("button", { name: "Accept quest", exact: true }).click();
   await expect(page).toHaveURL(/\/runs\/[a-f0-9-]+$/);
@@ -284,17 +301,17 @@ test("three real uploads complete once, render a portrait MP4, download, and sta
   expect(Number(metadata.format.duration)).toBeGreaterThanOrEqual(24);
   expect(Number(metadata.format.duration)).toBeLessThan(30);
   await page.screenshot({
-    path: "test-results/completed-reel-390.png",
+    path: testInfo.outputPath("completed-reel-390.png"),
     fullPage: true,
   });
   await page.reload();
   await expect(
     page.getByText("+100 XP · +10 points", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Journal", exact: true }).click();
+  await visitYourSpace(page, "Private journal");
   await expect(page.locator(".journal-card")).toHaveCount(1);
   await expect(page.getByText("Reel ready", { exact: false })).toBeVisible();
-  await page.getByRole("link", { name: "Rewards", exact: true }).click();
+  await visitYourSpace(page, "Rewards");
   await expect(page.locator(".wallet-card strong")).toHaveText("10points");
   expect(errors).toEqual([]);
 });
@@ -315,7 +332,7 @@ test("synthetic browser recording produces a usable clip and releases camera and
     };
   });
   await explore(page);
-  await page.getByRole("button", { name: "Find my quests" }).click();
+  await findDefaultQuests(page);
   await page.locator(".quest-card").first().click();
   await page.getByRole("button", { name: "Accept quest", exact: true }).click();
   await page
@@ -577,11 +594,9 @@ test("operator forms submit agreements and inventory; review decisions require o
     funding_reference: "fixture-agreement-123",
   });
   await page.getByText("Create a funded offer", { exact: true }).click();
-  const offerForm = page
-    .locator("form")
-    .filter({
-      has: page.getByRole("combobox", { name: /^Approved provider/ }),
-    });
+  const offerForm = page.locator("form").filter({
+    has: page.getByRole("combobox", { name: /^Approved provider/ }),
+  });
   await offerForm
     .getByRole("combobox", { name: /^Approved provider/ })
     .selectOption(providerId);

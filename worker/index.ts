@@ -6,7 +6,7 @@ import { SignJWT, jwtVerify } from "jose";
 import {
   DEFAULT_PREFERENCES,
   outingSchema,
-  profileSchema,
+  profilePatchSchema,
   questVariantSchema,
   categorySchema,
 } from "../shared/domain";
@@ -39,6 +39,11 @@ import {
   MediaRouteError,
 } from "./media";
 import { consumeRenderQueue, dispatchPendingRenders } from "./render-queue";
+import {
+  registerCommunityPublic,
+  registerCommunityPrivate,
+  COMMUNITY_PRIVATE_ROUTE,
+} from "./community";
 export { SidequestRenderer } from "./media";
 
 const app = new Hono<AppBindings>();
@@ -130,8 +135,10 @@ app.get("/api/quests/:templateId", async (c) => {
     );
   return c.json(data.content);
 });
+registerCommunityPublic(app);
 app.use("/api/*", async (c, next) => {
   const knownRoutes = [
+    COMMUNITY_PRIVATE_ROUTE,
     /^\/api\/(me|wallet|quests|quests\/recommend|quest-runs|quest-runs\/active|rewards|redemptions|operator)$/,
     /^\/api\/quest-runs\/[^/]+(?:\/(abandon|uploads|clips|complete|renders|share|media))?$/,
     /^\/api\/media\/[^/]+(?:\/(upload|finalize|playback))?$/,
@@ -190,6 +197,7 @@ app.use("/api/*", async (c, next) => {
   }
   await next();
 });
+registerCommunityPrivate(app);
 async function me(c: AppContext) {
   const db = c.get("serviceDb");
   const init = await db.rpc("sq_upsert_profile", {
@@ -232,19 +240,23 @@ async function me(c: AppContext) {
 }
 app.get("/api/me", async (c) => c.json(await me(c)));
 app.patch("/api/me", async (c) => {
-  const p = await json(c, profileSchema);
+  const p = await json(c, profilePatchSchema);
   const { error } = await c
     .get("userDb")
     .from("profiles")
     .update({
-      display_name: p.displayName,
-      timezone: p.timezone,
-      locale: p.locale,
-      imported_summary: p.summary,
-      preferences: p.preferences,
-      onboarding_complete: p.onboardingCompleted,
+      ...(p.displayName !== undefined ? { display_name: p.displayName } : {}),
+      ...(p.timezone !== undefined ? { timezone: p.timezone } : {}),
+      ...(p.locale !== undefined ? { locale: p.locale } : {}),
+      ...(p.summary !== undefined ? { imported_summary: p.summary } : {}),
+      ...(p.preferences !== undefined ? { preferences: p.preferences } : {}),
+      ...(p.onboardingCompleted !== undefined
+        ? { onboarding_complete: p.onboardingCompleted }
+        : {}),
     })
-    .eq("id", c.get("actor"));
+    .eq("id", c.get("actor"))
+    .select("id")
+    .single();
   if (error) dbError(error.message);
   return c.json(await me(c));
 });
@@ -255,7 +267,15 @@ app.delete("/api/me", async (c) => {
   return c.json(result);
 });
 app.post("/api/quests/recommend", async (c) => {
-  const { outing } = await json(c, z.object({ outing: outingSchema }).strict());
+  const { outing, templateId } = await json(
+    c,
+    z
+      .object({
+        outing: outingSchema,
+        templateId: z.string().max(120).optional(),
+      })
+      .strict(),
+  );
   const profile = (await me(c)).profile;
   const { data: published, error } = await c
     .get("userDb")
@@ -278,7 +298,11 @@ app.post("/api/quests/recommend", async (c) => {
       attemptedAt: r.created_at,
       awardedAt: r.reward_decision?.xp > 0 ? r.finalized_at : null,
     })),
-  ).filter((q) => published?.some((p) => p.id === q.id));
+    new Date(),
+    (published || [])
+      .filter((p) => !templateId || p.id === templateId)
+      .map((p) => questVariantSchema.parse(p.content)),
+  );
   for (const q of candidates) {
     const { data: campaigns, error: campaignError } = await c
       .get("userDb")
@@ -321,6 +345,7 @@ app.post("/api/quest-runs", async (c) => {
       .object({
         templateId: z.string().max(120),
         outing: outingSchema,
+        inspiredByPostId: z.uuid().optional(),
         expectedCampaign: z
           .object({ id: z.uuid(), version: z.number().int().positive() })
           .strict()
@@ -357,8 +382,18 @@ app.post("/api/quest-runs", async (c) => {
     );
   const result = await rpc(c, "sq_accept_run", {
     template_id: input.templateId,
-    outing: { ...input.outing, role: current.profile.preferences.role },
+    outing: {
+      ...input.outing,
+      role:
+        current.profile.preferences.role &&
+        quest.roles.includes(current.profile.preferences.role)
+          ? current.profile.preferences.role
+          : null,
+    },
     expected_campaign: input.expectedCampaign,
+    ...(input.inspiredByPostId
+      ? { inspired_by_post: input.inspiredByPostId }
+      : {}),
   });
   return c.json(await runDto(c, result.run));
 });

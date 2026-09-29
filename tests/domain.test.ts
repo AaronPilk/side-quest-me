@@ -385,3 +385,261 @@ describe("award eligibility preview boundaries", () => {
     ).toBe("2026-09-28T00:00:00.000Z");
   });
 });
+
+describe("confirmed, explainable profile matching", () => {
+  const daytime = outing({
+    category: "daytime",
+    group: "friends",
+    participants: 4,
+    durationMinutes: 90,
+  });
+
+  it("keeps unknown answers neutral and never assigns a role or invents fit claims", () => {
+    const candidates = recommend(daytime, prefs());
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const candidate of candidates) {
+      expect(candidate.selectedRole).toBeNull();
+      expect(candidate.whyFits).toEqual([
+        "Works at home",
+        "No purchase needed",
+      ]);
+    }
+    expect(
+      recommend(
+        daytime,
+        prefs({
+          premises: ["not_sure"],
+          skills: ["none"],
+          approach: "depends",
+          preparation: "varies",
+        }),
+      ),
+    ).toEqual(candidates);
+  });
+
+  it("normalizes old preselected defaults without claiming that they were confirmed", () => {
+    const legacy = {
+      categories: [],
+      premises: [],
+      humor: [],
+      humorExamples: "",
+      usualIntensity: "depends",
+      role: "rotate",
+      approach: "depends",
+      preparation: "varies",
+      skills: [],
+      otherSkill: "",
+      sharing: "decide_later",
+      exclusions: [],
+      otherExclusion: "",
+    };
+    expect(recommend(daytime, legacy as unknown as Preferences)).toEqual(
+      recommend(daytime, prefs()),
+    );
+  });
+
+  it("ranks confirmed interests separately from skills and willingness", () => {
+    const interest = recommend(daytime, prefs({ interests: ["games"] }));
+    const skill = recommend(daytime, prefs({ skills: ["games"] }));
+    expect(interest[0].familyId).toBe("day_secret_expert");
+    expect(skill[0].familyId).toBe("day_secret_expert");
+    expect(interest[0].whyFits[0]).toBe("Matches your interest in games");
+    expect(skill[0].whyFits[0]).toBe("Can use your games skills");
+    expect(interest[0].whyFits.join(" ")).not.toContain("you'd try");
+    expect(interest[0].whyFits.join(" ")).not.toContain("skills");
+    expect(
+      recommend(daytime, prefs({ interests: ["making"] }))[0].familyId,
+    ).toBe("day_absurd_commercial");
+    const willingness = recommend(
+      daytime,
+      prefs({
+        interests: ["making"],
+        premises: ["secret_expert"],
+      }),
+    );
+    expect(willingness[0].familyId).toBe("day_secret_expert");
+    expect(willingness[0].whyFits[0]).toBe(
+      "Matches a premise you'd try: a secret-expert game",
+    );
+  });
+
+  it("uses confirmed humor without promoting entertainment enjoyment to willingness", () => {
+    const candidates = recommend(daytime, prefs({ humor: ["skill_reveals"] }));
+    expect(candidates[0].familyId).toBe("day_secret_expert");
+    expect(candidates[0].whyFits[0]).toBe(
+      "Matches your taste for skill reveals",
+    );
+    expect(candidates[0].whyFits.join(" ")).not.toContain("you'd try");
+  });
+
+  it("does not interpret negation, guesses, viewing habits or design requests as structured answers", () => {
+    const neutral = recommend(daytime, prefs());
+    for (const prose of [
+      "I do not like games or sports.",
+      "Perhaps they like games; actual skills and willingness are unknown.",
+      "I watch prank videos, but do not want to perform pranks.",
+      "Design an app about games and add a camera-person selector.",
+    ]) {
+      const profile = {
+        displayName: "",
+        timezone: "UTC",
+        locale: "en",
+        summary: prose,
+        preferences: prefs({ humorExamples: prose, otherSkill: prose }),
+        onboardingCompleted: true,
+      };
+      expect(recommend(daytime, profile.preferences)).toEqual(neutral);
+    }
+  });
+
+  it("explains only a supported confirmed role", () => {
+    const candidates = recommend(outing(), prefs({ role: "mastermind" }));
+    const supported = candidates.find((q) => q.familyId === "date_pit_crew")!;
+    const unsupported = candidates.find(
+      (q) => q.familyId === "date_menu_draft",
+    )!;
+    expect(supported.selectedRole).toBe("mastermind");
+    expect(supported.whyFits[0]).toBe("Supports your preference to organize");
+    expect(unsupported.selectedRole).toBeNull();
+    expect(unsupported.whyFits).not.toContain(
+      "Supports your preference to organize",
+    );
+  });
+
+  it("ranks preparation while keeping no-preparation willingness precise", () => {
+    const demon = outing({
+      category: "demon",
+      group: "friends",
+      participants: 4,
+      durationMinutes: 90,
+      arrangementConfirmed: true,
+    });
+    expect(recommend(demon, prefs())[0].familyId).toBe(
+      "demon_friends_write_set",
+    );
+    const setup = recommend(demon, prefs({ preparation: "proper_setup" }));
+    expect(setup[0].familyId).toBe("demon_surprise_fanclub");
+    expect(setup[0].whyFits[0]).toBe(
+      "Matches your preference for a proper setup",
+    );
+    const bold = recommend(
+      { ...daytime, intensity: "bold" },
+      prefs({ premises: ["spontaneous"] }),
+    );
+    expect(bold.flatMap((q) => q.whyFits).join(" ")).not.toContain(
+      "spontaneous",
+    );
+  });
+
+  it("uses confirmed participation style and keeps firm stranger exclusions authoritative", () => {
+    const street = outing({
+      category: "street_challenges",
+      group: "friends",
+      participants: 3,
+      setting: "venue",
+      adultEligible: true,
+      venuePermission: true,
+      confirmedVenueCostMinor: 0,
+      budgetMinor: 3000,
+    });
+    expect(recommend(street, prefs())[0].familyId).toBe("street_make_us_break");
+    const invitation = recommend(street, prefs({ approach: "invitation" }));
+    expect(invitation[0].familyId).toBe("street_meal_choice");
+    expect(invitation[0].whyFits[0]).toBe(
+      "Uses a clear invitation, as you prefer",
+    );
+    const conversation = recommend(street, prefs({ approach: "conversation" }));
+    expect(conversation[0].familyId).toBe("street_meal_choice");
+    expect(conversation[0].whyFits[0]).toBe(
+      "Fits your willingness to start a conversation",
+    );
+    expect(
+      recommend(
+        street,
+        prefs({
+          approach: "conversation",
+          premises: ["meal_challenge"],
+          exclusions: ["strangers"],
+        }),
+      ).some((q) => q.familyId === "street_meal_choice"),
+    ).toBe(false);
+    expect(
+      recommend(street, prefs({ approach: "group_only" })).map(
+        (q) => q.familyId,
+      ),
+    ).toEqual(["street_make_us_break"]);
+  });
+
+  it("does not use unknown or unsupported roles to bypass a surprise boundary", () => {
+    const quest = catalog.find((q) => q.familyId === "demon_surprise_fanclub")!;
+    const settings = outing({
+      category: "demon",
+      group: "friends",
+      participants: 4,
+      arrangementConfirmed: true,
+    });
+    expect(
+      ineligibilityReasons(
+        quest,
+        settings,
+        prefs({
+          exclusions: ["being_surprised"],
+        }),
+      ),
+    ).toContain("This quest conflicts with a boundary in your profile.");
+    expect(
+      ineligibilityReasons(
+        { ...quest, roles: ["main_character"] },
+        settings,
+        prefs({
+          role: "camera_person",
+          exclusions: ["being_surprised"],
+        }),
+      ),
+    ).toContain("This quest conflicts with a boundary in your profile.");
+  });
+
+  it("never lets profile preferences override today's category, intensity, time, budget, setting or group", () => {
+    const settings = outing({ durationMinutes: 30 });
+    const original = structuredClone(settings);
+    const candidates = recommend(
+      settings,
+      prefs({
+        categories: ["demon"],
+        usualIntensity: "full_send",
+        preparation: "proper_setup",
+        interests: ["sports"],
+        premises: ["fan_club"],
+      }),
+    );
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const candidate of candidates) {
+      expect(candidate.category).toBe("date_night");
+      expect(candidate.intensity).toBe("chill");
+      expect(candidate.durationMinutes).toBeLessThanOrEqual(30);
+      expect(candidate.estimatedCostMaxMinor).toBe(0);
+      expect(candidate.settings).toContain("home");
+      expect(candidate.minParticipants).toBeLessThanOrEqual(2);
+      expect(candidate.maxParticipants).toBeGreaterThanOrEqual(2);
+    }
+    expect(settings).toEqual(original);
+  });
+
+  it("distinguishes private performance practice from a real open-mic match", () => {
+    const candidates = recommend(
+      outing({
+        category: "demon",
+        group: "friends",
+        participants: 4,
+        arrangementConfirmed: true,
+      }),
+      prefs({ premises: ["open_mic"] }),
+    );
+    const practice = candidates.find(
+      (q) => q.familyId === "demon_friends_write_set",
+    )!;
+    expect(practice.whyFits[0]).toBe(
+      "Private practice for the open mic you'd try",
+    );
+  });
+});

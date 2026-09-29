@@ -37,6 +37,40 @@ summaries remain reviewed text and do not weaken exclusions. Unparsed custom
 boundaries stop suggestions with an explanation; no model silently interprets them.
 AI is unnecessary for the core release.
 
+Unknown survey answers now remain nullable, including participation role. Ambiguous
+historical defaults are marked for review. Imported text is edited separately from
+confirmed structured preferences; the manual review explicitly distinguishes
+interests, usable skills, willingness, and firm boundaries. Confirmed ranking factors
+produce their own explanations. See [the preference audit](PROFILES.md).
+
+## Publication is separate from participation
+
+Discover posts pin one finished reel and its accepted quest version. Creating a
+reel, choosing a sharing preference, or generating an existing hosted share link
+does not publish a post. Unpublishing leaves the private original intact. Public
+creator identity is separate from the private account profile. Try this quest
+checks the viewer's own outing and boundaries, then stores one separate attempt
+with an immutable link to the inspiring post. Reviewed original quests use the
+same eligibility system and retain separate authorship.
+
+## Licensing existing videos with manual fulfillment
+
+A creator-level opt-in and a per-video opt-in permit inquiries, not advertising
+use. Approved businesses propose structured terms for one exact reel. Negotiation
+preserves revisions; the other party accepts a specific version. Acceptance means
+pending manual payment and permissions. A separate operator records evidence of
+both before completion. Commercial access is limited to the approved brand during
+the agreed period and can be suspended. Money and explicit per-deal platform fees
+never enter XP or reward balances. There is no assumed fee rate or automatic paid
+state. Funded quests remain a distinct pre-creation campaign path.
+
+## Demonstration identities remain local
+
+The demo persona selector operates on browser-only records and actual local fixture
+media. Production mode has no persona switch or seeded community identity. SQL and
+Worker tests independently enforce authorization, idempotency, and narrow DTOs;
+browser demo success is not evidence of deployed cloud integration.
+
 ## Single release owner
 
 GitHub Actions owns checks and explicitly invoked deployments. Environment-specific

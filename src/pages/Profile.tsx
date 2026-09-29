@@ -11,6 +11,7 @@ import {
 import { api } from "../lib/api";
 import { DEMO, supabase } from "../lib/auth";
 import { levelFromXp } from "../../shared/domain";
+import { preferenceChips } from "../../shared/profile";
 import {
   Button,
   PageTitle,
@@ -24,6 +25,7 @@ export default function Profile() {
   const [name, setName] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [saveError, setSaveError] = useState(false);
   if (!data) return error ? <Notice error>{error}</Notice> : <Loading />;
   const level = levelFromXp(data.wallet.xp);
   return (
@@ -68,14 +70,16 @@ export default function Profile() {
           onSubmit={async (e) => {
             e.preventDefault();
             setBusy(true);
+            setMessage("");
+            setSaveError(false);
             try {
-              await api.saveProfile({
-                ...data.profile,
+              await api.updateProfile({
                 displayName: name ?? data.profile.displayName,
               });
               setMessage("Profile saved.");
               refresh();
             } catch (e) {
+              setSaveError(true);
               setMessage((e as Error).message);
             } finally {
               setBusy(false);
@@ -96,6 +100,29 @@ export default function Profile() {
           </Button>
         </form>
       </section>
+      <section className="section confirmed-preferences">
+        <h2>Confirmed preferences</h2>
+        {preferenceChips(data.profile.preferences).length ? (
+          <div className="review-chips">
+            {preferenceChips(data.profile.preferences).map((chip) => (
+              <span className="chip selected" key={chip}>
+                {chip}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="support">
+            No matching preferences confirmed yet. We’ll use the outing you
+            choose.
+          </p>
+        )}
+        {data.profile.preferences.legacyUnconfirmed.length > 0 && (
+          <Notice>
+            Some older answers may have been defaults. They remain unknown until
+            you confirm them; firm boundaries are preserved.
+          </Notice>
+        )}
+      </section>
       <div className="settings-list">
         <Link to="/onboarding">
           <SlidersHorizontal size={20} />
@@ -105,10 +132,10 @@ export default function Profile() {
           </span>
           <ArrowUpRight size={18} />
         </Link>
-        <Link to="/onboarding?step=import">
+        <Link to="/profile/import">
           <FileText size={20} />
           <span>
-            <strong>Bring your ChatGPT context</strong>
+            <strong>Summary & confirmed preferences</strong>
             <small>
               {data.profile.summary
                 ? "Review, edit, or remove your saved summary"
@@ -160,30 +187,34 @@ export default function Profile() {
       )}
       <button
         className="text-button danger"
+        disabled={busy}
         onClick={async () => {
           if (
             !confirm(
               DEMO
-                ? "Delete your demo profile, progress and local media? This cannot be undone."
+                ? "Reset the entire local demo? This clears all four demo views in this browser, including profiles, posts, drafts, offers and progress, and deletes every uploaded clip and rendered reel from the local renderer. The labeled starter fixtures will return. This cannot be undone."
                 : "Delete your account and revoke access to your media? Media cleanup is queued. Minimal reward accounting records are retained. This cannot be undone.",
             )
           )
             return;
           setBusy(true);
+          setMessage("");
+          setSaveError(false);
           try {
             await api.deleteAccount();
-            sessionStorage.clear();
+            if (!DEMO) sessionStorage.clear();
             location.assign("/");
           } catch (e) {
+            setSaveError(true);
             setMessage((e as Error).message);
           } finally {
             setBusy(false);
           }
         }}
       >
-        {DEMO ? "Delete local demo data" : "Delete my account"}
+        {DEMO ? "Reset entire local demo" : "Delete my account"}
       </button>
-      {message && <Notice>{message}</Notice>}
+      {message && <Notice error={saveError}>{message}</Notice>}
     </>
   );
 }

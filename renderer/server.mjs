@@ -341,6 +341,20 @@ export async function startServer(port = Number(process.env.PORT || 8789)) {
       const route = internal
         ? url.pathname.replace("/internal", "")
         : url.pathname.replace("/api/local-media", "");
+      if (route === "/demo-reel" && req.method === "GET" && !internal) {
+        // Only this synthetic, locally generated fixture is a public demo seed.
+        // No user-selected path or source recording can enter this route.
+        const thumbnail = url.searchParams.get("thumbnail") === "1";
+        return await serveFile(
+          req,
+          res,
+          path.resolve(
+            ".local/fixtures",
+            thumbnail ? "sidequest-proof.jpg" : "sidequest-proof.mp4",
+          ),
+          thumbnail ? "image/jpeg" : "video/mp4",
+        );
+      }
       if (route === "/health" && req.method === "GET")
         return json(res, {
           mode,

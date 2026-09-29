@@ -12,6 +12,7 @@ export function mediaNeedsAuth(src: string) {
   return (
     url.origin === window.location.origin &&
     (url.pathname.startsWith("/api/media/") ||
+      /^\/api\/community\/offers\/[^/]+\/media$/.test(url.pathname) ||
       /^\/api\/operator\/reviews\/[^/]+\/media\//.test(url.pathname))
   );
 }

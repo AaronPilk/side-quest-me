@@ -1,8 +1,16 @@
-import type { Preferences } from "./domain";
+import {
+  DEFAULT_PREFERENCES,
+  normalizePreferences,
+  preferencesSchema,
+  type Preferences,
+  type PreferenceKey,
+  type PreferenceSource,
+} from "./domain";
 
 export const COPY_PROFILE_PROMPT = `Help me create a profile for Sidequest, an app that recommends real-world adventures, dates, social challenges, elaborate surprises, and pranks that I might actually want to perform.
 
 Use only information genuinely available in this conversation or other context you can access. Do not invent facts or claim to remember information you cannot access.
+Requests to design a product, write hypothetical personas, or suggest features are not evidence of my own preferences. Preserve negation and uncertainty.
 
 Write a summary of no more than 250 words under these headings:
 
@@ -24,20 +32,29 @@ Briefly identify important gaps instead of filling them with assumptions. Do not
 Do not include names of other people, contact details, precise addresses, financial account information, medical details, intimate history, or other sensitive personal information. Write this for me to review and edit before I paste it into another app. Do not write recommendations or an actual quest yet.`;
 
 export interface SurveyQuestion {
-  id: keyof Preferences;
-  key: keyof Preferences;
+  id: PreferenceKey;
+  key: PreferenceKey;
   title: string;
   type: "single" | "multi";
   description?: string;
   optional: boolean;
   options: { value: string; label: string }[];
-  otherKey?: keyof Preferences;
+  otherKey?: PreferenceKey;
   otherLabel?: string;
   noneLabel?: string;
   selectAllLabel?: string;
 }
 const options = (rows: [string, string][]) =>
   rows.map(([value, label]) => ({ value, label }));
+export const INTEREST_OPTIONS = options([
+  ["sports", "Sports"],
+  ["music", "Music"],
+  ["comedy", "Comedy"],
+  ["cooking", "Cooking"],
+  ["making", "Making or designing things"],
+  ["games", "Games"],
+  ["local_knowledge", "Exploring local places"],
+]);
 export const SURVEY_QUESTIONS: SurveyQuestion[] = [
   {
     id: "categories",
@@ -146,7 +163,9 @@ export const SURVEY_QUESTIONS: SurveyQuestion[] = [
   {
     id: "skills",
     key: "skills",
-    title: "What can we build a quest around?",
+    title: "What interests or skills can we build around?",
+    description:
+      "Enjoying something and having a skill are different. Choose either, both, or leave them unknown.",
     type: "multi",
     optional: true,
     options: options([
@@ -203,22 +222,68 @@ export const SURVEY_QUESTIONS: SurveyQuestion[] = [
 ];
 export const surveyQuestions = SURVEY_QUESTIONS;
 
+export function setPreferenceAnswer<K extends PreferenceKey>(
+  preferences: Preferences,
+  key: K,
+  value: Preferences[K],
+  source: PreferenceSource,
+): Preferences {
+  const current = normalizePreferences(preferences);
+  let answer = value;
+  const neutral =
+    key === "premises" ? "not_sure" : key === "skills" ? "none" : null;
+  if (
+    neutral &&
+    Array.isArray(answer) &&
+    answer.length > 1 &&
+    (answer as string[]).includes(neutral)
+  ) {
+    answer = (
+      (answer as string[]).at(-1) === neutral
+        ? [neutral]
+        : (answer as string[]).filter((item) => item !== neutral)
+    ) as Preferences[K];
+  }
+  const sources = { ...current.sources };
+  if (answer === null || answer === "") delete sources[key];
+  else sources[key] = source;
+  return preferencesSchema.parse({
+    ...current,
+    [key]: answer,
+    sources,
+    legacyUnconfirmed: current.legacyUnconfirmed.filter((item) => item !== key),
+  });
+}
+
+export function resetPreferenceAnswer(
+  preferences: Preferences,
+  key: PreferenceKey,
+): Preferences {
+  return setPreferenceAnswer(
+    preferences,
+    key,
+    DEFAULT_PREFERENCES[key],
+    "survey",
+  );
+}
+
 /** Only explicit survey answers produce review chips. Imported guesses never override these. */
 export function preferenceChips(preferences: Preferences): string[] {
+  preferences = normalizePreferences(preferences);
   const chips: string[] = [];
-  if (preferences.humor.includes("elaborate_setups"))
-    chips.push("Likes elaborate surprises");
-  if (preferences.humor.includes("skill_reveals"))
+  if (preferences.humor?.includes("elaborate_setups"))
+    chips.push("Enjoys elaborate setups");
+  if (preferences.humor?.includes("skill_reveals"))
     chips.push("Enjoys skill reveals");
-  if (preferences.humor.includes("absurd"))
+  if (preferences.humor?.includes("absurd"))
     chips.push("Enjoys absurd situations");
   const roles = {
-    mastermind: "Usually the mastermind",
-    camera_person: "Prefers filming",
-    main_character: "Happy in the spotlight",
+    mastermind: "Prefers the mastermind role",
+    camera_person: "Prefers the camera role",
+    main_character: "Prefers the main character role",
     rotate: "Happy to rotate roles",
   };
-  chips.push(roles[preferences.role]);
+  if (preferences.role) chips.push(roles[preferences.role]);
   if (preferences.approach === "group_only")
     chips.push("Keeps it within the group");
   if (preferences.preparation === "start_now") chips.push("Likes to start now");
@@ -235,6 +300,20 @@ export function preferenceChips(preferences: Preferences): string[] {
     being_surprised: "Not the surprise target",
   };
   // Boundaries take precedence in the compact review so they never disappear behind interest chips.
-  const boundaries = preferences.exclusions.map((value) => exclusions[value]);
+  for (const interest of preferences.interests || []) {
+    const label = INTEREST_OPTIONS.find(
+      (option) => option.value === interest,
+    )?.label;
+    if (label) chips.push(`Interested in ${label.toLowerCase()}`);
+  }
+  for (const skill of preferences.skills || []) {
+    if (skill === "none") continue;
+    chips.push(
+      `Skill: ${SURVEY_QUESTIONS.find((question) => question.key === "skills")!.options.find((option) => option.value === skill)!.label}`,
+    );
+  }
+  const boundaries = (preferences.exclusions || []).map(
+    (value) => exclusions[value],
+  );
   return [...boundaries, ...chips].slice(0, 6);
 }

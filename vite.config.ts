@@ -18,6 +18,13 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: 5173,
     strictPort: true,
+    watch: {
+      ignored: [
+        "**/output/**",
+        "**/test-results/**",
+        "**/playwright-report/**",
+      ],
+    },
     proxy:
       mode === "demo"
         ? {

@@ -1,13 +1,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, Clock3, Users } from "lucide-react";
-import { catalog } from "../../shared/catalog";
-import {
-  CATEGORIES,
-  DEFAULT_OUTING,
-  type QuestVariant,
-} from "../../shared/domain";
-import { request } from "../lib/api";
-import { DEMO } from "../lib/auth";
+import { CATEGORIES, type QuestVariant } from "../../shared/domain";
+import { api } from "../lib/api";
 import {
   Back,
   Button,
@@ -21,12 +15,7 @@ export default function PublicQuest() {
   const { templateId } = useParams();
   const navigate = useNavigate();
   const { data, error } = useResource(async (): Promise<QuestVariant> => {
-    if (DEMO) {
-      const quest = catalog.find((q) => q.id === templateId);
-      if (!quest) throw new Error("This quest is unavailable.");
-      return quest;
-    }
-    return request(`/api/quests/${encodeURIComponent(templateId!)}`);
+    return api.quest(templateId!);
   }, [templateId]);
   if (error)
     return (
@@ -73,15 +62,7 @@ export default function PublicQuest() {
       </section>
       <Button
         onClick={() => {
-          sessionStorage.setItem(
-            "sq-outing",
-            JSON.stringify({
-              ...DEFAULT_OUTING,
-              category: data.category,
-              intensity: data.intensity,
-            }),
-          );
-          navigate("/");
+          navigate(`/create?template=${encodeURIComponent(data.id)}`);
         }}
       >
         Try this quest <ArrowRight size={18} />

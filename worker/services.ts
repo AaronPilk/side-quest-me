@@ -2,8 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Context } from "hono";
 import {
-  DEFAULT_PREFERENCES,
-  preferencesSchema,
+  normalizePreferences,
   type Profile,
   type QuestVariant,
 } from "../shared/domain";
@@ -286,14 +285,13 @@ export async function owned(
   return data;
 }
 export function profileDto(row: Record<string, unknown>): Profile {
-  const preferences = preferencesSchema.safeParse(row.preferences);
   return {
     displayName: String(row.display_name || ""),
     timezone: String(row.timezone || "UTC"),
     locale: String(row.locale || "en-US"),
     summary: String(row.imported_summary || ""),
     onboardingCompleted: Boolean(row.onboarding_complete),
-    preferences: preferences.success ? preferences.data : DEFAULT_PREFERENCES,
+    preferences: normalizePreferences(row.preferences),
   };
 }
 export interface AssetRow {
@@ -400,7 +398,7 @@ export async function runDto(
         : {}),
     },
     outing: row.outing as Run["outing"],
-    role: snapshot.role,
+    role: snapshot.role ?? null,
     status: row.status as Run["status"],
     clips: (media || []).map(clipDto),
     createdAt: String(row.created_at),

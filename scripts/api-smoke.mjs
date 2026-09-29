@@ -48,6 +48,20 @@ assert.equal(
   "code,message,requestId",
 );
 await request("/api/operator", 503);
+for (const path of [
+  "/api/community/feed",
+  "/api/community/me",
+  "/api/community/operator",
+  "/api/community/offers/11111111-1111-4111-8111-111111111111/media",
+]) {
+  const communitySetup = await request(path, 503);
+  assert.equal(communitySetup.error.code, "setup_required");
+  assert.deepEqual(Object.keys(communitySetup.error).sort(), [
+    "code",
+    "message",
+    "requestId",
+  ]);
+}
 await request("/s/not-a-valid-share-token", 404, { api: false });
 const page = await fetch(new URL("/journal", origin));
 const html = await page.text();
@@ -55,5 +69,5 @@ assert.equal(page.status, 200);
 assert.match(page.headers.get("content-type") || "", /text\/html/);
 assert.match(html, /<div id="root">/);
 console.log(
-  "PASS: local Worker health JSON; API404 JSON; unconfigured services503 with bounded error envelopes; no token/cookie leaks; private no-store; invalid share404; SPA journal fallback.",
+  "PASS: local Worker health JSON; API404 JSON; unconfigured profile/community/commercial services503 with bounded error envelopes and no demo fallback; no token/cookie leaks; private no-store; invalid share404; SPA journal fallback.",
 );

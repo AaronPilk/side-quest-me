@@ -80,86 +80,182 @@ export const APP_CONFIG = {
 
 const boundedText = (max: number) => z.string().trim().max(max);
 const unique = <T>(values: T[]) => new Set(values).size === values.length;
+export const PREFERENCE_KEYS = [
+  "categories",
+  "premises",
+  "humor",
+  "humorExamples",
+  "usualIntensity",
+  "role",
+  "approach",
+  "preparation",
+  "interests",
+  "skills",
+  "otherSkill",
+  "sharing",
+  "exclusions",
+  "otherExclusion",
+] as const;
+export const preferenceKeySchema = z.enum(PREFERENCE_KEYS);
+export type PreferenceKey = z.infer<typeof preferenceKeySchema>;
+export type PreferenceSource = "survey" | "summary_review";
+export const interestSchema = z.enum([
+  "sports",
+  "music",
+  "comedy",
+  "cooking",
+  "making",
+  "games",
+  "local_knowledge",
+]);
+const preferenceFields = {
+  categories: z
+    .array(categorySchema)
+    .max(5)
+    .refine(unique, "Choose each category once")
+    .nullable(),
+  premises: z
+    .array(
+      z.enum([
+        "fan_club",
+        "open_mic",
+        "secret_expert",
+        "mystery_date",
+        "meal_challenge",
+        "spontaneous",
+        "not_sure",
+      ]),
+    )
+    .max(7)
+    .refine(unique)
+    .nullable(),
+  humor: z
+    .array(
+      z.enum([
+        "friendly_awkward",
+        "elaborate_setups",
+        "skill_reveals",
+        "competitive",
+        "absurd",
+        "surprises",
+      ]),
+    )
+    .max(6)
+    .refine(unique)
+    .nullable(),
+  humorExamples: boundedText(240),
+  usualIntensity: z.enum(["chill", "bold", "full_send", "depends"]).nullable(),
+  role: roleSchema.nullable(),
+  approach: z
+    .enum(["group_only", "invitation", "conversation", "depends"])
+    .nullable(),
+  preparation: z
+    .enum(["start_now", "a_few_things", "proper_setup", "varies"])
+    .nullable(),
+  interests: z.array(interestSchema).max(7).refine(unique).nullable(),
+  skills: z
+    .array(
+      z.enum([
+        "sports",
+        "music",
+        "comedy",
+        "cooking",
+        "making",
+        "games",
+        "local_knowledge",
+        "none",
+      ]),
+    )
+    .max(8)
+    .refine(unique)
+    .nullable(),
+  otherSkill: boundedText(120),
+  sharing: z.enum(["public", "friends", "private", "decide_later"]).nullable(),
+  exclusions: z.array(exclusionSchema).max(8).refine(unique).nullable(),
+  otherExclusion: boundedText(240),
+};
 export const preferencesSchema = z
   .object({
-    categories: z
-      .array(categorySchema)
-      .max(5)
-      .refine(unique, "Choose each category once"),
-    premises: z
-      .array(
-        z.enum([
-          "fan_club",
-          "open_mic",
-          "secret_expert",
-          "mystery_date",
-          "meal_challenge",
-          "spontaneous",
-          "not_sure",
-        ]),
-      )
-      .max(7)
-      .refine(unique),
-    humor: z
-      .array(
-        z.enum([
-          "friendly_awkward",
-          "elaborate_setups",
-          "skill_reveals",
-          "competitive",
-          "absurd",
-          "surprises",
-        ]),
-      )
-      .max(6)
-      .refine(unique),
-    humorExamples: boundedText(240),
-    usualIntensity: z.enum(["chill", "bold", "full_send", "depends"]),
-    role: roleSchema,
-    approach: z.enum(["group_only", "invitation", "conversation", "depends"]),
-    preparation: z.enum([
-      "start_now",
-      "a_few_things",
-      "proper_setup",
-      "varies",
-    ]),
-    skills: z
-      .array(
-        z.enum([
-          "sports",
-          "music",
-          "comedy",
-          "cooking",
-          "making",
-          "games",
-          "local_knowledge",
-          "none",
-        ]),
-      )
-      .max(8)
-      .refine(unique),
-    otherSkill: boundedText(120),
-    sharing: z.enum(["public", "friends", "private", "decide_later"]),
-    exclusions: z.array(exclusionSchema).max(8).refine(unique),
-    otherExclusion: boundedText(240),
+    ...preferenceFields,
+    version: z.literal(2),
+    sources: z
+      .partialRecord(preferenceKeySchema, z.enum(["survey", "summary_review"]))
+      .default({}),
+    legacyUnconfirmed: z
+      .array(preferenceKeySchema)
+      .max(PREFERENCE_KEYS.length)
+      .refine(unique)
+      .default([]),
   })
   .strict();
 export type Preferences = z.infer<typeof preferencesSchema>;
 export const DEFAULT_PREFERENCES: Preferences = {
-  categories: [],
-  premises: [],
-  humor: [],
+  version: 2,
+  sources: {},
+  legacyUnconfirmed: [],
+  categories: null,
+  premises: null,
+  humor: null,
   humorExamples: "",
-  usualIntensity: "depends",
-  role: "rotate",
-  approach: "depends",
-  preparation: "varies",
-  skills: [],
+  usualIntensity: null,
+  role: null,
+  approach: null,
+  preparation: null,
+  interests: null,
+  skills: null,
   otherSkill: "",
-  sharing: "decide_later",
-  exclusions: [],
+  sharing: null,
+  exclusions: null,
   otherExclusion: "",
 };
+
+/** V1 stored preselected scalars without provenance. Preserve real selections and
+ * boundaries, but never turn those ambiguous defaults into confirmed preferences. */
+export function normalizePreferences(input: unknown): Preferences {
+  const parsed = preferencesSchema.safeParse(input);
+  if (parsed.success) return parsed.data;
+  const raw =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  const legacy = raw.version !== 2;
+  const defaults: Partial<Record<PreferenceKey, string>> = {
+    usualIntensity: "depends",
+    role: "rotate",
+    approach: "depends",
+    preparation: "varies",
+    sharing: "decide_later",
+  };
+  const result: Preferences = {
+    ...DEFAULT_PREFERENCES,
+    sources: {},
+    legacyUnconfirmed: [],
+  };
+  for (const key of PREFERENCE_KEYS) {
+    const value = raw[key];
+    if (legacy && defaults[key] === value && value !== undefined) {
+      result.legacyUnconfirmed.push(key);
+      continue;
+    }
+    const field = preferenceFields[key].safeParse(value);
+    if (!field.success) continue;
+    const answer =
+      legacy && Array.isArray(field.data) && field.data.length === 0
+        ? null
+        : field.data;
+    Object.assign(result, { [key]: answer });
+    if (answer !== null && answer !== "") result.sources[key] = "survey";
+  }
+  if (!legacy) {
+    const sources = preferencesSchema.shape.sources.safeParse(raw.sources);
+    if (sources.success) result.sources = sources.data;
+    const unconfirmed = preferencesSchema.shape.legacyUnconfirmed.safeParse(
+      raw.legacyUnconfirmed,
+    );
+    if (unconfirmed.success) result.legacyUnconfirmed = unconfirmed.data;
+  }
+  return result;
+}
 export const profileSchema = z
   .object({
     displayName: boundedText(60),
@@ -171,6 +267,12 @@ export const profileSchema = z
   })
   .strict();
 export type Profile = z.infer<typeof profileSchema>;
+export const profilePatchSchema = profileSchema
+  .partial()
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    "Choose a profile field to update.",
+  );
 
 export const outingSchema = z
   .object({
@@ -336,7 +438,7 @@ export const candidateSchema = questVariantSchema.safeExtend({
   estimatedCostMaxMinor: z.number().int().nonnegative(),
   whyFits: z.array(z.string().max(150)).min(1).max(5),
   ready: z.literal(true),
-  selectedRole: roleSchema,
+  selectedRole: roleSchema.nullable(),
   rewardEligibility: z
     .object({
       eligible: z.boolean(),
@@ -352,7 +454,7 @@ export type Candidate = QuestVariant & {
   estimatedCostMaxMinor: number;
   whyFits: string[];
   ready: true;
-  selectedRole: Role;
+  selectedRole: Role | null;
   rewardEligibility: {
     eligible: boolean;
     reason: "eligible" | "family_cooldown";

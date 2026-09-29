@@ -25,12 +25,13 @@ export type Run = {
   id: string;
   quest: QuestVariant;
   outing: Outing;
-  role: string;
+  role: string | null;
   status:
     "accepted" | "in_progress" | "review_needed" | "finalized" | "abandoned";
   clips: Clip[];
   createdAt: string;
   completedAt?: string;
+  inspiredByPostId?: string;
   rewardDecision?: { xp: number; points: number; reason: string };
   render?: Reel;
 };

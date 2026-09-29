@@ -2,7 +2,7 @@ import { catalog } from "./catalog";
 import {
   effectiveBudget,
   outingSchema,
-  preferencesSchema,
+  normalizePreferences,
   REWARD_POLICY,
   type Candidate,
   type Outing,
@@ -14,6 +14,20 @@ export type TriedFamily =
   | string
   | { familyId: string; attemptedAt?: string; awardedAt?: string | null };
 const DAY_MS = 86_400_000;
+
+function preferenceLabel(value: string): string {
+  const labels: Record<string, string> = {
+    making: "making and design",
+    local_knowledge: "local knowledge",
+    friendly_awkward: "friendly awkwardness",
+    elaborate_setups: "elaborate setups",
+    skill_reveals: "skill reveals",
+    competitive: "friendly competition",
+    absurd: "absurd situations",
+    surprises: "surprises",
+  };
+  return labels[value] ?? value;
+}
 
 /** Currency amounts remain integer minor units throughout ranking and acceptance. */
 export function estimateCost(
@@ -41,8 +55,10 @@ export function estimateCost(
 export function ineligibilityReasons(
   quest: QuestVariant,
   outing: Outing,
-  preferences: Preferences,
+  preferencesInput: Preferences,
 ): string[] {
+  const preferences = normalizePreferences(preferencesInput);
+  const exclusions = preferences.exclusions ?? [];
   const reasons: string[] = [];
   if (quest.category !== outing.category)
     reasons.push("Choose this category to see this quest.");
@@ -105,21 +121,23 @@ export function ineligibilityReasons(
       return false;
     if (
       conflict === "being_surprised" &&
+      preferences.role !== null &&
+      quest.roles.includes(preferences.role) &&
       ["mastermind", "camera_person"].includes(preferences.role)
     )
       return false;
-    return preferences.exclusions.includes(conflict);
+    return exclusions.includes(conflict);
   });
   if (
-    preferences.exclusions.includes("food_challenges") &&
+    exclusions.includes("food_challenges") &&
     quest.familyId === "street_meal_choice"
   )
     conflicts.push("food_challenges");
-  if (preferences.exclusions.includes("adult_venues") && outing.adultContext)
+  if (exclusions.includes("adult_venues") && outing.adultContext)
     conflicts.push("adult_venues");
   // No catalog variant requires alcohol. A sober adult-venue visit remains possible if otherwise explicitly eligible.
   if (
-    preferences.exclusions.includes("strangers") &&
+    exclusions.includes("strangers") &&
     quest.requiresVolunteer &&
     outing.setting !== "home"
   )
@@ -131,10 +149,7 @@ export function ineligibilityReasons(
   )
     conflicts.push("strangers");
   // Without trustworthy area boundaries, keep this exclusion conservative instead of guessing where travel ends.
-  if (
-    preferences.exclusions.includes("travel_outside_area") &&
-    outing.travelMinutes > 0
-  )
+  if (exclusions.includes("travel_outside_area") && outing.travelMinutes > 0)
     conflicts.push("travel_outside_area");
   if (conflicts.length)
     reasons.push("This quest conflicts with a boundary in your profile.");
@@ -166,7 +181,8 @@ export function familyEligibility(
 }
 
 /**
- * Curated, deterministic fallback: no imported summary, AI output, or sponsor can change eligibility.
+ * Curated, deterministic matching: only confirmed structured preferences influence ranking.
+ * Imported prose, tentative impressions, unknown answers, and sponsors never imply willingness.
  * Server acceptance and finalization must recheck real account cap/cooldown with server time.
  */
 export function recommend(
@@ -174,39 +190,130 @@ export function recommend(
   preferencesInput: Preferences,
   triedFamilies: TriedFamily[] = [],
   now = new Date(),
+  variants: QuestVariant[] = catalog,
 ): Candidate[] {
   const outing = outingSchema.parse(outingInput);
-  const preferences = preferencesSchema.parse(preferencesInput);
+  const preferences = normalizePreferences(preferencesInput);
   const tried = new Set(
     triedFamilies.map((item) =>
       typeof item === "string" ? item : item.familyId,
     ),
   );
-  const preferenceInterests = new Set([
-    ...preferences.premises,
-    ...preferences.humor,
-    ...preferences.skills,
-  ]);
   const budget = effectiveBudget(outing);
-  const ranked = catalog
+  const ranked = variants
     .filter(
       (quest) => ineligibilityReasons(quest, outing, preferences).length === 0,
     )
     .map((quest) => {
-      const matches = quest.interests.filter((interest) =>
-        preferenceInterests.has(interest as never),
+      const factors: { score: number; reason: string }[] = [];
+      const premises = (preferences.premises ?? []).filter(
+        (
+          premise,
+        ): premise is Exclude<
+          NonNullable<Preferences["premises"]>[number],
+          "not_sure"
+        > =>
+          premise !== "not_sure" &&
+          quest.interests.includes(premise) &&
+          // This survey answer explicitly means no preparation; a shared tag cannot erase that qualifier.
+          (premise !== "spontaneous" ||
+            (quest.preparation === "start_now" && !quest.arrangementRequired)),
       );
-      const roleFit = quest.roles.includes(preferences.role);
-      const preparationFit =
-        preferences.preparation === "varies" ||
-        preferences.preparation === quest.preparation;
+      if (premises.length) {
+        const premise = premises[0];
+        const labels = {
+          fan_club: "a fan-club surprise",
+          open_mic: "an open mic",
+          secret_expert: "a secret-expert game",
+          mystery_date: "a mystery date",
+          meal_challenge: "a meal challenge",
+          spontaneous: "something spontaneous",
+        };
+        const privatePractice =
+          premise === "open_mic" &&
+          (outing.setting === "home" || quest.intensity !== "full_send");
+        factors.push({
+          score: premises.length * 5,
+          reason: privatePractice
+            ? "Private practice for the open mic you'd try"
+            : `Matches a premise you'd try: ${labels[premise]}`,
+        });
+      }
+      const skills = (preferences.skills ?? []).filter(
+        (skill) => skill !== "none" && quest.interests.includes(skill),
+      );
+      if (skills.length)
+        factors.push({
+          score: skills.length * 4,
+          reason: `Can use your ${preferenceLabel(skills[0])}${skills[0] === "local_knowledge" ? "" : " skills"}`,
+        });
+      const interests = (preferences.interests ?? []).filter((interest) =>
+        quest.interests.includes(interest),
+      );
+      if (interests.length)
+        factors.push({
+          score: interests.length * 3,
+          reason: `Matches your interest in ${interests[0] === "local_knowledge" ? "exploring local places" : preferenceLabel(interests[0])}`,
+        });
+      const humor = (preferences.humor ?? []).filter((style) =>
+        quest.interests.includes(style),
+      );
+      if (humor.length)
+        factors.push({
+          score: humor.length * 2,
+          reason: `Matches your taste for ${preferenceLabel(humor[0])}`,
+        });
+      const roleFit =
+        preferences.role !== null && quest.roles.includes(preferences.role);
+      if (roleFit)
+        factors.push({
+          score: 2,
+          reason: {
+            mastermind: "Supports your preference to organize",
+            camera_person: "Supports your preference to film",
+            main_character: "Supports your preference to take the lead",
+            rotate: "Supports your preference to rotate roles",
+          }[preferences.role!],
+        });
+      const preparationFit = preferences.preparation === quest.preparation;
+      if (preparationFit)
+        factors.push({
+          score: 2,
+          reason: {
+            start_now: "Matches your preference to start without preparation",
+            a_few_things: "Matches your preference for a little preparation",
+            proper_setup: "Matches your preference for a proper setup",
+          }[quest.preparation],
+        });
+      if (
+        preferences.approach === "group_only" &&
+        (outing.setting === "home" || !quest.requiresVolunteer)
+      )
+        factors.push({
+          score: 2,
+          reason: "Keeps participation within your group",
+        });
+      else if (
+        quest.requiresVolunteer &&
+        outing.setting !== "home" &&
+        (preferences.approach === "invitation" ||
+          preferences.approach === "conversation")
+      )
+        factors.push({
+          score: 2,
+          reason:
+            preferences.approach === "invitation"
+              ? "Uses a clear invitation, as you prefer"
+              : "Fits your willingness to start a conversation",
+        });
       const score =
-        matches.length * 4 +
-        (roleFit ? 2 : 0) +
-        (preparationFit ? 2 : 0) -
+        factors.reduce((total, factor) => total + factor.score, 0) -
         (tried.has(quest.familyId) ? 8 : 0);
       const cost = estimateCost(quest, outing);
       const reasons = [
+        ...factors
+          .sort((a, b) => b.score - a.score)
+          .map((factor) => factor.reason),
         outing.setting === "home"
           ? "Works at home"
           : "Fits your confirmed setting",
@@ -214,17 +321,6 @@ export function recommend(
           ? "No purchase needed"
           : `Fits your ${formatMoney(budget, outing.currency)} group budget`,
       ];
-      const skill = preferences.skills.find((value) =>
-        quest.interests.includes(value),
-      );
-      if (skill && skill !== "none")
-        reasons.push(
-          `Uses your ${skill === "making" ? "making and design" : skill.replaceAll("_", " ")} interests`,
-        );
-      if (preferences.role === "mastermind")
-        reasons.push("You can organize the reveal");
-      if (preferences.role === "camera_person")
-        reasons.push("You can film willing participants");
       const candidate: Candidate = {
         ...quest,
         effectiveBudgetMinor: budget,
@@ -232,7 +328,7 @@ export function recommend(
         estimatedCostMaxMinor: cost.maxMinor,
         whyFits: reasons.slice(0, 5),
         ready: true,
-        selectedRole: preferences.role,
+        selectedRole: roleFit ? preferences.role : null,
         rewardEligibility: familyEligibility(
           quest.familyId,
           triedFamilies,

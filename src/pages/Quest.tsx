@@ -1,13 +1,12 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { QuestWizard } from "../components/QuestWizard";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
   Clock3,
   Users,
-  MapPin,
   ChevronRight,
   Check,
-  SlidersHorizontal,
   Video,
   Flag,
   Sparkles,
@@ -16,18 +15,16 @@ import {
   CATEGORIES,
   INTENSITIES,
   DEFAULT_OUTING,
-  effectiveBudget,
   outingSchema,
   type Outing,
   type Candidate,
 } from "../../shared/domain";
 import { api, eligibility } from "../lib/api";
 import { DEMO } from "../lib/auth";
+import { ineligibilityReasons } from "../../shared/recommend";
 import {
   Button,
-  Chips,
   Notice,
-  PageTitle,
   QuestArt,
   useResource,
   Loading,
@@ -36,6 +33,14 @@ import {
 } from "../components/ui";
 export default function Quest() {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const requestedTemplate = params.get("template") || undefined;
+  const inspiredBy = params.get("from") || undefined;
+  const target = useResource(
+    () =>
+      requestedTemplate ? api.quest(requestedTemplate) : Promise.resolve(null),
+    [requestedTemplate],
+  );
   const runs = useResource(api.runs);
   const me = useResource(api.me);
   const [outing, setOuting] = useState<Outing>(() => {
@@ -49,23 +54,48 @@ export default function Quest() {
   });
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
   const [selected, setSelected] = useState<Candidate>();
+  const [alternatives, setAlternatives] = useState<Candidate[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [details, setDetails] = useState(false);
+  const resultsHeading = useRef<HTMLHeadingElement>(null);
   const [acceptKey] = useState(crypto.randomUUID());
+  useEffect(() => {
+    if (target.data) {
+      setOuting((current) => ({
+        ...current,
+        category: target.data!.category,
+        intensity: target.data!.intensity,
+      }));
+      setCandidates(null);
+      setSelected(undefined);
+    }
+  }, [target.data]);
+  useEffect(() => {
+    // Keep the last valid plans if a numeric input is temporarily incomplete.
+    if (outingSchema.safeParse(outing).success)
+      sessionStorage.setItem("sq-outing", JSON.stringify(outing));
+  }, [outing]);
+  useEffect(() => {
+    if (candidates !== null && !selected) {
+      resultsHeading.current?.focus({ preventScroll: true });
+      window.scrollTo(0, 0);
+    }
+  }, [candidates, selected]);
   function update(patch: Partial<Outing>) {
-    const value = { ...outing, ...patch };
-    setOuting(value);
-    sessionStorage.setItem("sq-outing", JSON.stringify(value));
+    setOuting((current) => ({ ...current, ...patch }));
     setCandidates(null);
+    setError("");
   }
-  async function discover(e: React.FormEvent) {
-    e.preventDefault();
+  async function discover() {
     setBusy(true);
     setError("");
     try {
       outingSchema.parse(outing);
-      setCandidates(await api.quests(outing));
+      const choices = await api.quests(outing, requestedTemplate);
+      setCandidates(choices);
+      setAlternatives(
+        requestedTemplate && !choices.length ? await api.quests(outing) : [],
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Check your outing details.");
     } finally {
@@ -76,7 +106,13 @@ export default function Quest() {
     setBusy(true);
     setError("");
     try {
-      const run = await api.accept(selected!, outing, acceptKey);
+      const run = await api.accept(
+        selected!,
+        outing,
+        acceptKey,
+        selected!.id === requestedTemplate ? inspiredBy : undefined,
+      );
+      sessionStorage.removeItem("sq-quest-flow");
       navigate(`/runs/${run.id}`);
     } catch (e) {
       setError((e as Error).message);
@@ -186,14 +222,36 @@ export default function Quest() {
   }
   return (
     <>
-      <PageTitle
-        eyebrow="A LITTLE OUT OF THE ORDINARY"
-        title={active ? "Your story is in motion." : "What’s the plan?"}
-      >
-        {active
-          ? "You have a quest in progress. Pick up where you left off."
-          : "A good plan. A little nerve. Something to remember."}
-      </PageTitle>
+      {requestedTemplate && (
+        <Notice>
+          {target.data ? (
+            <>
+              Make your version of <strong>{target.data.title}</strong>. Confirm
+              your own plans below.{" "}
+              {inspiredBy && (
+                <Link to={`/posts/${encodeURIComponent(inspiredBy)}`}>
+                  View the inspiring post
+                </Link>
+              )}
+            </>
+          ) : (
+            target.error || "Loading this quest…"
+          )}
+        </Notice>
+      )}
+      {requestedTemplate && (
+        <button
+          className="text-button"
+          disabled={busy}
+          onClick={() => {
+            setParams({});
+            setCandidates(null);
+            setSelected(undefined);
+          }}
+        >
+          Show other quests
+        </button>
+      )}
       {active && (
         <Link className="active-card" to={`/runs/${active.id}`}>
           <span className="icon-box">
@@ -207,421 +265,57 @@ export default function Quest() {
           <ChevronRight />
         </Link>
       )}
-      {me.data && !me.data.profile.onboardingCompleted && (
-        <Link className="profile-nudge" to="/onboarding">
-          <Sparkles size={18} />
-          <span>
-            Make it your kind of quest{" "}
-            <small>A few taps to find your fit</small>
-          </span>
-          <ChevronRight size={18} />
-        </Link>
+      {candidates === null && (!requestedTemplate || target.data) && (
+        <QuestWizard
+          key={requestedTemplate || "new-quest"}
+          outing={outing}
+          update={update}
+          onFind={discover}
+          targetId={requestedTemplate}
+          busy={busy}
+          error={error || runs.error || me.error}
+          needsProfile={Boolean(
+            me.data && !me.data.profile.onboardingCompleted,
+          )}
+        />
       )}
-      <form onSubmit={discover}>
-        <section className="section">
-          <div className="section-heading">
-            <h2>Pick your scene</h2>
-            <span className="support">01</span>
-          </div>
-          <div className="category-grid">
-            {CATEGORIES.map((c, i) => (
-              <button
-                key={c.id}
-                type="button"
-                className={`category ${outing.category === c.id ? "selected" : ""}`}
-                aria-pressed={outing.category === c.id}
-                onClick={() => update({ category: c.id })}
-              >
-                <span className="category-symbol" aria-hidden="true">
-                  {["♡", "☀", "☾", "↗", "♧"][i]}
-                </span>
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </section>
-        <section className="section">
-          <div className="section-heading">
-            <h2>How far are we taking this?</h2>
-            <span className="support">02</span>
-          </div>
-          <div className="intensity-group">
-            {INTENSITIES.map((v, i) => (
-              <button
-                type="button"
-                key={v.id}
-                aria-pressed={outing.intensity === v.id}
-                className={`intensity ${outing.intensity === v.id ? "selected" : ""}`}
-                onClick={() => update({ intensity: v.id })}
-              >
-                <span className="intensity-bars" aria-hidden="true">
-                  {[0, 1, 2].map((n) => (
-                    <i key={n} className={n <= i ? "on" : ""} />
-                  ))}
-                </span>
-                {v.label}
-              </button>
-            ))}
-          </div>
-          <p className="support level-description">
-            {INTENSITIES.find((i) => i.id === outing.intensity)?.description}
-          </p>
-        </section>
-        <section className="details-card">
-          <div className="section-heading">
-            <h2>
-              <SlidersHorizontal size={18} /> Today’s details
-            </h2>
-            <span className="pill">
-              {outing.setting === "home" ? "At home" : "Heading out"}
-            </span>
-          </div>
-          <div className="field">
-            <span className="field-label">Who’s in?</span>
-            <Chips
-              label="Group"
-              options={[
-                { id: "solo", label: "Solo" },
-                { id: "couple", label: "Couple" },
-                { id: "friends", label: "Friends" },
-              ]}
-              value={outing.group}
-              onChange={(v) =>
-                update({
-                  group: v as Outing["group"],
-                  participants: v === "solo" ? 1 : v === "couple" ? 2 : 4,
-                })
-              }
-            />
-          </div>
-          {outing.group === "friends" && (
-            <label>
-              Group size
-              <input
-                type="number"
-                min="2"
-                max="12"
-                value={outing.participants}
-                onChange={(e) =>
-                  update({ participants: Number(e.target.value) })
-                }
-              />
-            </label>
-          )}
-          <div className="form-grid">
-            <label>
-              Budget (USD)
-              <div className="money-input">
-                <span>$</span>
-                <input
-                  aria-label="Budget in dollars"
-                  type="number"
-                  min="0"
-                  max="10000"
-                  step="1"
-                  value={outing.budgetMinor / 100}
-                  onChange={(e) =>
-                    update({
-                      budgetMinor: Math.round(Number(e.target.value) * 100),
-                    })
-                  }
-                />
-              </div>
-            </label>
-            <label>
-              Budget is for
-              <select
-                value={outing.budgetScope}
-                onChange={(e) =>
-                  update({
-                    budgetScope: e.target.value as Outing["budgetScope"],
-                  })
-                }
-              >
-                <option value="total">The whole group</option>
-                <option value="per_person">Each person</option>
-              </select>
-            </label>
-          </div>
-          <p className="budget-total">
-            {money(effectiveBudget(outing))} total group ceiling{" "}
-            <span>· Including required costs</span>
-          </p>
-          <div className="field">
-            <span className="field-label">How much time?</span>
-            <Chips
-              label="Available time"
-              options={[
-                { id: "30", label: "30 min" },
-                { id: "60", label: "1 hour" },
-                { id: "120", label: "2 hours" },
-                { id: "flexible", label: "Flexible" },
-              ]}
-              value={String(outing.durationMinutes || "flexible")}
-              onChange={(v) =>
-                update({ durationMinutes: v === "flexible" ? null : Number(v) })
-              }
-            />
-          </div>
-          <div className="field">
-            <span className="field-label">At home or heading out?</span>
-            <Chips
-              label="Setting"
-              options={[
-                { id: "home", label: "At home" },
-                { id: "outside", label: "Outside" },
-                { id: "venue", label: "At a venue" },
-              ]}
-              value={outing.setting}
-              onChange={(v) =>
-                update({
-                  setting: v as Outing["setting"],
-                  ...(v === "home"
-                    ? {
-                        travelMinutes: 0,
-                        travelCostMinor: 0,
-                        transport: "none" as const,
-                        adultContext: false,
-                      }
-                    : {}),
-                })
-              }
-            />
-          </div>
-          {outing.setting !== "home" && (
-            <>
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => {
-                  if (!navigator.geolocation) {
-                    setError(
-                      "Location isn’t available. Enter your area manually.",
-                    );
-                    return;
-                  }
-                  navigator.geolocation.getCurrentPosition(
-                    (position) =>
-                      update({
-                        area: `${position.coords.latitude.toFixed(1)}, ${position.coords.longitude.toFixed(1)} (approximate)`,
-                      }),
-                    () =>
-                      setError(
-                        "Location access is off. Enter your area manually; your quest does not need GPS.",
-                      ),
-                    { enableHighAccuracy: false, timeout: 8000, maximumAge: 0 },
-                  );
-                }}
-              >
-                Use approximate device location
-              </button>
-              <label>
-                Area
-                <input
-                  value={outing.area}
-                  maxLength={100}
-                  placeholder="A neighborhood or town is enough"
-                  onChange={(e) => update({ area: e.target.value })}
-                />
-              </label>
-              <div className="form-grid">
-                <label>
-                  Round-trip travel (min)
-                  <input
-                    type="number"
-                    min="0"
-                    max="240"
-                    value={outing.travelMinutes}
-                    onChange={(e) =>
-                      update({ travelMinutes: Number(e.target.value) })
-                    }
-                  />
-                </label>
-                <label>
-                  Travel estimate (USD)
-                  <input
-                    type="number"
-                    min="0"
-                    value={outing.travelCostMinor / 100}
-                    onChange={(e) =>
-                      update({
-                        travelCostMinor: Math.round(
-                          Number(e.target.value) * 100,
-                        ),
-                      })
-                    }
-                  />
-                </label>
-              </div>
-              <label>
-                Getting there
-                <select
-                  value={outing.transport}
-                  onChange={(e) =>
-                    update({ transport: e.target.value as Outing["transport"] })
-                  }
-                >
-                  {["none", "walk", "bike", "transit", "car"].map((v) => (
-                    <option key={v}>{v}</option>
-                  ))}
-                </select>
-              </label>
-            </>
-          )}
-          <button
-            className="disclosure"
-            type="button"
-            onClick={() => setDetails(!details)}
-            aria-expanded={details}
-          >
-            Arrangements & setting options{" "}
-            <ChevronRight className={details ? "rotate" : ""} size={18} />
-          </button>
-          {details && (
-            <div className="extra-details">
-              <label>
-                Custom available time (minutes)
-                <input
-                  type="number"
-                  min="15"
-                  max="720"
-                  value={outing.durationMinutes ?? ""}
-                  placeholder="Flexible"
-                  onChange={(e) =>
-                    update({
-                      durationMinutes:
-                        e.target.value === "" ? null : Number(e.target.value),
-                    })
-                  }
-                />
-              </label>
-              {outing.setting !== "venue" &&
-                outing.category === "street_challenges" && (
-                  <label className="check-row">
-                    <input
-                      type="checkbox"
-                      checked={outing.adultEligible}
-                      onChange={(e) =>
-                        update({ adultEligible: e.target.checked })
-                      }
-                    />
-                    <span>
-                      The volunteers and organizers are adults who can freely
-                      choose to participate.
-                    </span>
-                  </label>
-                )}
-              <label className="check-row">
-                <input
-                  type="checkbox"
-                  checked={outing.arrangementConfirmed}
-                  onChange={(e) =>
-                    update({ arrangementConfirmed: e.target.checked })
-                  }
-                />
-                <span>
-                  We’ve arranged the required people, equipment or performance
-                  slot.
-                </span>
-              </label>
-              {outing.setting === "venue" && (
-                <>
-                  <label className="check-row">
-                    <input
-                      type="checkbox"
-                      checked={outing.venuePermission}
-                      onChange={(e) =>
-                        update({ venuePermission: e.target.checked })
-                      }
-                    />
-                    <span>
-                      We have permission for the activity and filming.
-                    </span>
-                  </label>
-                  <label>
-                    Confirmed total admission / room cost (USD)
-                    <input
-                      type="number"
-                      min="0"
-                      value={
-                        outing.confirmedVenueCostMinor === null
-                          ? ""
-                          : outing.confirmedVenueCostMinor / 100
-                      }
-                      placeholder="Unknown until confirmed"
-                      onChange={(e) =>
-                        update({
-                          confirmedVenueCostMinor:
-                            e.target.value === ""
-                              ? null
-                              : Math.round(Number(e.target.value) * 100),
-                        })
-                      }
-                    />
-                  </label>
-                  <label className="check-row">
-                    <input
-                      type="checkbox"
-                      checked={outing.adultEligible}
-                      onChange={(e) =>
-                        update({
-                          adultEligible: e.target.checked,
-                          ...(!e.target.checked ? { adultContext: false } : {}),
-                        })
-                      }
-                    />
-                    <span>
-                      All participants meet the venue’s legal age requirement.
-                    </span>
-                  </label>
-                  <label className="check-row">
-                    <input
-                      type="checkbox"
-                      checked={outing.adultContext}
-                      disabled={!outing.adultEligible}
-                      onChange={(e) =>
-                        update({ adultContext: e.target.checked })
-                      }
-                    />
-                    <span>
-                      Include explicitly agreed adult nightlife contexts.
-                    </span>
-                  </label>
-                </>
-              )}
-              <p className="support">
-                <MapPin size={15} /> Manual setting works without location
-                permission. Photo interpretation is not configured; no photo is
-                required or uploaded.
-              </p>
-            </div>
-          )}
-        </section>
-        {(error || runs.error || me.error) && (
-          <Notice error>{error || runs.error || me.error}</Notice>
-        )}
-        <Button type="submit" busy={busy}>
-          Find my quests <ArrowRight size={18} />
-        </Button>
-        <p className="fine-print centered">
-          Made for your plans. Never a pressure to spend.
-        </p>
-      </form>
       {candidates !== null && (
-        <section className="section results" aria-live="polite">
+        <section className="section results quest-results">
+          <button
+            className="back"
+            aria-label="Edit plans"
+            onClick={() => {
+              setError("");
+              setCandidates(null);
+            }}
+          >
+            ← Edit plans
+          </button>
           <div className="section-heading">
-            <h2>
+            <h1 ref={resultsHeading} tabIndex={-1}>
               {candidates.length
                 ? "This could be a good story."
                 : "Nothing quite fits. Yet."}
-            </h2>
+            </h1>
             <span className="support">
               {candidates.length}{" "}
               {candidates.length === 1 ? "choice" : "choices"}
             </span>
           </div>
+          {error && <Notice error>{error}</Notice>}
           {candidates.length === 0 ? (
             <Notice>
+              {requestedTemplate && target.data && me.data && (
+                <ul>
+                  {ineligibilityReasons(
+                    target.data,
+                    outing,
+                    me.data.profile.preferences,
+                  ).map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              )}
               {me.data?.profile.preferences.otherExclusion
                 ? "Your custom boundary needs review. Replace it with matching listed exclusions or edit it before choosing a quest; we won’t guess what it means."
                 : "Try more time, a different group, or a private setting. Required arrangements and unknown venue costs must be confirmed. Your boundaries stay in place."}
@@ -665,6 +359,24 @@ export default function Quest() {
                 </div>
               </button>
             ))
+          )}
+          {!candidates.length && alternatives.length > 0 && (
+            <div className="section">
+              <h3>Other quests that fit your plans</h3>
+              {alternatives.map((quest) => (
+                <button
+                  key={quest.id}
+                  className="text-button"
+                  onClick={() => {
+                    setParams({});
+                    setSelected(quest);
+                    setCandidates(alternatives);
+                  }}
+                >
+                  Review {quest.title} <ArrowRight size={16} />
+                </button>
+              ))}
+            </div>
           )}
         </section>
       )}

@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: "browser.spec.ts",
+  testMatch: "*browser.spec.ts",
   fullyParallel: false,
   workers: 1,
   timeout: 180_000,

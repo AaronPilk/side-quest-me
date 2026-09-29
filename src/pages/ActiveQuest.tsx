@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import PublishReel from "../components/PublishReel";
 import { useParams, Link } from "react-router-dom";
 import {
   Camera,
@@ -405,6 +406,7 @@ export default function ActiveQuest() {
           Build a new reel from saved edits
         </button>
       )}
+      <PublishReel run={run} />
       {(run.clips.length > 0 || run.render) && (
         <button
           className="text-button danger"

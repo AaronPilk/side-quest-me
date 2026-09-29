@@ -1,46 +1,68 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowRight, ArrowLeft, Copy, Check, Sparkles } from "lucide-react";
-import {
-  DEFAULT_PREFERENCES,
-  type Profile,
-  type Preferences,
-} from "../../shared/domain";
+import { ArrowRight, ArrowLeft, Check, Sparkles } from "lucide-react";
+import { normalizePreferences, type Profile } from "../../shared/domain";
 import {
   SURVEY_QUESTIONS,
-  COPY_PROFILE_PROMPT,
   preferenceChips,
+  resetPreferenceAnswer,
+  INTEREST_OPTIONS,
 } from "../../shared/profile";
 import { api } from "../lib/api";
 import { Button, Notice, PageTitle, Loading } from "../components/ui";
+import SummaryReview from "../components/SummaryReview";
+import { PreferenceControl } from "../components/PreferenceControl";
+
 export default function Onboarding() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const importStep = params.get("step") === "import";
   const [profile, setProfile] = useState<Profile>();
   const [step, setStep] = useState(-1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
   useEffect(() => {
+    let active = true;
     api
       .me()
-      .then((d) => {
+      .then((data) => {
+        if (!active) return;
+        if (importStep && data.profile.onboardingCompleted) {
+          navigate("/profile/import", { replace: true });
+          return;
+        }
+        let draft: { profile?: Profile; step?: number } | null = null;
         try {
-          const draft = JSON.parse(
+          draft = JSON.parse(
             sessionStorage.getItem("sq-profile-draft") || "null",
           );
-          setProfile(draft?.profile || d.profile);
-          setStep(
-            params.get("step") === "import"
-              ? -1
-              : (draft?.step ?? (d.profile.onboardingCompleted ? 0 : -1)),
-          );
         } catch {
-          setProfile(d.profile);
+          /* Invalid drafts can be replaced by the saved profile. */
         }
+        const selected = draft?.profile || data.profile;
+        setProfile({
+          ...selected,
+          preferences: normalizePreferences(selected.preferences),
+        });
+        setStep(
+          importStep
+            ? -1
+            : Math.max(
+                -1,
+                Math.min(
+                  10,
+                  draft?.step ?? (data.profile.onboardingCompleted ? 0 : -1),
+                ),
+              ),
+        );
       })
-      .catch((e) => setError(e.message));
-  }, []);
+      .catch((cause) => {
+        if (active) setError((cause as Error).message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [importStep, navigate]);
   useEffect(() => {
     if (profile)
       sessionStorage.setItem(
@@ -48,37 +70,43 @@ export default function Onboarding() {
         JSON.stringify({ profile, step }),
       );
   }, [profile, step]);
-  function setPreference(key: keyof Preferences, value: unknown) {
-    setProfile((p) =>
-      p ? { ...p, preferences: { ...p.preferences, [key]: value } } : p,
-    );
+
+  function nextStep() {
+    setStep((current) => current + 1);
+    window.scrollTo(0, 0);
   }
-  async function save(finish: boolean) {
+  async function finish() {
+    if (!profile) return;
     setBusy(true);
     setError("");
     try {
-      await api.saveProfile({
-        ...profile!,
-        onboardingCompleted: finish || profile!.onboardingCompleted,
+      await api.updateProfile({
+        preferences: profile.preferences,
+        onboardingCompleted: true,
       });
-      if (finish) {
-        sessionStorage.removeItem("sq-profile-draft");
-        navigate("/");
-      } else setStep(0);
-    } catch (e) {
-      setError((e as Error).message);
+      sessionStorage.removeItem("sq-profile-draft");
+      const target = sessionStorage.getItem("sq-return-to") || "/create";
+      sessionStorage.removeItem("sq-return-to");
+      navigate(target);
+    } catch (cause) {
+      setError((cause as Error).message);
     } finally {
       setBusy(false);
     }
   }
   if (!profile) return error ? <Notice error>{error}</Notice> : <Loading />;
   const q = SURVEY_QUESTIONS[step];
+  const chips = preferenceChips(profile.preferences);
   return (
-    <div className="onboarding">
+    <div className={`onboarding ${step === -1 ? "onboarding-import" : ""}`}>
       <div className="onboard-top">
         <button
           className="back"
-          onClick={() => (step <= -1 ? navigate("/") : setStep(step - 1))}
+          onClick={() =>
+            step <= -1
+              ? navigate(profile.onboardingCompleted ? "/profile" : "/")
+              : setStep(step - 1)
+          }
         >
           <ArrowLeft size={18} />
           Back
@@ -97,63 +125,17 @@ export default function Onboarding() {
             <Sparkles size={30} />
           </div>
           <PageTitle title="Bring your ChatGPT context">
-            Get a short summary from a conversation that knows your preferences.
-            Review it before sharing.
+            Turn a reviewed summary into preferences you choose.
           </PageTitle>
-          <Button
-            secondary
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(COPY_PROFILE_PROMPT);
-                setCopied(true);
-              } catch {
-                setError(
-                  "Copy is unavailable here. Expand the prompt below and select its text.",
-                );
-              }
-            }}
-          >
-            {copied ? <Check size={18} /> : <Copy size={18} />}{" "}
-            {copied ? "Prompt copied" : "Copy prompt"}
-          </Button>
-          <details className="prompt-details">
-            <summary>Read the copyable prompt</summary>
-            <pre>{COPY_PROFILE_PROMPT}</pre>
-          </details>
-          <label>
-            Review what you’re sharing
-            <textarea
-              rows={8}
-              maxLength={3000}
-              placeholder="Paste your reviewed summary here. Remove anything you don’t want to share."
-              value={profile.summary}
-              onChange={(e) =>
-                setProfile({ ...profile, summary: e.target.value })
-              }
-            />
-          </label>
-          <p className="support">
-            You control what gets shared. There is no automatic ChatGPT
-            connection. Your explicit answers guide recommendations; this text
-            is not automatically analyzed.
-          </p>
-          {profile.summary ? (
-            <>
-              <Button busy={busy} onClick={() => save(false)}>
-                Save summary <ArrowRight size={18} />
-              </Button>
-              <button
-                className="text-button"
-                onClick={() => setProfile({ ...profile, summary: "" })}
-              >
-                Remove summary
-              </button>
-            </>
-          ) : (
-            <Button onClick={() => setStep(0)}>
-              Skip for now <ArrowRight size={18} />
-            </Button>
-          )}
+          <SummaryReview
+            profile={profile}
+            onSaved={(patch) =>
+              setProfile((current) =>
+                current ? { ...current, ...patch } : current,
+              )
+            }
+            onContinue={() => setStep(0)}
+          />
         </>
       ) : step < 10 ? (
         <>
@@ -165,101 +147,76 @@ export default function Onboarding() {
             aria-valuenow={step + 1}
             aria-label={`${step + 1} of 10 questions`}
           >
-            {SURVEY_QUESTIONS.map((_, i) => (
-              <i key={i} className={i <= step ? "filled" : ""} />
+            {SURVEY_QUESTIONS.map((_, index) => (
+              <i key={index} className={index <= step ? "filled" : ""} />
             ))}
           </div>
           <PageTitle title={q.title}>
             {q.description ||
-              (q.type === "multi"
-                ? "Choose what sounds like you. You can change this later."
-                : "Go with what feels right. Nothing is set in stone.")}
+              "Choose only what you can confirm. Leave it unanswered if you’re unsure."}
           </PageTitle>
-          <div className="survey-options" role="group" aria-label={q.title}>
-            {q.options.map((o) => {
-              const value = profile.preferences[q.key];
-              const selected = Array.isArray(value)
-                ? value.includes(o.value as never)
-                : value === o.value;
-              return (
-                <button
-                  key={o.value}
-                  type="button"
-                  className={`survey-option ${selected ? "selected" : ""}`}
-                  aria-pressed={selected}
-                  onClick={() =>
-                    setPreference(
-                      q.key,
-                      q.type === "multi"
-                        ? selected
-                          ? (value as string[]).filter((v) => v !== o.value)
-                          : [...(value as string[]), o.value]
-                        : o.value,
-                    )
-                  }
-                >
-                  <span>{o.label}</span>
-                  <span
-                    className={`selection-mark ${q.type === "single" ? "radio" : ""}`}
-                  >
-                    {selected && <Check size={15} />}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          {q.key === "categories" && (
-            <button
-              className="text-button"
-              onClick={() =>
-                setPreference(
-                  q.key,
-                  q.options.map((o) => o.value),
-                )
+          {profile.preferences.legacyUnconfirmed.includes(q.key) && (
+            <Notice>
+              Your old profile may have filled this answer by default. Choose
+              again to confirm it, or leave it unknown.
+            </Notice>
+          )}
+          {q.key === "skills" && (
+            <PreferenceControl
+              preferenceKey="interests"
+              title="Interests to explore"
+              type="multi"
+              options={INTEREST_OPTIONS}
+              preferences={profile.preferences}
+              onChange={(preferences) =>
+                setProfile({ ...profile, preferences })
               }
-            >
-              Select all
-            </button>
+              source="survey"
+              showTitle
+              showReset={false}
+            />
           )}
-          {q.key === "exclusions" && (
-            <button
-              className="text-button"
-              onClick={() => {
-                setPreference("exclusions", []);
-                setPreference("otherExclusion", "");
-              }}
-            >
-              No preferences yet
-            </button>
-          )}
-          {q.otherKey && (
-            <label>
-              {q.otherLabel}
-              <input
-                maxLength={q.otherKey === "otherSkill" ? 120 : 240}
-                value={profile.preferences[q.otherKey] as string}
-                onChange={(e) => setPreference(q.otherKey!, e.target.value)}
-              />
-            </label>
-          )}
+          <PreferenceControl
+            preferenceKey={q.key}
+            title={q.key === "skills" ? "Skills I am willing to use" : q.title}
+            type={q.type}
+            options={q.options}
+            otherKey={q.otherKey}
+            otherLabel={q.otherLabel}
+            preferences={profile.preferences}
+            onChange={(preferences) => setProfile({ ...profile, preferences })}
+            source="survey"
+            showTitle={q.key === "skills"}
+            showReset={false}
+          />
+          <button
+            className="text-button"
+            type="button"
+            onClick={() => {
+              let preferences = resetPreferenceAnswer(
+                profile.preferences,
+                q.key,
+              );
+              if (q.otherKey)
+                preferences = resetPreferenceAnswer(preferences, q.otherKey);
+              if (q.key === "skills")
+                preferences = resetPreferenceAnswer(preferences, "interests");
+              setProfile({ ...profile, preferences });
+            }}
+          >
+            Reset answer to unknown
+          </button>
           <div className="survey-footer">
-            <Button
-              onClick={() => {
-                setStep(step + 1);
-                window.scrollTo(0, 0);
-              }}
-            >
+            <Button onClick={nextStep}>
               Continue <ArrowRight size={18} />
             </Button>
-            <button
-              className="text-button"
-              onClick={() => {
-                setPreference(q.key, DEFAULT_PREFERENCES[q.key]);
-                setStep(step + 1);
-              }}
-            >
+            <button className="text-button" onClick={nextStep}>
               Skip this question
             </button>
+            <p className="support">
+              Moving on keeps any answer you chose. Unanswered questions stay
+              unknown.
+            </p>
           </div>
         </>
       ) : (
@@ -268,31 +225,37 @@ export default function Onboarding() {
             <Check size={30} />
           </div>
           <PageTitle title="Your kind of side quest.">
-            A starting point, based on what you told us. Today’s plans are
-            always yours to choose.
+            Based only on preferences you confirmed. Today’s plans are always
+            yours to choose.
           </PageTitle>
+          {profile.preferences.legacyUnconfirmed.length > 0 && (
+            <Notice>
+              Unconfirmed answers from your older profile remain unknown. You
+              can confirm them whenever you like.
+            </Notice>
+          )}
           <div className="review-chips">
-            {preferenceChips(profile.preferences).map((c) => (
+            {chips.map((chip) => (
               <button
                 className="chip selected"
-                key={c}
+                key={chip}
                 onClick={() => setStep(0)}
               >
-                {c}
+                {chip}
               </button>
             ))}
           </div>
-          {!preferenceChips(profile.preferences).length && (
+          {!chips.length && (
             <p>
-              We’ll start with your outing and learn from the preferences you
-              choose.
+              We’ll start with your outing. You can add preferences whenever
+              you’re ready.
             </p>
           )}
           <p className="support">
             Your budget, group, location and available time come next. Nothing
             here authorizes a public post.
           </p>
-          <Button onClick={() => save(true)} busy={busy}>
+          <Button onClick={finish} busy={busy}>
             Looks right <ArrowRight size={18} />
           </Button>
           <button className="text-button" onClick={() => setStep(0)}>

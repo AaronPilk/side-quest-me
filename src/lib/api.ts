@@ -1,20 +1,33 @@
 import {
   DEFAULT_PREFERENCES,
+  normalizePreferences,
+  profilePatchSchema,
   type Profile,
   type Outing,
   type Candidate,
+  type QuestVariant,
 } from "../../shared/domain";
 import { catalog } from "../../shared/catalog";
 import { recommend } from "../../shared/recommend";
 import { accessToken, DEMO, supabase } from "./auth";
 import type { Clip, Me, Offer, Redemption, Run, Reel } from "./types";
+import {
+  demoDataKey,
+  demoPersona,
+  demoActor,
+  resetDemoState,
+} from "./demo-identity";
+import { demoInspiration, demoOriginalTemplates } from "./demo-community";
 
-const KEY = "sidequest-demo-v1";
-type DemoData = { me: Me; runs: Run[] };
+type DemoData = {
+  me: Me;
+  runs: Run[];
+  acceptances?: Record<string, { fingerprint: string; runId: string }>;
+};
 const initial = (): DemoData => ({
   me: {
     profile: {
-      displayName: "",
+      displayName: demoPersona() === "creator" ? "" : demoActor().name,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       locale: navigator.language,
       summary: "",
@@ -26,26 +39,31 @@ const initial = (): DemoData => ({
   },
   runs: [],
 });
-function read(): DemoData {
+function read(key = demoDataKey()): DemoData {
   try {
-    const data = localStorage.getItem(KEY);
-    return data ? JSON.parse(data) : initial();
+    const data = localStorage.getItem(key);
+    const saved: DemoData = data ? JSON.parse(data) : initial();
+    saved.me.profile.preferences = normalizePreferences(
+      saved.me.profile.preferences,
+    );
+    return saved;
   } catch {
     return initial();
   }
 }
-function write(value: DemoData) {
-  localStorage.setItem(KEY, JSON.stringify(value));
+function write(value: DemoData, key = demoDataKey()) {
+  localStorage.setItem(key, JSON.stringify(value));
   window.dispatchEvent(new Event("sidequest-change"));
 }
 async function transaction<T>(fn: (data: DemoData) => T): Promise<T> {
+  const key = demoDataKey();
   const execute = () => {
-    const data = read();
+    const data = read(key);
     const result = fn(data);
-    write(data);
+    write(data, key);
     return result;
   };
-  return navigator.locks ? navigator.locks.request(KEY, execute) : execute();
+  return navigator.locks ? navigator.locks.request(key, execute) : execute();
 }
 export async function request<T>(
   path: string,
@@ -144,21 +162,63 @@ export function eligibility(runs: Run[], familyId: string) {
   return "eligible";
 }
 export const api = {
-  me: async (): Promise<Me> => (DEMO ? read().me : request("/api/me")),
-  saveProfile: async (profile: Profile) =>
+  me: async (): Promise<Me> => {
+    const me = DEMO ? read().me : await request<Me>("/api/me");
+    me.profile.preferences = normalizePreferences(me.profile.preferences);
+    return me;
+  },
+  updateProfile: async (input: Partial<Profile>): Promise<void> => {
+    const patch = profilePatchSchema.parse(input);
+    if (DEMO)
+      await transaction((d) => {
+        d.me.profile = { ...d.me.profile, ...patch };
+      });
+    else
+      await request<Me>("/api/me", {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+    // A saved summary edit/removal must not be resurrected by an older survey draft.
+    // Preserve unrelated answers still being edited in that draft.
+    try {
+      const draft = JSON.parse(
+        sessionStorage.getItem("sq-profile-draft") || "null",
+      );
+      if (draft?.profile)
+        sessionStorage.setItem(
+          "sq-profile-draft",
+          JSON.stringify({ ...draft, profile: { ...draft.profile, ...patch } }),
+        );
+    } catch {
+      /* Saving the durable profile succeeded even if draft storage is unavailable. */
+    }
+  },
+  saveProfile: async (profile: Profile): Promise<void> =>
+    api.updateProfile(profile),
+  quest: async (templateId: string): Promise<QuestVariant> => {
+    if (!DEMO) return request(`/api/quests/${encodeURIComponent(templateId)}`);
+    const quest = [...catalog, ...demoOriginalTemplates()].find(
+      (item) => item.id === templateId,
+    );
+    if (!quest)
+      throw new Error("This quest is unavailable. Choose another quest.");
+    return quest;
+  },
+  quests: async (outing: Outing, templateId?: string): Promise<Candidate[]> =>
     DEMO
-      ? transaction((d) => {
-          d.me.profile = profile;
-          return d.me;
-        })
-      : request<Me>("/api/me", {
-          method: "PATCH",
-          body: JSON.stringify(profile),
+      ? recommend(
+          outing,
+          read().me.profile.preferences,
+          [],
+          new Date(),
+          [...catalog, ...demoOriginalTemplates()].filter(
+            (item) => !templateId || item.id === templateId,
+          ),
+        )
+      : mutation("/api/quests/recommend", {
+          outing,
+          ...(templateId ? { templateId } : {}),
         }),
-  quests: async (outing: Outing): Promise<Candidate[]> =>
-    DEMO
-      ? recommend(outing, read().me.profile.preferences)
-      : mutation("/api/quests/recommend", { outing }),
   runs: async (): Promise<Run[]> =>
     DEMO ? read().runs : request("/api/quest-runs"),
   run: async (id: string): Promise<Run> => {
@@ -195,36 +255,71 @@ export const api = {
     quest: Candidate,
     outing: Outing,
     key: string,
+    inspiredByPostId?: string,
   ): Promise<Run> =>
     DEMO
       ? transaction((d) => {
+          const fingerprint = JSON.stringify([
+            quest.id,
+            Object.fromEntries(
+              Object.entries(outing).sort(([a], [b]) => a.localeCompare(b)),
+            ),
+            inspiredByPostId ?? null,
+          ]);
+          const receipt = d.acceptances?.[key];
+          if (receipt) {
+            if (receipt.fingerprint !== fingerprint)
+              throw new Error(
+                "This request key was already used for a different quest or outing.",
+              );
+            const accepted = d.runs.find((run) => run.id === receipt.runId);
+            if (!accepted)
+              throw new Error("The original attempt is no longer available.");
+            return accepted;
+          }
+          const remember = (run: Run) => {
+            d.acceptances = {
+              ...d.acceptances,
+              [key]: { fingerprint, runId: run.id },
+            };
+            return run;
+          };
+          if (inspiredByPostId) demoInspiration(inspiredByPostId, quest.id);
           const active = d.runs.find((r) =>
             ["accepted", "in_progress"].includes(r.status),
           );
           if (active) {
-            if (active.quest.id === quest.id) return active;
+            if (active.quest.id === quest.id) return remember(active);
             throw new Error(
               "You have a quest in progress. Continue it or abandon it first.",
             );
           }
-          const selected = recommend(outing, d.me.profile.preferences).find(
-            (q) => q.id === quest.id,
+          const variant = [...catalog, ...demoOriginalTemplates()].find(
+            (item) => item.id === quest.id,
           );
-          if (!selected)
+          const selected = recommend(
+            outing,
+            d.me.profile.preferences,
+            [],
+            new Date(),
+            variant ? [variant] : [],
+          ).find((q) => q.id === quest.id);
+          if (!selected || !variant)
             throw new Error(
               "This quest no longer fits. Find your quests again.",
             );
           const run: Run = {
             id: crypto.randomUUID(),
-            quest: structuredClone(catalog.find((q) => q.id === quest.id)!),
+            quest: structuredClone(variant),
             outing,
-            role: d.me.profile.preferences.role,
+            role: selected.selectedRole,
+            ...(inspiredByPostId ? { inspiredByPostId } : {}),
             status: "accepted",
             clips: [],
             createdAt: new Date().toISOString(),
           };
           d.runs.unshift(run);
-          return run;
+          return remember(run);
         })
       : mutation(
           "/api/quest-runs",
@@ -232,6 +327,7 @@ export const api = {
             templateId: quest.id,
             outing,
             expectedCampaign: quest.sponsorCampaign || null,
+            ...(inspiredByPostId ? { inspiredByPostId } : {}),
           },
           key,
         ),
@@ -391,7 +487,7 @@ export const api = {
         method: "DELETE",
         headers: { "X-Sidequest-Demo": "1" },
       });
-      localStorage.removeItem(KEY);
+      resetDemoState();
       return;
     }
     await request("/api/me", { method: "DELETE" });

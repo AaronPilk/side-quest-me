@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { runCommunityTests } from "./community-invariants.mjs";
 export async function runDatabaseTests(sql) {
   const quote = (v) => `'${String(v).replaceAll("'", "''")}'`;
   const json = (v) => `${quote(JSON.stringify(v))}::jsonb`;
@@ -33,6 +35,166 @@ export async function runDatabaseTests(sql) {
   assert.equal(templates.length, 30);
   assert.equal(await scalar('select count(*) from campaigns;'), '0');
   const distinct = [...new Map(templates.map((t) => [t.family, t])).values()];
+  console.log(
+    "Checking profile unknowns, summary-only updates, and role migration compatibility…",
+  );
+  const profileOwner = await user();
+  const legacyPreferences = {
+    role: "rotate",
+    preparation: "some",
+    exclusions: ["alcohol"],
+  };
+  await sql(
+    `select sq_upsert_profile(${quote(profileOwner)},${json({ preferences: legacyPreferences, imported_summary: "A historical summary" })});`,
+  );
+  // Exercise an actual upgrade with a run accepted by the old function. The
+  // disposable runner already applied all migrations; reinstall only that
+  // prior function/column constraint before replaying the compatible migration.
+  const currentAcceptDefinition = await sql("select pg_get_functiondef('public.sq_accept_run(uuid,jsonb,text,text)'::regprocedure);", null);
+  const coreMigration = await readFile(
+    new URL(
+      "../../supabase/migrations/20260927151042_sidequest_core.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const legacyAccept = coreMigration.match(
+    /create function public\.sq_accept_run\([\s\S]*?end \$\$;/,
+  )?.[0];
+  assert(legacyAccept);
+  await sql(
+    `alter table public.quest_runs alter column selected_role set not null;\n${legacyAccept.replace("create function", "create or replace function")}`,
+    null,
+  );
+  const basicOuting = {
+    participants: 2,
+    budgetMinor: 5000,
+    budgetScope: "total",
+    currency: "USD",
+    area: "",
+  };
+  const historical = await rpc("sq_accept_run", profileOwner, {
+    template_id: distinct[0].id,
+    outing: basicOuting,
+  });
+  assert.equal(historical.run.selected_role, "rotate");
+  assert.equal(historical.run.snapshot.role, "rotate");
+  await sql(
+    await readFile(
+      new URL(
+        "../../supabase/migrations/20260929190728_preserve_unknown_profile_role.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    null,
+  );
+  const historicalReload = JSON.parse(
+    await sql(
+      `select to_jsonb(r) from quest_runs r where id=${quote(historical.run.id)};`,
+    ),
+  );
+  assert.deepEqual(
+    historicalReload,
+    historical.run,
+    "Upgrading must not rewrite accepted snapshots, hashes, or historical roles",
+  );
+  assert.deepEqual(
+    JSON.parse(
+      await sql(
+        `select preferences from profiles where id=${quote(profileOwner)};`,
+      ),
+    ),
+    legacyPreferences,
+    "Historical preference ambiguity must not be rewritten as certainty",
+  );
+  await rpc("sq_abandon_run", profileOwner, { run_id: historical.run.id });
+  const missingRole = await rpc("sq_accept_run", profileOwner, {
+    template_id: distinct[0].id,
+    outing: basicOuting,
+  });
+  assert.equal(
+    missingRole.run.selected_role,
+    null,
+    "Omitted role must not fall back to a legacy rotate default",
+  );
+  assert.equal(missingRole.run.snapshot.role, null);
+  await rpc("sq_abandon_run", profileOwner, { run_id: missingRole.run.id });
+  const unknownRole = await rpc("sq_accept_run", profileOwner, {
+    template_id: distinct[0].id,
+    role: "mastermind",
+    outing: { ...basicOuting, role: null },
+  });
+  assert.equal(
+    unknownRole.run.selected_role,
+    null,
+    "Explicit outing unknown wins over any historical top-level role",
+  );
+  assert.equal(unknownRole.run.snapshot.role, null);
+  await deny(
+    () =>
+      sql(
+        `update quest_runs set selected_role='rotate' where id=${quote(unknownRole.run.id)};`,
+      ),
+    /accepted_snapshot_immutable/,
+  );
+  await rpc("sq_abandon_run", profileOwner, { run_id: unknownRole.run.id });
+  const explicitRotate = await rpc("sq_accept_run", profileOwner, {
+    template_id: distinct[0].id,
+    outing: { ...basicOuting, role: "rotate" },
+  });
+  assert.equal(explicitRotate.run.selected_role, "rotate");
+  assert.equal(explicitRotate.run.snapshot.role, "rotate");
+  await rpc("sq_abandon_run", profileOwner, { run_id: explicitRotate.run.id });
+  const preferencesWithUnknowns = {
+    version: 2,
+    role: null,
+    categories: null,
+    skills: ["music"],
+    exclusions: ["alcohol"],
+    preparation: null,
+  };
+  await sql(
+    `set request.jwt.claim.sub=${quote(profileOwner)}; update profiles set preferences=${json(preferencesWithUnknowns)},imported_summary='Original imported text' where id=${quote(profileOwner)};`,
+    "authenticated",
+  );
+  const readOwnProfile = () =>
+    sql(
+      `set request.jwt.claim.sub=${quote(profileOwner)}; select jsonb_build_object('preferences',preferences,'summary',imported_summary) from profiles where id=${quote(profileOwner)};`,
+      "authenticated",
+    ).then(JSON.parse);
+  assert.deepEqual(
+    (await readOwnProfile()).preferences,
+    preferencesWithUnknowns,
+    "Nested JSON nulls survive a fresh authenticated read",
+  );
+  await sql(
+    `set request.jwt.claim.sub=${quote(profileOwner)}; update profiles set imported_summary='Edited imported text' where id=${quote(profileOwner)};`,
+    "authenticated",
+  );
+  assert.deepEqual(await readOwnProfile(), {
+    preferences: preferencesWithUnknowns,
+    summary: "Edited imported text",
+  });
+  await sql(
+    `set request.jwt.claim.sub=${quote(profileOwner)}; update profiles set imported_summary='' where id=${quote(profileOwner)};`,
+    "authenticated",
+  );
+  assert.deepEqual(
+    await readOwnProfile(),
+    { preferences: preferencesWithUnknowns, summary: "" },
+    "Summary removal persists independently of confirmed preferences",
+  );
+  await sql(
+    `set request.jwt.claim.sub=${quote(b)}; update profiles set imported_summary='Another person' where id=${quote(profileOwner)};`,
+    "authenticated",
+  );
+  assert.equal(
+    (await readOwnProfile()).summary,
+    "",
+    "Summary-only update remains owner-scoped by RLS",
+  );
+  await sql(currentAcceptDefinition, null);
   const accept = (actor, t, key, area = '') =>
     rpc(
       "sq_accept_run",
@@ -913,6 +1075,7 @@ export async function runDatabaseTests(sql) {
     JSON.parse(await sql(`select sq_wallet_audit(${quote(operator)});`)),
     [],
   );
+  await runCommunityTests(sql);
   console.log(
     "PASS: 30 seeds, real RLS/privileges, transactions, concurrent acceptance/awards/stock/spending/consumption, idempotency, evidence, fenced render, share revoke, deletion, ledger reconciliation.",
   );

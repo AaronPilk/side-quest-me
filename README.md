@@ -1,7 +1,7 @@
 # Sidequest
 
-A mobile-first React/Vite PWA for choosing a real-world quest, recording three
-moments, exporting a private reel, and earning server-controlled progress.
+A mobile-first React/Vite PWA for discovering real-world quests, making your own
+version, keeping or publishing a reel, and optionally licensing an existing video.
 
 **Current state:** working isolated local demo, actual local FFmpeg rendering,
 and tested PostgreSQL migrations. No Sidequest production account, merchant,
@@ -17,15 +17,45 @@ Use Node 22.12+ or 24 LTS, npm, FFmpeg/ffprobe, and PostgreSQL 17 developer tool
 npm ci
 npm run render:dev
 # In another terminal:
+npm run render:fixtures  # labeled synthetic footage for the demo feed
 npm run dev:demo
 ```
 
 Open **http://127.0.0.1:5173**. The banner always identifies the local demo.
-The ten-question onboarding is editable; import and AI are optional. Select an
-at-home, Chill, zero-budget outing for the quickest path. Accept a quest,
+The four primary destinations are **Create**, **Discover**, **Activity**, and
+**Profile**. Private journal, rewards, account settings, and onboarding remain in
+secondary navigation. The ten-question onboarding is editable; import is optional
+and uses an explicit manual review. Unanswered questions remain unknown. Select an
+at-home, Chill, zero-budget outing for the quickest path. Create asks one outing
+question at a time, saves progress in the current browser tab, and lets you edit
+a final review before finding matching quests. Travel and venue questions follow
+your setting; trying a discovered quest keeps its scene and energy while asking
+for your own plans. Accept a quest,
 record/upload three 5–15-second selections, and complete it. The local renderer
 saves actual files under `.local/media`; demo profile/progress stays in browser
 storage. Local progress is a simulation, not proof of the production economy.
+
+Use the **Demo view** selector to exercise separate local personas. On Discover,
+try the labeled fixture video as Creator, confirm your own outing, capture three
+clips, and finish. **Keep private** leaves the reel in your journal; **Publish to
+Sidequest** explicitly creates a post. Profile has a separate public name, avatar,
+bio, and brand-availability setting. Account settings → imported summary lets you
+edit/remove text and confirm matching preferences without repeating onboarding.
+
+For licensing, switch to **Brand**, open an opted-in video, and select **Request
+to use video**. Enter payment, channels, dates, edits, and an explicit agreed fee
+(zero is permitted; no fee rate is assumed). Switch to **Second creator** to review
+the fixture video's offer in Activity, then counter, decline, or accept. The other
+party must accept a counter. Accepted terms remain **pending fulfillment** until
+**Operator** records manual payment and permission references in `/studio`.
+Only a completed deal within its usage period unlocks the brand's commercial
+download. These personas, businesses, money, and references are demo fixtures.
+
+To author a quest, choose Create → **Draft an original quest**, save and submit
+the structured plan, then switch to Operator → `/studio` to review it. Approval
+makes the exact version publicly available to try through ordinary eligibility
+checks. A new business profile also needs an operator decision before requesting
+videos; the labeled demo brand starts preapproved solely for local exploration.
 
 The first renderer run needs `sharp` from `npm ci`. Camera access needs localhost
 or HTTPS. Permission denial has an equal file-upload/capture alternative. Generated
@@ -124,8 +154,9 @@ Configure the chosen hostname and Supabase callback allowlist to match
 
 ## What is here
 
-- `src/`: four consumer tabs, email sign-in, onboarding, discovery, capture/review,
-  private journal, export, reward reservation UI, and restricted operator tools.
+- `src/`: four consumer tabs, public creator posts, original quest review, structured
+  licensing, email sign-in, confirmed preferences, capture/review, private journal,
+  export, rewards, and restricted operator tools.
 - `shared/`: canonical types, hard filters, deterministic ranking and thirty
   complete authored variants across ten families. Branding lives in `APP_CONFIG`.
 - `worker/`: JWT/session checks, RLS reads, narrow transaction endpoints,
@@ -164,8 +195,11 @@ downloaded copies cannot be recalled.
 Real-device iPhone/Android camera behavior, real Supabase email, deployed Container
 builds and cloud end-to-end behavior require staging verification. No funded
 sponsors or live rewards are asserted. AI parsing/vision is unconfigured and the
-manual authored flow remains useful. Public feeds, billing, subscriptions, grand
+manual authored flow remains useful. Billing, subscriptions, grand
 prizes/drawings, automatic social publishing and advanced video editing are deferred.
 
 See [BUILD_STATUS](docs/BUILD_STATUS.md) for measured results and remaining setup,
 [DECISIONS](docs/DECISIONS.md) for meaningful design choices, and [LICENSES](LICENSES.md).
+The [community guide](docs/COMMUNITY.md) details publication, role enforcement,
+licensing transitions and manual operations. The [profile audit](docs/PROFILES.md)
+documents historical uncertainty, editing, and each recommendation factor.
