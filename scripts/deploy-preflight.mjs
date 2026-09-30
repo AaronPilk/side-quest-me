@@ -10,7 +10,17 @@ function required(name) {
   return value;
 }
 
-required("CLOUDFLARE_API_TOKEN");
+const cloudflareToken = required("CLOUDFLARE_API_TOKEN");
+// Catch copied headers, shell commands and quoted assignments without imposing
+// a token length or printing any part of the credential. Cloudflare still
+// verifies token validity and permissions during deployment.
+if (
+  /[\s="'`]/.test(cloudflareToken) ||
+  /^Authorization:/i.test(cloudflareToken)
+)
+  throw new Error(
+    "CLOUDFLARE_API_TOKEN must contain the raw token only, without Bearer, whitespace, quotes, an assignment or a command",
+  );
 const rawUrl = required("VITE_SUPABASE_URL");
 let url;
 try {

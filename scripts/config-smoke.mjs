@@ -23,6 +23,39 @@ function preflight(overrides = {}) {
   );
 }
 assert.equal(preflight().status, 0, "Public deployment inputs should pass");
+for (const value of [
+  "Bearer configuration-token-secret-fixture",
+  "CLOUDFLARE_API_TOKEN=configuration-token-secret-fixture",
+  '"configuration-token-secret-fixture"',
+  "'configuration-token-secret-fixture'",
+  "`configuration-token-secret-fixture`",
+  "configuration-token secret-fixture",
+  "configuration-token\nsecret-fixture",
+  "configuration-token\tsecret-fixture",
+  "Authorization:configuration-token-secret-fixture",
+  "curl https://api.cloudflare.com/client/v4/user/tokens/verify",
+]) {
+  const result = preflight({ CLOUDFLARE_API_TOKEN: value });
+  assert.notEqual(
+    result.status,
+    0,
+    "Copied headers and commands must fail before deployment",
+  );
+  assert.match(
+    result.stderr,
+    /CLOUDFLARE_API_TOKEN must contain the raw token only/,
+  );
+  assert.ok(
+    !result.stderr.includes(value),
+    "Malformed credentials must never be printed",
+  );
+  assert.ok(!result.stderr.includes("configuration-token-secret-fixture"));
+}
+assert.equal(
+  preflight({ CLOUDFLARE_API_TOKEN: "token-shape-".repeat(20) }).status,
+  0,
+  "Token format validation must not impose a fixed provider token length",
+);
 for (const name of Object.keys(deploymentFixture)) {
   for (const value of ["", "YOUR_CONFIGURATION_PLACEHOLDER"]) {
     const result = preflight({ [name]: value });
@@ -71,7 +104,7 @@ for (const value of [
   );
 }
 console.log(
-  "PASS: deployment preflight rejects missing inputs, placeholders and browser-exposed server keys.",
+  "PASS: deployment preflight rejects missing inputs, malformed tokens, placeholders and browser-exposed server keys.",
 );
 const directory = await mkdtemp(path.join(tmpdir(), "sidequest-config-test-"));
 try {
