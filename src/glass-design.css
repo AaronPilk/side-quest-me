@@ -1,0 +1,487 @@
+/* Sidequest: cool glass surfaces, tactile pills, and real-world editorial imagery. */
+:root {
+  --canvas: #f5f6fc;
+  --surface: #ffffff;
+  --surface-muted: #eceef7;
+  --surface-hover: #e3e6f3;
+  --divider: #dfe2ef;
+  --input-border: #d9ddec;
+  --secondary: #626778;
+  --glass: rgb(255 255 255 / 76%);
+  --glass-border: rgb(255 255 255 / 90%);
+  --shadow-card: 0 8px 28px #33356408;
+}
+html.native-app {
+  background: var(--canvas);
+}
+body {
+  background:
+    radial-gradient(ellipse at 10% 0%, #e9e3ff 0, transparent 42%),
+    radial-gradient(ellipse at 100% 38%, #e6edff 0, transparent 40%),
+    var(--canvas);
+  background-attachment: fixed;
+}
+.native-app body::before {
+  background: #f3f3fc;
+}
+.button,
+.button.secondary,
+.chip,
+.quest-answer .chip,
+.quest-choice,
+.category,
+.survey-option,
+.intensity,
+.secondary-nav a,
+.discover-create,
+.discover-search button,
+.search-button,
+.icon-button {
+  border-radius: 999px;
+}
+/* Route styles load lazily; retain the same tactile shape on every screen. */
+.app-shell .button.secondary,
+.app-shell .social-profile-actions .button,
+.app-shell .rewards-tabs button,
+.app-shell .post-social-actions :is(a, button),
+.app-shell .discovery-search .icon-button {
+  border-radius: 999px;
+}
+.button {
+  min-height: 50px;
+  padding: 13px 22px;
+}
+.button:not(.secondary) {
+  background: linear-gradient(160deg, #8960f1, #7245df);
+  border: 1px solid #ffffff24;
+  box-shadow:
+    inset 0 1px 0 #ffffff30,
+    0 5px 15px #7950e826;
+}
+.button.secondary,
+.chip,
+.survey-option,
+.quest-choice,
+.category {
+  background: var(--glass);
+  border-color: #dce0ef;
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 3px 12px #34356604;
+}
+.chip.selected,
+.survey-option.selected,
+.quest-choice.selected,
+.category.selected {
+  background: #eee7ff;
+  border-color: #a385e7;
+  color: var(--action-ink);
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+select {
+  border-radius: 999px;
+  padding-inline: 18px;
+  background: #ffffffd9;
+}
+textarea {
+  border-radius: 22px;
+}
+.app-shell .brandbar {
+  background: transparent;
+}
+.space-menu > summary,
+.space-menu .secondary-nav,
+.app-shell .bottom-nav {
+  background: var(--glass);
+  border-color: var(--glass-border);
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  backdrop-filter: blur(26px) saturate(170%);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 8px 32px #32335a14,
+    0 0 0 0.5px #a8aec52e;
+}
+.app-shell .bottom-nav {
+  border-radius: 999px;
+}
+.app-shell .bottom-nav a {
+  border-radius: 999px;
+}
+.app-shell .bottom-nav a.active {
+  background: #7950e816;
+}
+.details-card,
+.community-panel,
+.quest-review,
+.wallet-card,
+.level-card {
+  background: #ffffffb8;
+  border-color: #ffffff;
+  box-shadow: var(--shadow-card);
+}
+.quest-card,
+.community-card {
+  background: #fff;
+  border-color: #e8eaf2;
+  border-radius: 26px;
+}
+.quest-card .quest-card-body {
+  padding: 22px;
+}
+.quest-card h2 {
+  line-height: 1.18;
+}
+.quest-card p {
+  line-height: 1.55;
+}
+.quest-art.adventure-art {
+  height: auto;
+  aspect-ratio: 3 / 2;
+  background: #292337;
+  border-radius: 26px;
+  position: relative;
+  overflow: hidden;
+}
+.quest-art.adventure-art.small {
+  aspect-ratio: 16 / 9;
+}
+.quest-art.adventure-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.adventure-art-mark {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: white;
+  border: 1px solid #ffffff55;
+  border-radius: 50%;
+  background: #16122133;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+.quest-card .quest-art.adventure-art {
+  border-radius: 0;
+}
+.journal-image .quest-art.adventure-art {
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+.adventure-carousel {
+  margin: 28px 0 18px;
+}
+.adventure-slides {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  border-radius: 28px;
+  overscroll-behavior-inline: contain;
+}
+.adventure-slides::-webkit-scrollbar {
+  display: none;
+}
+.adventure-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  position: relative;
+  min-height: 300px;
+  aspect-ratio: 1.13;
+  isolation: isolate;
+  background: #171a22;
+  color: white;
+}
+.adventure-slide img {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: -2;
+}
+.adventure-slide::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(transparent 20%, #10101912 35%, #101019df 100%);
+}
+.adventure-slide-copy {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  right: 24px;
+  text-align: left;
+}
+.adventure-slide-copy > span {
+  color: #ddd1ff;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+.adventure-slide-copy h2 {
+  margin: 10px 0;
+  font-size: clamp(1.5rem, 6vw, 2rem);
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+  max-width: 15ch;
+}
+.adventure-slide-copy p {
+  color: #f0edf9;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 29ch;
+}
+.adventure-carousel-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 8px;
+}
+.adventure-caption {
+  color: var(--secondary);
+  font-size: 0.625rem;
+  text-align: left;
+  max-width: 22ch;
+}
+.adventure-dots {
+  display: flex;
+  align-items: center;
+}
+.adventure-dots button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  color: var(--secondary);
+  background: transparent;
+}
+.adventure-dots button > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #bfc2d3;
+  transition: width 180ms;
+}
+.adventure-dots button[aria-pressed="true"] > span {
+  width: 20px;
+  background: var(--action);
+}
+.budget-picker {
+  padding-top: 0;
+}
+.budget-amount {
+  display: grid;
+  text-align: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.budget-amount output {
+  font-size: clamp(3rem, 12vw, 3.5rem);
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.06em;
+}
+input.budget-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 44px;
+  padding: 0;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+input.budget-slider::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--action) var(--budget-fill),
+    #dfe1ef var(--budget-fill)
+  );
+}
+input.budget-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 30px;
+  width: 30px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0.5px solid #d8dbea;
+  box-shadow: 0 2px 7px #29234330;
+  margin-top: -11px;
+}
+input.budget-slider::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #dfe1ef;
+}
+input.budget-slider::-moz-range-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--action);
+}
+input.budget-slider::-moz-range-thumb {
+  height: 30px;
+  width: 30px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid #d8dbea;
+  box-shadow: 0 2px 7px #29234330;
+}
+.budget-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--secondary);
+  font-size: 0.6875rem;
+}
+.budget-exact.text-button {
+  font-size: 0.8125rem;
+  min-height: 44px;
+  margin: 4px 0 0;
+}
+.budget-picker > label:not(.sr-only) {
+  margin-top: 4px;
+}
+.quest-flow-actions {
+  gap: 10px;
+  margin-top: 28px;
+}
+.quest-answer .chip {
+  min-height: 60px;
+  padding-inline: 18px;
+}
+.quest-answer .category {
+  min-height: 90px;
+  border-radius: 34px;
+}
+.quest-answer .category:nth-child(n + 4) {
+  min-height: 62px;
+  border-radius: 999px;
+}
+.quest-choice {
+  padding: 16px 22px;
+}
+.quest-flow-progress {
+  margin-bottom: 28px;
+}
+.quest-question {
+  margin-bottom: 24px;
+}
+.quest-answer {
+  min-height: 0;
+}
+@media (max-width: 1119px) {
+  .app-shell .bottom-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1px;
+    padding: 6px;
+  }
+  .app-shell .bottom-nav a {
+    flex: 1 1 0;
+    min-width: max-content;
+    padding: 8px 3px;
+    font-size: 0.625rem;
+  }
+  .app-shell .bottom-nav a span {
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+  .app-shell.has-navigation main {
+    padding-bottom: calc(max(112px, 7rem) + env(safe-area-inset-bottom));
+  }
+}
+@media (max-width: 480px) {
+  main {
+    padding: 22px 20px calc(104px + env(safe-area-inset-bottom));
+  }
+  .native-app .app-shell .brandbar {
+    padding-inline: 20px;
+    padding-bottom: 10px;
+  }
+  .quest-question h1 {
+    font-size: 1.875rem;
+  }
+  .quest-question p {
+    font-size: 0.9375rem;
+  }
+  .quest-card .quest-card-body {
+    padding: 20px;
+  }
+  .page-title {
+    margin-bottom: 24px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .adventure-slides {
+    scroll-behavior: auto;
+  }
+  .adventure-dots button > span {
+    transition: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass: #fff;
+  }
+  body {
+    background: var(--canvas);
+  }
+  .details-card,
+  .community-panel,
+  .quest-review,
+  .wallet-card,
+  .level-card {
+    background: #fff;
+  }
+}
+/* Create is the central action in the consumer tab bar. */
+.app-shell .bottom-nav a[href="/create"] svg {
+  width: 30px;
+  height: 30px;
+  padding: 4px;
+  border-radius: 50%;
+  color: white;
+  background: var(--action);
+  box-shadow: 0 3px 10px #7950e833;
+}
+.app-shell .bottom-nav a[href="/create"] {
+  gap: 1px;
+  color: var(--action-ink);
+  font-weight: 650;
+}
+.quest-answer .category-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.quest-answer .category,
+.quest-answer .category:nth-child(n + 4) {
+  grid-column: span 1;
+  min-height: 62px;
+  border-radius: 999px;
+  flex-direction: row;
+  gap: 8px;
+  padding: 12px;
+}
+.quest-answer .category:last-child {
+  grid-column: 1 / -1;
+}
+.quest-answer .category .category-icon {
+  font-size: 1.2rem;
+}
+.native-app body::before {
+  background: #f3f3fcd9;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}

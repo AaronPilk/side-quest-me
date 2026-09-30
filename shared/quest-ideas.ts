@@ -25,8 +25,8 @@ import {
  *   with the same hard filters the recommender uses (category, intensity,
  *   settings, group size, cost, time, boundary conflicts) plus ranking tags.
  * - `generateQuestRecipe` composes one idea into an `ActivityRecipe` draft that
- *   reuses the existing six-brief × three-intensity expansion, so a draft is
- *   catalog-compatible before a person has read it.
+ *   uses only its authored briefs at its declared intensity and preserves time,
+ *   group, cost and boundary constraints for editorial review.
  * - Nothing here enters `catalog` on its own. Drafts are reviewed, then added to
  *   `activity-recipes.ts` with a new migration. Published rows never change.
  *
@@ -42,8 +42,8 @@ export const IDEA_SCOPES = [
   "expedition",
 ] as const;
 /** moment ≤ 15 min · session ≤ 90 min · outing = half a day · expedition = a full day or more.
- * Only moment/session ideas fit the current three-clip quest structure; longer
- * scopes are kept for Series parts and future formats. */
+ * Draft generation defaults to the shorter scopes. Longer plans need explicit
+ * editorial selection; recording length is separate from activity duration. */
 export type IdeaScope = (typeof IDEA_SCOPES)[number];
 export const IDEA_GROUPS = ["solo", "couple", "friends"] as const;
 export const IDEA_THEMES = [
@@ -2618,12 +2618,12 @@ export function filterQuestIdeas(
       return false;
     if (
       constraints.maxMinutes !== undefined &&
-      idea.minutes > constraints.maxMinutes
+      Math.max(15, idea.minutes) > constraints.maxMinutes
     )
       return false;
     if (
       constraints.budgetMinor !== undefined &&
-      idea.cost.minMinor > constraints.budgetMinor
+      idea.cost.maxMinor > constraints.budgetMinor
     )
       return false;
     if (constraints.exclusions?.some((rule) => idea.conflicts.includes(rule)))
@@ -2642,22 +2642,6 @@ export function filterQuestIdeas(
 // ---------------------------------------------------------------------------
 // Generation: compose an idea into a catalog-compatible recipe draft.
 // ---------------------------------------------------------------------------
-/** Generic modifiers that turn one idea into extra distinct briefs when the idea
- * itself supplies fewer than six. Each changes the actual assignment, not just
- * the wording, mirroring how authored recipes differ across briefs. */
-export const BRIEF_TWISTS = [
-  "the free version",
-  "the thirty-minute version, timed",
-  "with someone else's rules",
-  "scored one to five on a card",
-  "starting right where you stand",
-  "predicted first, then checked",
-  "at the least likely hour",
-  "with one silly rule added",
-  "as a three-item ranking",
-  "narrated for a beginner",
-] as const;
-
 function hash32(input: string): number {
   let hash = 2166136261;
   for (const character of input)
@@ -2705,29 +2689,16 @@ export type GeneratedRecipe = ActivityRecipe & {
   reviewNotes: string[];
 };
 
-/** Builds six briefs from the idea's own briefs, then generic twists, without
- * repeating any and without exceeding the variant title limit. */
-export function composeBriefs(
-  idea: QuestIdea,
-  random: () => number,
-): [string, string, string, string, string, string] {
-  const own = idea.briefs.slice(0, 6);
-  const twists = shuffle([...BRIEF_TWISTS], random).map(
-    (twist) => `${idea.briefs[0]}, ${twist}`,
-  );
-  const briefs = [...own];
-  for (const twist of twists) {
-    if (briefs.length >= 6) break;
-    if (!briefs.includes(twist)) briefs.push(cutAtWord(twist, 96));
-  }
-  return briefs.slice(0, 6) as [string, string, string, string, string, string];
+/** Use the editor's concrete briefs only. Adding generic twists can change cost,
+ * duration, or the actual activity without changing its eligibility metadata. */
+export function composeBriefs(idea: QuestIdea): string[] {
+  return [...new Set(idea.briefs.map((brief) => cutAtWord(brief, 96)))];
 }
 
 export function generateQuestRecipe(
   idea: QuestIdea,
-  seed = "sidequest",
+  _seed = "sidequest",
 ): GeneratedRecipe {
-  const random = rng(`${seed}:${idea.id}`);
   const recipeId = `idea_${idea.id}`;
   if (publishedFamilyIds.has(`activity_${recipeId}`))
     throw new Error(`Idea ${idea.id} already has a published recipe family.`);
@@ -2735,15 +2706,16 @@ export function generateQuestRecipe(
     "Generated draft: read every brief aloud, cut anything that needs a purchase, booking, or a stranger's participation unless the idea declares it.",
     ...(idea.cost.maxMinor > 0
       ? [
-          `The idea can cost up to $${(idea.cost.maxMinor / 100).toFixed(2)}; the generated variants still declare $0 like other recipes, so either make the draft free or author cost fields by hand.`,
+          `The idea can cost up to $${(idea.cost.maxMinor / 100).toFixed(2)} in total. That estimate is preserved in the draft; confirm current prices before publication.`,
         ]
       : []),
     ...(idea.scope === "outing" || idea.scope === "expedition"
       ? [
-          `This is a ${idea.scope}-scale idea (${idea.minutes} minutes); the three-clip structure assumes under an hour. Consider a Series part instead.`,
+          `This is a ${idea.scope}-scale idea (${idea.minutes} minutes). Review travel, access and breaks for the full plan; consider a Series only if it has distinct stages. The finished video shows highlights, not the entire activity.`,
         ]
       : []),
     ...(idea.note ? [`Safety/permission: ${idea.note}`] : []),
+    `Keeps the authored ${idea.intensity} intensity, ${Math.max(15, idea.minutes)} minutes, and ${idea.groups.join(" / ")} group choices. Do not invent other intensity variants without writing their activities.`,
     ...(idea.conflicts.length
       ? [
           `Declares boundaries: ${idea.conflicts.join(", ")}. These stay hard filters.`,
@@ -2756,10 +2728,17 @@ export function generateQuestRecipe(
     category: idea.category,
     action: idea.text,
     evidence: idea.evidence,
-    prompts: composeBriefs(idea, random),
+    prompts: composeBriefs(idea),
     interests: idea.interests,
     settings: idea.settings,
     conflicts: idea.conflicts,
+    constraints: {
+      minutes: Math.max(15, idea.minutes),
+      groups: [...idea.groups],
+      intensity: idea.intensity,
+      cost: { ...idea.cost },
+      note: idea.note,
+    },
     ideaId: idea.id,
     reviewNotes,
   };
@@ -2782,8 +2761,7 @@ export function generateQuestRecipes(
     .map((idea) => generateQuestRecipe(idea, seed));
 }
 
-/** Expands a draft with the same builder the published catalog uses, so a
- * reviewer sees exactly the 18 variants that would ship. */
+/** Expands only the authored briefs, retaining each draft's declared constraints. */
 export function draftVariants(draft: GeneratedRecipe) {
   const { ideaId: _ideaId, reviewNotes: _notes, ...recipe } = draft;
   return recipeVariants(recipe);

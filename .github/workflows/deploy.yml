@@ -46,6 +46,7 @@ jobs:
           SIDEQUEST_BUCKET: ${{ vars.SIDEQUEST_BUCKET }}
           SIDEQUEST_QUEUE: ${{ vars.SIDEQUEST_QUEUE }}
           SIDEQUEST_ORIGIN: ${{ vars.SIDEQUEST_ORIGIN }}
+          SIDEQUEST_NATIVE_ORIGIN: ${{ vars.SIDEQUEST_NATIVE_ORIGIN }}
           SIDEQUEST_AREA: ${{ vars.SIDEQUEST_AREA }}
       - name: Build configured target
         run: npm run build

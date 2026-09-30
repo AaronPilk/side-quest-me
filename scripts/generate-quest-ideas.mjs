@@ -4,7 +4,7 @@
  *   node scripts/generate-quest-ideas.mjs --count 3
  *   node scripts/generate-quest-ideas.mjs --category late_night --setting home --group friends
  *   node scripts/generate-quest-ideas.mjs --seed 2026-10-01 --budget 0 --minutes 60 --exclude strangers,alcohol
- *   node scripts/generate-quest-ideas.mjs --variants      # also print the 18 validated variants per draft
+ *   node scripts/generate-quest-ideas.mjs --variants      # print each authored, validated variant
  *   node scripts/generate-quest-ideas.mjs --json > drafts.json
  *
  * Output is a DRAFT for editorial review. Nothing here touches shared/catalog.ts,

@@ -6,11 +6,12 @@ import {
 } from "react";
 import { accessToken } from "../lib/auth";
 import { MEDIA_LIMITS } from "../../shared/media";
+import { isTrustedApiUrl, mediaCrossOrigin, mediaUrl } from "../lib/runtime";
 
 export function mediaNeedsAuth(src: string) {
-  const url = new URL(src, window.location.href);
+  const url = new URL(mediaUrl(src), window.location.href);
   return (
-    url.origin === window.location.origin &&
+    isTrustedApiUrl(src) &&
     (url.pathname.startsWith("/api/media/") ||
       /^\/api\/community\/offers\/[^/]+\/media$/.test(url.pathname) ||
       /^\/api\/operator\/reviews\/[^/]+\/media\//.test(url.pathname))
@@ -27,7 +28,7 @@ export async function fetchMediaBlob(
   const token = protectedRoute ? await accessToken() : undefined;
   if (protectedRoute && !token)
     throw new Error("Sign in again to view your private video.");
-  const response = await fetch(src, {
+  const response = await fetch(mediaUrl(src), {
     signal,
     credentials: "omit",
     cache: "no-store",
@@ -109,7 +110,7 @@ function useMediaSource(
     ? state.source === src
       ? state
       : { source: src }
-    : { source: src, url: src };
+    : { source: src, url: src ? mediaUrl(src) : src };
 }
 
 export function AuthVideo({
@@ -136,6 +137,7 @@ export function AuthVideo({
   return (
     <video
       {...props}
+      crossOrigin={mediaCrossOrigin(src || poster)}
       src={media.url}
       poster={image.url}
       aria-busy={!!src && !media.url}
@@ -163,6 +165,7 @@ export function AuthImage({
   return (
     <img
       {...props}
+      crossOrigin={mediaCrossOrigin(src)}
       src={media.url}
       alt={alt || ""}
       loading={props.loading || "lazy"}

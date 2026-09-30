@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, writeFile, stat, rm } from "node:fs/promises";
+import { mkdir, writeFile, stat, rm, copyFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { MEDIA_LIMITS, renderManifestSchema } from "./contracts.mjs";
+import { writeWatermark, writeImageOverlay } from "./overlays.mjs";
 
 export class MediaError extends Error {
   constructor(message, status = 422) {
@@ -76,7 +77,10 @@ export async function hashFile(file) {
   return hash.digest("hex");
 }
 
-export async function probeMedia(file, { output = false } = {}) {
+export async function probeMedia(
+  file,
+  { output = false, minSeconds = 5 } = {},
+) {
   const info = await stat(file);
   const cap = output
     ? MEDIA_LIMITS.maxOutputBytes
@@ -152,8 +156,8 @@ export async function probeMedia(file, { output = false } = {}) {
   }
   if (
     !Number.isFinite(duration) ||
-    duration < 5 ||
-    duration > MEDIA_LIMITS.maxRawSeconds + 0.1
+    duration < minSeconds ||
+    duration > MEDIA_LIMITS.maxRawSeconds + (output ? 0.3 : 0.1)
   )
     throw new MediaError(
       "Upload a video between 5 and 60 seconds. Trim longer footage before uploading.",
@@ -293,6 +297,9 @@ export async function renderReel(
   const output = path.join(outputDirectory, `${manifest.outputId}.mp4`),
     thumbnail = path.join(outputDirectory, `${manifest.outputId}.jpg`);
   try {
+    const watermark =
+      manifest.clips.length === 1 ? path.join(work, "watermark.png") : null;
+    if (watermark) await writeWatermark(watermark);
     const parts = [];
     for (const [index, clip] of manifest.clips.entries()) {
       const asset = assets.get(clip.assetId);
@@ -343,6 +350,7 @@ export async function renderReel(
         treatmentPng,
       ];
       const needsSilence = clip.mute || !metadata.hasAudio;
+      if (watermark) inputArgs.push("-loop", "1", "-i", watermark);
       if (needsSilence)
         inputArgs.push(
           "-f",
@@ -354,8 +362,8 @@ export async function renderReel(
         );
       const size =
         clip.fit === "fill"
-          ? `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:(iw-1080)*${clip.crop}:(ih-1920)/2`
-          : "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x171A22";
+          ? `scale=1080:1920:force_original_aspect_ratio=increase:out_range=tv,crop=1080:1920:(iw-1080)*${clip.crop}:(ih-1920)/2`
+          : "scale=1080:1920:force_original_aspect_ratio=decrease:out_range=tv,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x171A22";
       const titleSeconds = manifest.sponsorDisclosure
         ? Math.min(duration, 4.5)
         : 2.3;
@@ -368,7 +376,15 @@ export async function renderReel(
           : index === 2
             ? `gte(t,${duration - closingSeconds})`
             : "0";
-      const filter = `[0:v]${size},setsar=1,fps=30,setpts=PTS-STARTPTS[v];[v][1:v]overlay=0:0:shortest=1[vlabel];[vlabel][2:v]overlay=0:0:shortest=1:enable='${enable}',format=yuv420p[outv];[${needsSilence ? 3 : 0}:a]aresample=48000:async=1:first_pts=0,aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=duration=${duration},asetpts=PTS-STARTPTS[outa]`;
+      const videoTreatment =
+        manifest.clips.length === 1
+          ? manifest.sponsorDisclosure
+            ? `[v][2:v]overlay=0:0:shortest=1:enable='${enable}'[disclosed];[disclosed][3:v]overlay=0:0:shortest=1,format=yuv420p[outv]`
+            : "[v][3:v]overlay=0:0:shortest=1,format=yuv420p[outv]"
+          : `[v][1:v]overlay=0:0:shortest=1[vlabel];[vlabel][2:v]overlay=0:0:shortest=1:enable='${enable}',format=yuv420p[outv]`;
+      // Native camera H.264 can be full-range. Convert samples as well as the
+      // range metadata; format=yuv420p alone can retain full-range yuvj420p.
+      const filter = `[0:v]${size},setparams=range=limited,setsar=1,fps=30,setpts=PTS-STARTPTS[v];${videoTreatment};[${needsSilence ? (watermark ? 4 : 3) : 0}:a]aresample=48000:async=1:first_pts=0,aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=duration=${duration},asetpts=PTS-STARTPTS[outa]`;
       await command(
         "ffmpeg",
         [
@@ -402,6 +418,8 @@ export async function renderReel(
           "23",
           "-pix_fmt",
           "yuv420p",
+          "-color_range",
+          "tv",
           "-c:a",
           "aac",
           "-b:a",
@@ -424,26 +442,28 @@ export async function renderReel(
       path.join(work, "concat.txt"),
       parts.map((_, i) => `file 'part-${i}.mp4'`).join("\n"),
     );
-    await command("ffmpeg", [
-      "-hide_banner",
-      "-loglevel",
-      "error",
-      "-nostdin",
-      "-y",
-      "-f",
-      "concat",
-      "-safe",
-      "1",
-      "-i",
-      path.join(work, "concat.txt"),
-      "-c",
-      "copy",
-      "-map_metadata",
-      "-1",
-      "-movflags",
-      "+faststart",
-      output,
-    ]);
+    if (parts.length === 1) await copyFile(parts[0], output);
+    else
+      await command("ffmpeg", [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "1",
+        "-i",
+        path.join(work, "concat.txt"),
+        "-c",
+        "copy",
+        "-map_metadata",
+        "-1",
+        "-movflags",
+        "+faststart",
+        output,
+      ]);
     const metadata = await probeMedia(output, { output: true });
     const expected = manifest.clips.reduce(
       (sum, clip) => sum + clip.end - clip.start,
@@ -489,4 +509,159 @@ export async function renderReel(
   } finally {
     await rm(work, { recursive: true, force: true });
   }
+}
+
+/** Normalize independent recorder containers before joining; never append raw MP4/WebM bytes. */
+export async function composeTakes(files, directory, imageOverlay) {
+  if (!files.length || files.length > 30)
+    throw new MediaError("Choose between 1 and 30 takes.", 400);
+  let seconds = 0;
+  let bytes = 0;
+  const sources = [];
+  for (const file of files) {
+    const metadata = await probeMedia(file, { minSeconds: 0.1 });
+    seconds += metadata.duration;
+    bytes += metadata.bytes;
+    if (seconds > 60.1 || bytes > MEDIA_LIMITS.maxUploadBytes)
+      throw new MediaError(
+        "Your complete video must be at most 60 seconds and 40 MB.",
+      );
+    sources.push({ file, metadata });
+  }
+  if (seconds < 5 || seconds > 60.1 || bytes > MEDIA_LIMITS.maxUploadBytes)
+    throw new MediaError(
+      "Your complete video must be 5–60 seconds and no larger than 40 MB.",
+    );
+  const started = performance.now();
+  const overlay = imageOverlay
+    ? path.join(directory, "image-overlay.png")
+    : null;
+  if (imageOverlay) {
+    try {
+      await writeImageOverlay(
+        imageOverlay.file,
+        imageOverlay.position,
+        overlay,
+      );
+    } catch {
+      throw new MediaError(
+        "Choose a still PNG, JPEG or WebP image no larger than 5 MB.",
+        400,
+      );
+    }
+  }
+  for (const [index, { file, metadata }] of sources.entries()) {
+    const args = ["-i", file];
+    if (!metadata.hasAudio)
+      args.push(
+        "-f",
+        "lavfi",
+        "-i",
+        "anullsrc=channel_layout=stereo:sample_rate=48000",
+      );
+    await command(
+      "ffmpeg",
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-y",
+        "-threads",
+        "2",
+        "-filter_complex_threads",
+        "2",
+        "-protocol_whitelist",
+        "file,pipe",
+        ...args,
+        "-filter_complex",
+        `[0:v]scale=1080:1920:force_original_aspect_ratio=decrease:out_range=tv,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x171A22,setparams=range=limited,setsar=1,fps=30,setpts=PTS-STARTPTS,format=yuv420p[v];[${metadata.hasAudio ? 0 : 1}:a]aresample=48000:async=1:first_pts=0,aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=duration=${metadata.duration},asetpts=PTS-STARTPTS[a]`,
+        "-map",
+        "[v]",
+        "-map",
+        "[a]",
+        "-t",
+        String(metadata.duration),
+        "-c:v",
+        "libx264",
+        "-threads",
+        "2",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-color_range",
+        "tv",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-map_metadata",
+        "-1",
+        "-movflags",
+        "+faststart",
+        path.join(directory, `part-${index}.mp4`),
+      ],
+      Math.max(1000, MEDIA_LIMITS.maxJobMs - (performance.now() - started)),
+    );
+  }
+  await writeFile(
+    path.join(directory, "concat.txt"),
+    sources.map((_, i) => `file 'part-${i}.mp4'`).join("\n"),
+  );
+  const output = path.join(directory, "session.mp4");
+  await command("ffmpeg", [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-nostdin",
+    "-y",
+    "-f",
+    "concat",
+    "-safe",
+    "1",
+    "-i",
+    path.join(directory, "concat.txt"),
+    ...(overlay
+      ? [
+          "-loop",
+          "1",
+          "-i",
+          overlay,
+          "-filter_complex",
+          "[0:v]setpts=PTS-STARTPTS[v];[v][1:v]overlay=0:0:shortest=1,format=yuv420p[outv]",
+          "-map",
+          "[outv]",
+          "-map",
+          "0:a",
+        ]
+      : ["-vf", "setpts=PTS-STARTPTS"]),
+    "-c:v",
+    "libx264",
+    "-threads",
+    "2",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "23",
+    "-pix_fmt",
+    "yuv420p",
+    "-color_range",
+    "tv",
+    "-c:a",
+    "aac",
+    "-af",
+    `asetpts=PTS-STARTPTS,atrim=duration=${Math.min(seconds, 60)}`,
+    "-t",
+    String(Math.min(seconds, 60)),
+    "-map_metadata",
+    "-1",
+    "-movflags",
+    "+faststart",
+    output,
+  ]);
+  const result = await probeMedia(output);
+  if (Math.abs(result.duration - seconds) > 0.3)
+    throw new MediaError("The recorded takes could not be joined accurately.");
+  return output;
 }

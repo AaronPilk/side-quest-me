@@ -133,6 +133,9 @@ test("Daytime Bold for a couple with $25 and one hour at home finds a real quest
   await expect(page.locator(".quest-recovery")).toHaveCount(0);
   await page.getByRole("button", { name: "Couple", exact: true }).click();
   await next(page);
+  await page
+    .getByRole("button", { name: "Enter exact amount", exact: true })
+    .click();
   await page.getByRole("spinbutton", { name: "Budget in dollars" }).fill("25");
   await next(page);
   await page.getByRole("button", { name: "1 hour", exact: true }).click();

@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { activityRecipes } from "../shared/activity-recipes";
 import { catalog } from "../shared/catalog";
-import { questVariantSchema, DEFAULT_PREFERENCES } from "../shared/domain";
 import {
-  BRIEF_TWISTS,
+  questVariantSchema,
+  DEFAULT_PREFERENCES,
+  DEFAULT_OUTING,
+} from "../shared/domain";
+import { ineligibilityReasons } from "../shared/recommend";
+import {
   IDEA_INTEREST_TAGS,
   composeBriefs,
   cutAtWord,
@@ -91,7 +95,7 @@ describe("idea filtering mirrors hard filters", () => {
     ).toBe(true);
     expect(strangers.length).toBeLessThan(questIdeas.length);
     const free = filterQuestIdeas({ budgetMinor: 0 });
-    expect(free.every((idea) => idea.cost.minMinor === 0)).toBe(true);
+    expect(free.every((idea) => idea.cost.maxMinor === 0)).toBe(true);
     const quick = filterQuestIdeas({ maxMinutes: 15 });
     expect(quick.every((idea) => idea.minutes <= 15)).toBe(true);
     const solo = filterQuestIdeas({ group: "solo", category: "date_night" });
@@ -140,18 +144,29 @@ describe("recipe generation", () => {
     }
   });
 
-  it("expands every draft into 18 schema-valid variants with unique ids and titles", () => {
+  it("only expands authored briefs with the original constraints", () => {
     for (const idea of questIdeas) {
       const draft = generateQuestRecipe(idea, "all");
       const variants = draftVariants(draft);
-      expect(variants).toHaveLength(18);
-      expect(new Set(variants.map((v) => v.id)).size).toBe(18);
-      expect(new Set(variants.map((v) => v.title)).size).toBe(6);
+      expect(variants).toHaveLength(idea.briefs.length);
+      expect(new Set(variants.map((v) => v.id)).size).toBe(idea.briefs.length);
+      expect(new Set(variants.map((v) => v.title)).size).toBe(
+        idea.briefs.length,
+      );
       for (const variant of variants) {
         expect(() => questVariantSchema.parse(variant)).not.toThrow();
         expect(variant.familyId).toBe(`activity_idea_${idea.id}`);
         expect(variant.conflicts).toEqual(idea.conflicts);
         expect(variant.beats[1].action).toContain(idea.text);
+        expect(variant.intensity).toBe(idea.intensity);
+        expect(variant.durationMinutes).toBe(Math.max(15, idea.minutes));
+        expect(variant.cost.minMinor).toBe(idea.cost.minMinor);
+        expect(variant.cost.maxMinor).toBe(idea.cost.maxMinor);
+        expect(draft.constraints?.groups).toEqual(idea.groups);
+        if (!idea.groups.includes("solo"))
+          expect(variant.minParticipants).toBeGreaterThan(1);
+        if (idea.groups.length === 1 && idea.groups[0] === "solo")
+          expect(variant.maxParticipants).toBe(1);
       }
     }
   });
@@ -169,16 +184,53 @@ describe("recipe generation", () => {
     );
   });
 
-  it("fills briefs from the idea first and never repeats or overruns a title", () => {
+  it("keeps authored briefs without inventing cost or time-changing twists", () => {
     const idea = questIdeas.find((item) => item.briefs.length === 3)!;
-    const briefs = composeBriefs(idea, () => 0.5);
-    expect(briefs.slice(0, 3)).toEqual(idea.briefs);
-    expect(new Set(briefs).size).toBe(6);
+    const briefs = composeBriefs(idea);
+    expect(briefs).toEqual(idea.briefs);
+    expect(new Set(briefs).size).toBe(3);
     for (const brief of briefs) expect(brief.length).toBeLessThanOrEqual(100);
-    expect(BRIEF_TWISTS.some((twist) => briefs[3].endsWith(twist))).toBe(true);
     expect(
       cutAtWord("Host a skill swap where everyone teaches one thing for", 50),
     ).toBe("Host a skill swap where everyone teaches one thing");
+  });
+
+  it("rejects over-budget drafts and does not shorten the friends-only reading party", () => {
+    const dinner = questIdeas.find((idea) => idea.id === "market_dinner")!;
+    expect(filterQuestIdeas({ budgetMinor: 1000 }, [dinner])).toEqual([]);
+    expect(filterQuestIdeas({ budgetMinor: 4000 }, [dinner])).toEqual([dinner]);
+    const party = questIdeas.find((idea) => idea.id === "reading_party")!;
+    expect(generateQuestRecipes({ group: "solo", count: 1 }, [party])).toEqual(
+      [],
+    );
+    expect(generateQuestRecipes({ maxMinutes: 60, count: 1 }, [party])).toEqual(
+      [],
+    );
+    const [draft] = generateQuestRecipes(
+      { group: "friends", maxMinutes: 75, count: 1 },
+      [party],
+    );
+    for (const variant of draftVariants(draft)) {
+      expect(variant.durationMinutes).toBe(75);
+      expect(variant.minParticipants).toBe(2);
+      expect(variant.allowedGroups).toEqual(["friends"]);
+      expect(
+        ineligibilityReasons(
+          variant,
+          {
+            ...DEFAULT_OUTING,
+            category: variant.category,
+            intensity: variant.intensity,
+            setting: variant.settings[0],
+            group: "couple",
+            durationMinutes: 75,
+          },
+          DEFAULT_PREFERENCES,
+        ),
+      ).toContain("This quest is written for a group of friends.");
+      expect(variant.beats[1].action).toContain("forty minutes of silence");
+    }
+    expect(generateQuestRecipes({ maxMinutes: 10 })).toEqual([]);
   });
 });
 

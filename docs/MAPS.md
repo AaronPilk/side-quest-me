@@ -6,8 +6,10 @@ accordion. The wizard does not ask for a travel price or a round-trip estimate.
 Existing saved travel amounts remain visible in optional review details and can
 be cleared explicitly; they are not silently discarded.
 
-**Use my current area** requests browser location only after the user selects it,
-even when Apple Maps has not been configured. Users can instead enter a town in
+**Use my current area** is the primary place action. It requests device location
+only after the user selects it and starts an Apple Maps search as soon as both
+location and place search are ready. Location permission itself is available
+even when browser Apple Maps has not been configured. Users can instead enter a town in
 **Area** or choose **Use entered area instead** after granting location. A denied
 location request leaves manual entry available. Location does not automatically
 change the selected setting, budget, time, intensity, or group.
@@ -19,7 +21,7 @@ Apple Maps** still opens an area-aware search; the app says in-app search is not
 connected and supplies no invented places. Failed lookups and searches can be
 retried.
 
-## Connect Apple Maps
+## Connect browser Apple Maps
 
 **Current state: `APPLE_MAPS_TOKEN` is not configured.**
 
@@ -122,6 +124,22 @@ external listing does not silently convert it into a quest or revise their
 answers. The current outing inputs and firm profile boundaries remain
 responsible for quest eligibility.
 
+A supported structured Apple POI category now influences quest ranking before
+pagination. A park can prioritize an outdoor observation walk; a museum can
+prioritize visual observation activities. This is an explicit editorial affinity
+map, not language understanding or AI. Unsupported or missing categories make no
+fit claim, and venue-name keywords are never interpreted as categories. Only
+eligible published quest families receive a ranking boost; a selected place does
+not establish access, opening hours, cost, tickets or permission. Explanations say
+“Suggested for a park setting,” rather than claiming that a specific venue hosts
+the activity.
+
+The transient context contains only the chosen Place ID and supported category.
+It must match the outing’s selected ID. Category lookups have a two-minute memory
+cache and are not saved to the profile, outing, browser storage or database. A
+failed lookup uses ordinary recommendations. Pagination holds the same context
+for that discovery so results do not shuffle halfway through.
+
 Only the durable **Apple Place ID** is saved in the private outing and accepted
 run. Name, address, and map coordinates are looked up for display; Apple's
 [Place ID documentation](https://developer.apple.com/documentation/mapkit/identifying-unique-locations-with-place-ids)
@@ -151,6 +169,65 @@ bounded date windows/responses, unsafe/canceled listings, venue-local midnight,
 exact timestamp edges, and unknown times. Configured tests use explicit SDK and
 provider fixtures rather than claiming live inventory.
 
-Both provider credentials remain to be supplied. Live Apple authorization and
-real map rendering, real Ticketmaster discovery, and device directions still need
-verification after configuration.
+The browser Maps token and Ticketmaster credentials remain to be supplied.
+Native iOS 18+ place search does not need that token. Live browser authorization,
+real map rendering, Ticketmaster discovery, and device directions need verification
+after their relevant configuration.
+
+## Optional AI follow-up (not enabled)
+
+No AI provider or AI generation endpoint is implemented or enabled in this pass.
+Adding an API key alone will not make the app generate quests. Native Apple Maps or configured browser Maps, and
+Ticketmaster configuration above supply real place and event inventory; an AI model is not a substitute for either feed.
+
+A practical next integration is Cloudflare Workers AI on the existing Worker.
+Its [official binding](https://developers.cloudflare.com/workers-ai/configuration/bindings/)
+uses `"ai": { "binding": "AI" }` in Wrangler configuration and `env.AI.run()` on
+the server. It does not require a separate browser API key or an `AI_API_KEY`
+environment variable. This binding has **not** been added locally or remotely;
+there is currently no AI setting to turn on. The environment-generation script
+would also need to carry that explicit opt-in binding into deployment.
+
+The first feature should be a reviewed creative brief grounded in an already
+eligible quest and supported place category, with structured output validation,
+a server request limit, an output-token limit, a short timeout and the authored
+quest as fallback. It must never invent a business, event, price, opening hour or
+booking, and must not change group size, intensity, time, budget or exclusions.
+Do not send imported profile prose, names, precise GPS or provider inventory to
+an AI model as part of this initial feature. Review model terms and
+[current usage pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)
+before enabling billed inference. No inference charges were incurred by this
+local implementation.
+
+## Native iOS place search
+
+The iPhone build uses a custom Capacitor `SidequestPlaces` bridge to Apple's
+[`MKLocalSearch`](https://developer.apple.com/documentation/mapkit/mklocalsearch),
+with native device location only after **Use my current area** is tapped. It does
+not request a browser Maps token or expose an Apple signing key. Search returns
+up to eight real points of interest, with provider names, addresses, coordinates,
+and only supported structured categories used in existing quest ranking.
+
+Durable [`MKMapItem.identifier`](https://developer.apple.com/documentation/mapkit/mkmapitem/identifier-swift.property)
+and [`MKMapItemRequest`](https://developer.apple.com/documentation/mapkit/mkmapitemrequest)
+lookup require iOS 18. The app still installs on iOS 15+, but older systems show
+an explicit iOS 18 requirement for in-app search and retain manual area entry and
+external Apple Maps browsing. No locally fabricated place IDs are stored.
+
+Only the real Apple place ID is saved. Details are looked up again for the selected
+place after refresh; recommendation context remains short-lived and in memory.
+Unknown categories add no fit claim. GPS biases the search region; it does not
+promise that every returned place is inside a strict radius, open, free, or allows
+filming. Native selected-place cards offer Apple Maps details and directions;
+embedded map previews remain a browser-only feature.
+
+Native search and lookup cancel on request changes, have a 12-second deadline,
+and discard invalid or ID-less provider results. Swift compilation targets iOS 15
+with iOS 18 availability guards. Unit tests mock the native bridge to verify
+validation, cancellation, unknown categories, exact-ID lookups and browser fallback.
+On September 30, 2026, the rebuilt iPhone 17 / iOS 26.4 Simulator completed a
+live search for Central Park New York, returned Apple’s Central Park result and
+resolved its selected ID into a place card with directions controls. Denied
+location and manual-area search also worked. Allowed/approximate GPS, full app
+restart persistence, actual directions handoff and physical-device checks remain
+pending. This live search is separate from the mocked service tests.

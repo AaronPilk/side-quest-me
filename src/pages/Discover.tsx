@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -131,9 +137,13 @@ export function DiscoverPostCard({
           </p>
         )}
         <h2>
-          <Link to={`/posts/${post.id}`} state={{ returnTo }}>
-            {post.quest.title}
-          </Link>
+          {detail ? (
+            post.quest.title
+          ) : (
+            <Link to={`/posts/${post.id}`} state={{ returnTo }}>
+              {post.quest.title}
+            </Link>
+          )}
         </h2>
         <p>{post.quest.hook}</p>
         {post.caption && <p className="post-caption">{post.caption}</p>}
@@ -483,7 +493,9 @@ export default function Discover({ signedIn = false }: { signedIn?: boolean }) {
   const followingOnly = params.get("view") === "following";
   const query = (params.get("q") || "").trim().slice(0, 80);
   const [search, setSearch] = useState(query);
-  useEffect(() => setSearch(query), [query]);
+  // Reconcile URL navigation before the next paint/input event; a deferred
+  // effect can overwrite a second query typed immediately after submission.
+  useLayoutEffect(() => setSearch(query), [query]);
   const post = useCommunity("post", { id }, Boolean(id));
   const me = useCommunity("me", {}, signedIn);
   useEffect(() => {

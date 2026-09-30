@@ -1,0 +1,127 @@
+/* Bundled iOS screens extend under the status bar and home indicator. */
+html.native-app {
+  min-height: 100%;
+  background: var(--brand-warm-white, #f7f6f2);
+  overscroll-behavior-y: none;
+}
+.native-app body {
+  min-height: 100dvh;
+}
+.native-app .app-shell .brandbar {
+  height: auto;
+  min-height: calc(68px + env(safe-area-inset-top));
+  padding-top: calc(12px + env(safe-area-inset-top));
+  padding-bottom: 12px;
+  padding-left: max(18px, env(safe-area-inset-left));
+  padding-right: max(18px, env(safe-area-inset-right));
+}
+.native-app .reel-viewer-header {
+  padding-top: calc(12px + env(safe-area-inset-top));
+  padding-left: max(18px, env(safe-area-inset-left));
+  padding-right: max(18px, env(safe-area-inset-right));
+}
+.native-app .reel-viewer .public-video video {
+  max-height: calc(100dvh - 150px - env(safe-area-inset-top));
+}
+.native-app input,
+.native-app select,
+.native-app textarea {
+  /* Prevent iOS focus zoom without disabling user zoom for accessibility. */
+  font-size: max(16px, 1em);
+}
+@media (max-width: 1119px) {
+  .native-app .app-shell .bottom-nav {
+    left: max(10px, env(safe-area-inset-left));
+    right: max(10px, env(safe-area-inset-right));
+    width: auto;
+    transform: none;
+  }
+}
+
+/* The shared text-button fills its container; Cancel must only fill its cell. */
+.native-app .onboard-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.native-app .onboard-top > .back {
+  justify-self: start;
+  white-space: nowrap;
+}
+.native-app .onboard-top > .support {
+  margin: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+.native-app .onboard-top > .text-button {
+  width: auto;
+  margin: 0;
+  justify-self: end;
+  white-space: nowrap;
+}
+/* Keep scrolling content behind an opaque status-bar surface. */
+.native-app body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top);
+  z-index: 100;
+  pointer-events: none;
+  background: var(--brand-warm-white);
+}
+
+.native-app .quest-budget input {
+  font-size: 2rem;
+}
+
+/* Keep the first recording actions in reach on an iPhone capture sheet. */
+.native-app body:has(.capture-overlay)::before {
+  background: var(--brand-charcoal);
+}
+.native-app .capture-content {
+  padding-top: calc(12px + env(safe-area-inset-top));
+}
+.native-app .capture-content > .section-heading {
+  top: env(safe-area-inset-top);
+  margin-bottom: 8px;
+}
+.native-app .capture-content > .capture-quest-title {
+  margin: 0 0 4px;
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+.native-app .native-filming-guide {
+  margin: 10px 0;
+  padding: 0 0 0 12px;
+}
+.native-app .native-filming-guide > summary {
+  min-height: 44px;
+  padding: 2px 0;
+}
+.native-app .native-filming-guide > summary > span {
+  display: block;
+  margin-top: 2px;
+  color: #c5c5ce;
+  font-size: 0.7rem;
+}
+.native-app .capture-overlay .capture-frame {
+  /* Constrain width with height so the portrait frame retains its 9:16 ratio. */
+  width: min(100%, 20.25dvh, 240px);
+  height: auto;
+  max-height: 36dvh;
+  margin: 12px auto;
+}
+.native-app .capture-placeholder {
+  gap: 10px;
+  padding: 12px;
+}
+.native-app .capture-overlay .take-progress {
+  margin: 10px 0;
+}
+.native-app .capture-actions > .support {
+  margin: 8px 0;
+}
+.native-app .capture-actions .take-controls {
+  margin-top: 10px;
+}

@@ -1,3 +1,5 @@
+import type { PlaceContext } from "../../shared/place-matching";
+import { selectedPlaceContext } from "../lib/place-context";
 import { useState, useEffect, useRef } from "react";
 import { QuestWizard, editQuestPlans } from "../components/QuestWizard";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -20,6 +22,7 @@ import {
   type Candidate,
 } from "../../shared/domain";
 import { api, eligibility } from "../lib/api";
+import { currentActivityTemplateId } from "../../shared/activity-history";
 import { DEMO } from "../lib/auth";
 import { seriesApi } from "../lib/series-api";
 import type { QuestViability, QuestRecovery } from "../../shared/viability";
@@ -74,6 +77,7 @@ export default function Quest() {
   const [busy, setBusy] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const discoveryGeneration = useRef(0);
+  const discoveryPlace = useRef<PlaceContext | null>(null);
   const resultsVisible = candidates !== null && !selected;
   const resultsHeading = useRef<HTMLHeadingElement>(null);
   const [acceptKey] = useState(crypto.randomUUID());
@@ -142,7 +146,14 @@ export default function Quest() {
     setError("");
     try {
       outingSchema.parse(outing);
-      const choices = await api.quests(outing, requestedTemplate);
+      const placeContext = await selectedPlaceContext(outing.applePlaceId);
+      if (generation !== discoveryGeneration.current) return;
+      const choices = await api.quests(
+        outing,
+        requestedTemplate,
+        0,
+        placeContext,
+      );
       const [assessment, others] = await Promise.all([
         choices.length
           ? Promise.resolve(undefined)
@@ -152,10 +163,11 @@ export default function Quest() {
               requestedTemplate,
             ),
         requestedTemplate && !choices.length
-          ? api.quests(outing)
+          ? api.quests(outing, undefined, 0, placeContext)
           : Promise.resolve([]),
       ]);
       if (generation !== discoveryGeneration.current) return;
+      discoveryPlace.current = placeContext;
       setFit(assessment);
       setAlternatives(others);
       setCandidates(choices);
@@ -172,7 +184,12 @@ export default function Quest() {
     setBusy(true);
     setError("");
     try {
-      const next = await api.quests(outing, undefined, candidates.length);
+      const next = await api.quests(
+        outing,
+        undefined,
+        candidates.length,
+        discoveryPlace.current,
+      );
       if (generation !== discoveryGeneration.current) return;
       setCandidates((previous) => {
         const unique = new Map(
@@ -226,6 +243,21 @@ export default function Quest() {
     ["accepted", "in_progress"].includes(r.status),
   );
   const label = CATEGORIES.find((c) => c.id === outing.category)?.label;
+  const updatedTemplate =
+    requestedTemplate && currentActivityTemplateId(requestedTemplate);
+  if (updatedTemplate)
+    return (
+      <section className="section">
+        <h1>This quest has a new edition.</h1>
+        <p>
+          The original story stays as it was. Start a fresh attempt with the
+          updated challenge and filming ideas.
+        </p>
+        <Link className="button" to={`/create?template=${updatedTemplate}`}>
+          View updated quest <ArrowRight size={18} />
+        </Link>
+      </section>
+    );
   if (selected) {
     const reason = DEMO
       ? eligibility(runs.data || [], selected.familyId)
@@ -235,7 +267,7 @@ export default function Quest() {
         <button className="back" onClick={() => setSelected(undefined)}>
           ← Your choices
         </button>
-        <QuestArt variant={selected.category} small />
+        <QuestArt variant={selected.category} seed={selected.familyId} small />
         <div className="eyebrow space-top">
           {label} ·{" "}
           {INTENSITIES.find((i) => i.id === selected.intensity)?.label}
@@ -263,7 +295,7 @@ export default function Quest() {
           />
         )}
         <section className="section">
-          <h2>The three moments</h2>
+          <h2>Your challenge</h2>
           <ol className="beats-preview">
             {selected.beats.map((b, i) => (
               <li key={b.label}>
@@ -306,7 +338,7 @@ export default function Quest() {
                 ? "This family has a 30-day award cooldown across all levels."
                 : reason === "daily_cap"
                   ? `Your daily award limit resets ${localReset()}.`
-                  : "Three valid clips and an honest attempt. A real flop counts, too."}
+                  : "Save your video and confirm your attempt. A real flop counts, too."}
             </p>
           </div>
         </div>
@@ -368,7 +400,13 @@ export default function Quest() {
           <div>
             <span className="eyebrow">YOUR ACTIVE QUEST</span>
             <h2>{active.quest.title}</h2>
-            <p>{active.clips.length} of 3 moments saved</p>
+            <p>
+              {active.clips.length === 1 && active.clips[0].mode === "session"
+                ? "Your video is saved"
+                : active.clips.length
+                  ? "Continue your story"
+                  : "Ready when you are"}
+            </p>
           </div>
           <ChevronRight />
         </Link>
@@ -466,7 +504,7 @@ export default function Quest() {
                   window.scrollTo(0, 0);
                 }}
               >
-                <QuestArt variant={q.category} small />
+                <QuestArt variant={q.category} seed={q.familyId} small />
                 <div className="quest-card-body">
                   <div className="eyebrow">
                     {label} ·{" "}

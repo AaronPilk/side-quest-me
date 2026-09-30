@@ -23,10 +23,25 @@
     "test:db:advisors": "node scripts/db-test.mjs --advisors",
     "format": "prettier --write .",
     "test:api": "node scripts/api-smoke.mjs",
-    "db:types": "node scripts/db-test.mjs --generate-types"
+    "db:types": "node scripts/db-test.mjs --generate-types",
+    "ios:build": "vite build --config vite.ios.config.ts --mode ios",
+    "ios:build:demo": "vite build --config vite.ios.config.ts --mode ios-demo",
+    "ios:sync": "npm run ios:build && cap sync ios",
+    "ios:sync:demo": "npm run ios:build:demo && cap sync ios",
+    "ios:open": "cap open ios",
+    "ios:verify:release": "node scripts/verify-ios-release.mjs",
+    "ios:simulator": "node scripts/run-ios-simulator.mjs"
   },
   "dependencies": {
     "@apple/mapkit-loader": "1.0.0",
+    "@capacitor/app": "8.1.1",
+    "@capacitor/browser": "8.0.4",
+    "@capacitor/clipboard": "8.0.1",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/filesystem": "8.1.3",
+    "@capacitor/geolocation": "8.2.2",
+    "@capacitor/ios": "8.5.2",
+    "@capacitor/share": "8.0.2",
     "@cloudflare/containers": "0.3.7",
     "@supabase/supabase-js": "2.117.2",
     "hono": "4.13.9",
@@ -39,6 +54,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.2",
     "@cloudflare/vite-plugin": "1.61.0",
     "@playwright/test": "1.63.0",
     "@types/node": "26.6.3",

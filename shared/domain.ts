@@ -377,6 +377,11 @@ export const questVariantSchema = z
     durationMinutes: z.number().int().min(15).max(720),
     minParticipants: z.number().int().min(1),
     maxParticipants: z.number().int().max(12),
+    allowedGroups: z
+      .array(z.enum(["solo", "couple", "friends"]))
+      .min(1)
+      .max(3)
+      .optional(),
     cost: z
       .object({
         minMinor: z.number().int().nonnegative(),

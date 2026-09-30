@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MapKit, Place } from "@apple/mapkit-loader";
 import { ExternalLink, LocateFixed, MapPin, Search, X } from "lucide-react";
 import {
@@ -6,11 +6,18 @@ import {
   applePlaceUrl,
   appleSearchUrl,
 } from "../../shared/places";
-import { loadAppleMaps, uniquePlaces } from "../lib/apple-maps";
+import type { ApplePlace } from "../lib/apple-maps";
+import {
+  loadApplePlaceService,
+  type ApplePlaceService,
+} from "../lib/apple-place-service";
+import { isNativeApp } from "../lib/runtime";
+import { currentArea } from "../lib/location";
+import { rememberApplePlaceContext } from "../lib/place-context";
 import { Button, Notice } from "./ui";
 import NearbyEvents from "./NearbyEvents";
 
-function PlaceMap({ place, mapkit }: { place: Place; mapkit: MapKit }) {
+function PlaceMap({ place, mapkit }: { place: ApplePlace; mapkit: MapKit }) {
   const element = useRef<HTMLDivElement>(null);
   const [error, setError] = useState(false);
   useEffect(() => {
@@ -18,11 +25,12 @@ function PlaceMap({ place, mapkit }: { place: Place; mapkit: MapKit }) {
     let map: InstanceType<MapKit["Map"]> | undefined;
     try {
       map = new mapkit.Map(element.current, {
-        center: place.coordinate,
+        center: (place as Place).coordinate!,
         showsUserLocation: false,
         isRotationEnabled: false,
       });
-      map.showItems([new mapkit.PlaceAnnotation(place)]);
+      // Only the browser service supplies MapKit and its complete Place objects.
+      map.showItems([new mapkit.PlaceAnnotation(place as Place)]);
       setError(false);
     } catch {
       setError(true);
@@ -55,7 +63,7 @@ export function ApplePlaceCard({
   transport?: string;
   onRemove?: () => void;
 }) {
-  const [place, setPlace] = useState<Place>();
+  const [place, setPlace] = useState<ApplePlace>();
   const [mapkit, setMapkit] = useState<MapKit | null>();
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -63,15 +71,18 @@ export function ApplePlaceCard({
     const controller = new AbortController();
     setPlace(undefined);
     setError("");
-    loadAppleMaps()
+    loadApplePlaceService()
       .then(async (kit) => {
         if (controller.signal.aborted) return;
-        setMapkit(kit);
+        setMapkit(kit?.mapkit ?? null);
         if (kit) {
-          const value = await new kit.PlaceLookup().getPlace(placeId, {
+          const value = await kit.lookup(placeId, {
             signal: controller.signal,
           });
-          if (!controller.signal.aborted) setPlace(value);
+          if (!controller.signal.aborted) {
+            rememberApplePlaceContext(value);
+            setPlace(value);
+          }
         }
       })
       .catch(() => {
@@ -144,16 +155,18 @@ export function ApplePlacePicker({
   setting,
   placeId,
   onChange,
+  onAreaChange,
 }: {
   area: string;
   setting: "outside" | "venue";
   placeId?: string | null;
   onChange: (id: string | null) => void;
+  onAreaChange?: (value: string) => void;
 }) {
   const [query, setQuery] = useState(setting === "outside" ? "parks" : "cafés");
-  const [kit, setKit] = useState<MapKit | null>();
+  const [kit, setKit] = useState<ApplePlaceService | null>();
   const [error, setError] = useState("");
-  const [places, setPlaces] = useState<Place[] | null>(null);
+  const [places, setPlaces] = useState<ApplePlace[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [locating, setLocating] = useState(false);
   const [center, setCenter] = useState<{
@@ -161,7 +174,9 @@ export function ApplePlacePicker({
     longitude: number;
   }>();
   const [attempt, setAttempt] = useState(0);
+  const [searchAfterLocation, setSearchAfterLocation] = useState(false);
   const generation = useRef(0);
+  const locationRequest = useRef(0);
   const searchRequest = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const searchQuery = [query.trim(), center ? "" : area.trim()]
@@ -171,7 +186,7 @@ export function ApplePlacePicker({
     mounted.current = true;
     let active = true;
     setError("");
-    loadAppleMaps()
+    loadApplePlaceService()
       .then((value) => {
         if (active) setKit(value);
       })
@@ -191,41 +206,86 @@ export function ApplePlacePicker({
     setPlaces(null);
     setBusy(false);
   }, [query, area, center]);
-  async function search(near = center) {
-    if (!kit || !query.trim()) return;
-    searchRequest.current?.abort();
-    const controller = new AbortController();
-    searchRequest.current = controller;
-    const request = ++generation.current;
-    setBusy(true);
-    setError("");
-    setPlaces(null);
-    try {
-      const response = await new kit.Search().search(
-        near ? query.trim() : searchQuery,
-        {
+  const search = useCallback(
+    async (near = center) => {
+      if (!kit || !query.trim()) return;
+      searchRequest.current?.abort();
+      const controller = new AbortController();
+      searchRequest.current = controller;
+      const request = ++generation.current;
+      setBusy(true);
+      setError("");
+      setPlaces(null);
+      try {
+        const response = await kit.search(near ? query.trim() : searchQuery, {
           ...(near ? { coordinate: near } : {}),
           signal: controller.signal,
-        },
-      );
-      if (request === generation.current)
-        setPlaces(uniquePlaces(response.places));
+        });
+        if (request === generation.current) setPlaces(response);
+      } catch {
+        if (!controller.signal.aborted && request === generation.current)
+          setError(
+            "Places couldn’t load. Try searching again, or open Apple Maps.",
+          );
+      } finally {
+        if (request === generation.current) setBusy(false);
+      }
+    },
+    [center, kit, query, searchQuery],
+  );
+  useEffect(() => {
+    if (!searchAfterLocation || !center || !kit) return;
+    setSearchAfterLocation(false);
+    void search(center);
+  }, [center, kit, search, searchAfterLocation]);
+  async function locate() {
+    const request = ++locationRequest.current;
+    setLocating(true);
+    setError("");
+    try {
+      const near = await currentArea();
+      if (mounted.current && request === locationRequest.current) {
+        setCenter(near);
+        setSearchAfterLocation(true);
+      }
     } catch {
-      if (!controller.signal.aborted && request === generation.current)
+      if (mounted.current && request === locationRequest.current)
         setError(
-          "Places couldn’t load. Try searching again, or open Apple Maps.",
+          "Location access is off or unavailable. You can still search by town or place name.",
         );
     } finally {
-      if (request === generation.current) setBusy(false);
+      if (mounted.current && request === locationRequest.current)
+        setLocating(false);
     }
   }
   return (
     <div className="apple-place-picker">
       <h3>Find a place near you</h3>
       <p className="support">
-        Choose a meeting point for your quest. Your answers still set the budget
-        and requirements.
+        Start with what’s around you, or search a town or place. Your budget,
+        time and group stay the same.
       </p>
+      <Button type="button" busy={locating} onClick={() => void locate()}>
+        <LocateFixed size={17} />
+        {locating ? "Finding your area…" : "Use my current area"}
+      </Button>
+      {onAreaChange && (
+        <label>
+          Area
+          <input
+            value={area}
+            maxLength={100}
+            placeholder="Or enter a neighborhood or town"
+            onChange={(event) => {
+              locationRequest.current++;
+              setLocating(false);
+              setSearchAfterLocation(false);
+              setCenter(undefined);
+              onAreaChange(event.target.value);
+            }}
+          />
+        </label>
+      )}
       <label>
         Search Apple Maps
         <input
@@ -245,6 +305,7 @@ export function ApplePlacePicker({
         {kit && (
           <Button
             type="button"
+            secondary
             busy={busy}
             disabled={!query.trim()}
             onClick={() => void search()}
@@ -253,45 +314,6 @@ export function ApplePlacePicker({
             Find places
           </Button>
         )}
-        <button
-          type="button"
-          className="text-button"
-          disabled={locating}
-          onClick={() => {
-            if (!navigator.geolocation) {
-              setError(
-                "Location isn’t available. Type your town or neighborhood in Area instead.",
-              );
-              return;
-            }
-            setLocating(true);
-            navigator.geolocation.getCurrentPosition(
-              (position) => {
-                if (mounted.current) {
-                  const near = {
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude,
-                  };
-                  setCenter(near);
-                  setLocating(false);
-                  setError("");
-                }
-              },
-              () => {
-                if (mounted.current) {
-                  setLocating(false);
-                  setError(
-                    "Location access is off. You can still search by town or place name.",
-                  );
-                }
-              },
-              { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
-            );
-          }}
-        >
-          <LocateFixed size={17} />
-          {locating ? "Finding your area…" : "Use my current area"}
-        </button>
       </div>
       {center && (
         <p className="fine-print">
@@ -300,7 +322,12 @@ export function ApplePlacePicker({
           <button
             type="button"
             className="text-button"
-            onClick={() => setCenter(undefined)}
+            onClick={() => {
+              locationRequest.current++;
+              setLocating(false);
+              setSearchAfterLocation(false);
+              setCenter(undefined);
+            }}
           >
             Use entered area instead
           </button>
@@ -313,8 +340,9 @@ export function ApplePlacePicker({
       )}
       {kit === null && (
         <p className="support" role="status">
-          In-app place search isn’t connected yet. You can still browse Apple
-          Maps and enter your area above.
+          {isNativeApp()
+            ? "In-app place search needs iOS 18 or later. You can still browse Apple Maps and enter your area above."
+            : "In-app place search isn’t connected yet. You can still browse Apple Maps and enter your area above."}
         </p>
       )}
       {error && (
@@ -344,6 +372,7 @@ export function ApplePlacePicker({
                 className={`apple-place-result ${place.id === placeId ? "selected" : ""}`}
                 aria-pressed={place.id === placeId}
                 onClick={() => {
+                  rememberApplePlaceContext(place);
                   onChange(place.id!);
                   setPlaces(null);
                 }}
@@ -373,7 +402,8 @@ export function ApplePlacePicker({
         <ApplePlaceCard placeId={placeId} onRemove={() => onChange(null)} />
       )}
       <p className="fine-print">
-        Search and map data by Apple Maps. Place selection is optional.
+        Search and map data by Apple Maps. When a place type is available, it
+        helps sort quest ideas. Check access and rules before you go.
       </p>
       <NearbyEvents area={area} center={center} />
     </div>

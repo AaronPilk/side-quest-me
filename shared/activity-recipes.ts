@@ -2,6 +2,7 @@ import {
   AWARDS,
   type Category,
   type Exclusion,
+  type Intensity,
   type QuestVariant,
   type Setting,
 } from "./domain";
@@ -16,17 +17,26 @@ export type ActivityRecipe = {
   category: Category;
   action: string;
   evidence: string;
-  prompts: [string, string, string, string, string, string];
+  prompts: string[];
   interests: string[];
   settings: Setting[];
   conflicts?: Exclusion[];
+  /** Editorial constraints survive generation; a draft is never silently free,
+   * solo-compatible, shorter, or assigned a different intensity. */
+  constraints?: {
+    minutes: number;
+    groups: ("solo" | "couple" | "friends")[];
+    intensity: Intensity;
+    cost: { minMinor: number; maxMinor: number };
+    note: string;
+  };
 };
 const both: Setting[] = ["home", "outside"];
 const quiet: Setting[] = ["home", "outside", "venue"];
 const outside: Setting[] = ["outside"];
 const home: Setting[] = ["home"];
 
-export const activityRecipes: ActivityRecipe[] = [
+const historicalActivityRecipes: ActivityRecipe[] = [
   {
     id: "date_photo_duet",
     title: "Two Views, One Story",
@@ -1154,7 +1164,7 @@ const levels = {
 /** Expands one editorial recipe into its six briefs × three intensities.
  * Pure: the same recipe always yields the same 18 variants. Generated draft
  * recipes (see quest-ideas.ts) reuse this so drafts are catalog-compatible. */
-export function recipeVariants(recipe: ActivityRecipe): QuestVariant[] {
+function legacyRecipeVariants(recipe: ActivityRecipe): QuestVariant[] {
   return recipe.prompts.flatMap((prompt, promptIndex) =>
     (Object.keys(levels) as (keyof typeof levels)[]).map((intensity) => {
       const level = levels[intensity];
@@ -1243,5 +1253,358 @@ export function recipeVariants(recipe: ActivityRecipe): QuestVariant[] {
   );
 }
 
-export const activityCatalog: QuestVariant[] =
-  activityRecipes.flatMap(recipeVariants);
+/** Frozen v1 content is kept for immutable history and idempotent seed replay. */
+export const historicalActivityCatalog: QuestVariant[] =
+  historicalActivityRecipes.flatMap(legacyRecipeVariants);
+
+/** A revision keeps the reward family; it does not create extra earning families. */
+export const activityRecipes: ActivityRecipe[] = historicalActivityRecipes.map(
+  (recipe) =>
+    recipe.id === "date_memory_map"
+      ? {
+          ...recipe,
+          title: "The Three-Stop Date",
+          action:
+            "Build a short date with three free stops in one familiar area. Each partner picks one stop; choose the last together. Visit them in order and decide which one you would come back to.",
+          evidence: "one detail from each stop and your shared favorite",
+          settings: ["outside"],
+          prompts: [
+            "a good view, a curious detail, and somewhere to sit",
+            "a mural, an unusual doorway, and a quiet corner",
+            "three places you usually pass without stopping",
+            "one stop in each partner's favorite color, then a shared pick",
+            "a place for a photo, a place for a story, and a place to rest",
+            "three free stops along one short accessible route",
+          ],
+        }
+      : recipe.id === "date_mini_game"
+        ? {
+            ...recipe,
+            prompts: recipe.prompts.map((prompt, index) =>
+              index === 3 ? "a strategy game for paper tokens" : prompt,
+            ),
+          }
+        : recipe,
+);
+
+type ActivityCoaching = {
+  hook: string;
+  setup: string;
+  shots: [string, string, string];
+  finish: string;
+  challenge?: Record<Intensity, string>;
+};
+
+const coaching: Record<string, ActivityCoaching> = {
+  date_photo_duet: {
+    hook: "Same brief. Two different photos. Don't show each other until the reveal.",
+    setup:
+      "Read the photo brief together. Agree a small area and keep your screens hidden from each other.",
+    shots: [
+      "Film both of you naming the photo brief with your screens turned away. Keep the finished photos hidden.",
+      "Record a few seconds of each person choosing a subject or framing a shot; avoid revealing the finished images.",
+      "Show both photos side by side and capture your first comparison. Finish on the same two phones from your opening, now with the photos visible.",
+    ],
+    finish:
+      "Reveal both photos at the same time. Name one thing the other person noticed that you missed.",
+    challenge: {
+      chill: "Take one photo each and compare them.",
+      bold: "Take two photos each using different angles; each partner chooses their final entry before the reveal.",
+      full_send:
+        "Each partner makes a three-photo mini story answering the brief. Reveal both sequences, then choose one frame from each to make a shared final pair.",
+    },
+  },
+  date_postcard: {
+    hook: "Make a postcard from where you are right now, then trade without a preview.",
+    setup:
+      "Fold two pieces of paper into cards. Choose one real detail nearby and keep your message hidden until you exchange them.",
+    shots: [
+      "Show the blank cards beside the real place you are drawing.",
+      "Film a drawing taking shape and a short line being written; hide anything private.",
+      "Film the card exchange, then hold both finished drawings in one frame.",
+    ],
+    finish:
+      "Exchange the cards. Read an agreed line aloud and choose a real detail to revisit next time.",
+  },
+  date_portrait: {
+    hook: "Draw each other with one ridiculous rule. Reveal the portraits together.",
+    setup:
+      "Choose the drawing rule below, give each person paper, and agree a five-minute drawing timer. Keep the drawings face down until both are ready.",
+    shots: [
+      "Say the drawing rule over two blank sheets. Don't show a finished portrait yet.",
+      "Film the pencil following the rule and a quick reaction to the difficulty.",
+      "Reveal both drawings together. Ask which real detail each person managed to capture.",
+    ],
+    finish:
+      "Swap portraits and point out one recognizable detail. Keep jokes about the drawings, not anyone's appearance.",
+  },
+  date_memory_map: {
+    hook: "Three free stops. You pick one, your date picks one, and the last is a joint decision.",
+    setup:
+      "Pick one familiar area and check that all three stops are free, open, and close enough for your available time. Use the selected place as the starting point if you chose one; it is not a promise of entry or opening hours.",
+    shots: [
+      "Film yourselves naming the three-stop challenge at your starting point. Say what kind of stop each of you is choosing; save the favorite for the end.",
+      "At each stop, record one short detail that explains why you chose it. Film while stopped, not while navigating or crossing roads.",
+      "Show your favorite stop and give one sentence explaining the choice. A final look at the route can connect back to your opening; no repeated reaction is needed.",
+    ],
+    finish:
+      "At the last stop, each choose a favorite and explain why. Agree one place you would return to.",
+    challenge: {
+      chill:
+        "Keep all three stops in one small area. A few different views from an accessible public spot are enough.",
+      bold: "Keep your individual choices a surprise until you reach them. At each stop, the chooser has thirty seconds to explain why it belongs on the date.",
+      full_send:
+        "Plan three distinct reveals along one short route: the first partner leads stop one, the second leads stop two, then create a shared photo or mini picnic with things you already brought at stop three.",
+    },
+  },
+  date_object_museum: {
+    hook: "Choose an ordinary object that tells a story about you two. Give it the museum treatment.",
+    setup:
+      "Each pick an object you own and write a short museum label. Agree which parts of its story are okay to film.",
+    shots: [
+      "Show an object without its label and ask why it belongs in your museum.",
+      "Film the label being made and one person giving a short tour.",
+      "Show the object with its finished label and tell the actual story behind it.",
+    ],
+    finish:
+      "Give each other a one-minute tour. Pick the label that tells the clearest true story.",
+  },
+  date_trailer: {
+    hook: "Turn an ordinary date moment into a movie trailer using only your own voices and props.",
+    setup:
+      "Choose the film premise below. Write three shots: the situation, a complication, and the reveal. Give each person a role.",
+    shots: [
+      "Show the ordinary prop or situation and announce the movie genre.",
+      "Film your most committed trailer moment, including the real attempt to get the shot.",
+      "Show the final scene, then reveal the ordinary prop again. That repeated prop can make a natural visual loop.",
+    ],
+    finish:
+      "Play the trailer back together and choose a title that makes the ordinary premise clear.",
+  },
+  date_prompt_walk: {
+    hook: "Find a detail your date would have walked straight past, then bring them to see it.",
+    setup:
+      "Choose a small accessible area and the discovery prompt below. Each partner finds a detail without showing the other yet.",
+    shots: [
+      "Name the discovery prompt at your starting point; keep your chosen details out of frame.",
+      "Film a short search or your partner noticing their find. Stop filming while crossing or navigating.",
+      "Reveal both details and give each person one sentence to explain their choice.",
+    ],
+    finish:
+      "Show each other the discoveries. Choose which one changed how you see the place.",
+  },
+  date_mini_game: {
+    hook: "Invent a game you can explain in one sentence. Find out whether it actually works.",
+    setup:
+      "Put paper and a few objects on a stable surface. Write how a turn works and the exact condition for winning.",
+    shots: [
+      "Show the board and state the win condition before the first turn.",
+      "Record a real turn and the moment a rule works or causes confusion.",
+      "Show the result beside the corrected rule. End with the board reset if you want the next loop to look like a new game.",
+    ],
+    finish:
+      "Play a complete game, change one confusing rule, and explain the final version in one sentence.",
+  },
+  date_shared_skill: {
+    hook: "Teach your date one tiny skill. Show the first attempt before the improved one.",
+    setup:
+      "Choose a skill one of you genuinely knows from the prompt below. Gather what it needs and let the learner make one uncoached attempt.",
+    shots: [
+      "Film the learner's first attempt and name the skill they will learn.",
+      "Capture one useful tip being demonstrated, then the learner trying it.",
+      "Show the improved attempt beside the first. Keep the outcome honest if it is still difficult.",
+    ],
+    finish:
+      "Swap teacher and learner roles if both have something to teach. Each name the tip that helped most.",
+  },
+  date_soundtrack: {
+    hook: "Make your date a theme tune. One person starts the rhythm; the other adds the melody or words.",
+    setup:
+      "Choose the theme below. Agree a quiet volume and a short original rhythm you can both repeat.",
+    shots: [
+      "Name what the theme tune is for and show the two people about to contribute.",
+      "Record a layer being added and the real attempt to make the sounds work together.",
+      "Perform the finished tune once. Let its last beat lead back to the opening rhythm only if it fits naturally.",
+    ],
+    finish:
+      "Perform the finished theme and give it a title. Use your own sounds rather than a commercial backing track.",
+  },
+  date_paper_picnic: {
+    hook: "Design an impossible picnic, then see what part you can make work with things you already have.",
+    setup:
+      "Pick the picnic premise below. Each sketch one idea, then gather a few objects you own to represent it.",
+    shots: [
+      "Show the two picnic sketches before revealing the finished setup.",
+      "Film the moment you turn one impossible idea into something achievable.",
+      "Show the finished setup and explain which part you could actually use on a real picnic.",
+    ],
+    finish:
+      "Choose one practical idea to keep for a real free outing. Food purchases are not required.",
+  },
+  date_time_capsule: {
+    hook: "Make three predictions for your next date, then seal them without showing the private parts.",
+    setup:
+      "Choose when you will open the notes. Each write a prediction and a small wish; agree which single line may be filmed.",
+    shots: [
+      "Show the blank notes and state when you will open them.",
+      "Film writing or folding without revealing private words; read only the agreed line.",
+      "Show the sealed, dated notes and where you will keep them. Returning to the opening envelope gives an optional visual loop.",
+    ],
+    finish:
+      "Date and keep the notes somewhere private. Put the agreed opening date in your own calendar if you want a reminder.",
+  },
+};
+
+function shortText(value: string, max: number) {
+  if (value.length <= max) return value;
+  const cut = value.slice(0, max - 1);
+  return `${cut.slice(0, cut.lastIndexOf(" ")).replace(/[,:;]$/, "")}…`;
+}
+
+/** Reviewed generation uses the activity as the task and the prompt as a brief.
+ * It never asks a user to "make" a memory, reaction, or an abstract title. */
+export function recipeVariants(
+  recipe: ActivityRecipe,
+  version = 1,
+): QuestVariant[] {
+  if (!recipe.prompts.length || recipe.prompts.length > missionIds.length)
+    throw new Error("A recipe needs one to six authored briefs.");
+  const plan = coaching[recipe.id];
+  const constraints = recipe.constraints;
+  const intensities: Intensity[] = constraints
+    ? [constraints.intensity]
+    : ["chill", "bold", "full_send"];
+  return recipe.prompts.flatMap((prompt, promptIndex) =>
+    intensities.map((intensity) => {
+      const level = levels[intensity];
+      const familyId = `activity_${recipe.id}`;
+      const challenge =
+        plan?.challenge?.[intensity] ??
+        (constraints
+          ? ""
+          : {
+              chill: "Make one complete result for this brief.",
+              bold: "Make a first version, deliberately change one detail, and compare the results.",
+              full_send:
+                "Make three different entries for the brief, choose a winner using one clear criterion, and show why it won.",
+            }[intensity]);
+      const task = `${recipe.action} ${challenge}`.trim();
+      const participantMin = constraints
+        ? constraints.groups.includes("solo")
+          ? 1
+          : 2
+        : recipe.category === "date_night"
+          ? 2
+          : 1;
+      const participantMax = constraints
+        ? constraints.groups.includes("friends")
+          ? 8
+          : constraints.groups.includes("couple")
+            ? 2
+            : 1
+        : 8;
+      const cost = constraints?.cost ?? { minMinor: 0, maxMinor: 0 };
+      const paid = cost.maxMinor > 0;
+      return {
+        id: `${familyId}_${missionIds[promptIndex]}_${intensity}_v${version}`,
+        familyId,
+        variantKey: missionIds[promptIndex],
+        version,
+        // Render manifests share this title and have a 96-character limit.
+        title: shortText(`${recipe.title}: ${prompt}`, 96),
+        category: recipe.category,
+        intensity,
+        hook: shortText(
+          `${plan?.hook ?? recipe.action.split(/(?<=\.)\s/)[0]} Brief: ${prompt}.`,
+          260,
+        ),
+        durationMinutes: constraints
+          ? Math.max(15, constraints.minutes)
+          : level.minutes,
+        minParticipants: participantMin,
+        maxParticipants: participantMax,
+        ...(constraints ? { allowedGroups: [...constraints.groups] } : {}),
+        cost: {
+          ...cost,
+          currency: "USD",
+          scope: "total",
+          venueCostUnknown: false,
+          note: paid
+            ? "This is the activity's estimated total cost. Check current prices before choosing it; any confirmed travel and entry charges also count toward your budget."
+            : "Use things you already own and a free, permitted place. No purchase or booking is required. Any confirmed travel or entry charges still count toward your budget.",
+        },
+        settings: recipe.settings,
+        interests: recipe.interests,
+        roles: ["main_character", "mastermind", "camera_person", "rotate"],
+        preparation: level.preparation,
+        conflicts: recipe.conflicts ?? [],
+        venuePermissionRequired: false,
+        arrangementRequired: false,
+        adultOnly: false,
+        supportsAdultContext: false,
+        requiresVolunteer: false,
+        beats: [
+          {
+            label: "Set up the challenge",
+            action:
+              `${plan?.setup ?? recipe.action} Today's brief: ${prompt}. ${challenge}`.trim(),
+            filming:
+              plan?.shots[0] ??
+              shortText(
+                `Introduce ${recipe.title.toLowerCase()} and show what you will use. Say the brief: “${prompt}.” Keep the finished result for the end.`,
+                400,
+              ),
+            caption: shortText(recipe.title, 80),
+          },
+          {
+            label: "Do the activity",
+            action: task,
+            filming:
+              plan?.shots[1] ??
+              `Record a short moment of the activity itself, with ${recipe.evidence} taking shape. Keep the camera on the specific choice, movement, or change; stop between takes to skip waiting.`,
+            caption: "The attempt",
+          },
+          {
+            label: "Show the result",
+            action:
+              plan?.finish ??
+              `Show ${recipe.evidence}. Point out one real detail that worked or surprised you. An unsuccessful attempt is still a result; do not stage a reaction.`,
+            filming:
+              plan?.shots[2] ??
+              `Get a clear close-up of ${recipe.evidence}, then give your honest verdict in one sentence. Only repeat an opening frame if it helps show the change.`,
+            caption: "The result",
+          },
+        ],
+        materials: [
+          "A phone",
+          "Any paper or ordinary objects needed for your chosen brief",
+        ],
+        completionQuestions: [
+          "Did you attempt the activity and show the actual result?",
+          "Did everyone shown agree to be recorded?",
+          "Did you use a permitted place and leave it as you found it?",
+        ],
+        fallback:
+          recipe.id === "date_memory_map"
+            ? "Use three different views within one accessible public area. Skip any closed, paid, or unsuitable stop; do not change your budget or enter private property."
+            : "If the place or supplies are unavailable, choose another eligible quest. Keep your budget and boundaries; a shorter honest attempt is better than pretending the planned result happened.",
+        requirements: [
+          "Film yourself, your own work, or consenting companions. Keep paths clear and private information out of frame.",
+          ...(constraints?.note ? [constraints.note] : []),
+          ...(recipe.settings.includes("venue")
+            ? [
+                "Check that the venue allows your activity and personal filming. A place suggestion does not confirm permission or opening hours.",
+              ]
+            : []),
+        ],
+        award: { ...AWARDS[intensity] },
+        cooldownDays: 30,
+      } satisfies QuestVariant;
+    }),
+  );
+}
+
+/** Current recommendations use new immutable versions of the same 60 families. */
+export const activityCatalog: QuestVariant[] = activityRecipes.flatMap(
+  (recipe) => recipeVariants(recipe, 2),
+);

@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { activityCatalog, activityRecipes } from "../shared/activity-recipes";
+import {
+  activityCatalog,
+  activityRecipes,
+  historicalActivityCatalog,
+} from "../shared/activity-recipes";
 import { catalog } from "../shared/catalog";
 import {
   CATEGORIES,
@@ -41,15 +45,18 @@ describe("authored activity expansion", () => {
         (quest) => quest.familyId === `activity_${recipe.id}`,
       );
       expect(variants).toHaveLength(18);
-      expect(new Set(variants.map((quest) => quest.hook)).size).toBe(18);
+      expect(new Set(variants.map((quest) => quest.hook)).size).toBe(6);
       for (const quest of variants) {
         expect(quest.arrangementRequired).toBe(false);
+        expect(quest.title.length).toBeLessThanOrEqual(96);
         expect(quest.cost.maxMinor).toBe(0);
-        expect(quest.beats[0].filming).toContain("before revealing the result");
-        expect(quest.beats[1].filming).toContain(recipe.evidence);
-        expect(quest.beats[2].filming).toContain(recipe.evidence);
-        expect(quest.beats[2].filming).toContain(
-          "same composition as your first frame",
+        expect(quest.title).toMatch(new RegExp(`^${recipe.title}`));
+        expect(quest.beats[1].action).toContain(recipe.action);
+        expect(quest.hook).not.toContain(
+          "make the ordinary worth a second look",
+        );
+        expect(quest.beats.every((beat) => beat.filming.length > 40)).toBe(
+          true,
         );
       }
     }
@@ -67,17 +74,48 @@ describe("authored activity expansion", () => {
       ),
       "utf8",
     );
-    expect(rows(seed)).toHaveLength(1113);
+    const revision = readFileSync(
+      new URL(
+        "../supabase/migrations/20260930203052_activity_instructions_v2.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    expect(rows(seed)).toHaveLength(2193);
     expect(
       createHash("sha256")
         .update(rows(seed).slice(0, 33).join("\n"))
         .digest("hex"),
     ).toBe("cb0c72d793d313f7915e3f49367372c1ef59fdcdd3d1aab1bb8257f7c86e726b");
-    expect(rows(migration)).toEqual(rows(seed).slice(33));
+    expect(rows(migration)).toEqual(rows(seed).slice(33, 1113));
+    expect(rows(revision)).toEqual(rows(seed).slice(1113));
+    expect(revision).toContain("set published=false");
     expect(migration).toContain("on conflict (id) do nothing");
     expect(migration).not.toMatch(
       /\b(?:update|delete)\s+(?:public\.)?quest_templates/i,
     );
+  });
+
+  it("keeps accepted v1 content frozen while the current date has a real three-stop route", () => {
+    const old = historicalActivityCatalog.find(
+      (quest) => quest.id === "activity_date_memory_map_alpha_full_send_v1",
+    )!;
+    const current = activityCatalog.find(
+      (quest) => quest.id === "activity_date_memory_map_alpha_full_send_v2",
+    )!;
+    expect(old.title).toBe("The first time you laughed together");
+    expect(current.familyId).toBe(old.familyId);
+    expect(current.title).toContain("The Three-Stop Date");
+    expect(current.settings).toEqual(["outside"]);
+    expect(current.beats[1].action).toContain("Each partner picks one stop");
+    expect(current.beats[1].action).toContain("first partner leads stop one");
+    expect(current.beats[1].filming).toContain("At each stop");
+    expect(current.beats[2].filming).toContain("favorite stop");
+    expect(current.beats.map((beat) => beat.action).join(" ")).not.toContain(
+      "shared memories",
+    );
+    expect(old.version).toBe(1);
+    expect(old.beats[1].action).not.toContain("first partner leads stop one");
   });
 
   it("satisfies the reported Full Send, couple, outdoors plan without changing a single choice", () => {

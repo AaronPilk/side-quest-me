@@ -4,6 +4,8 @@ import { Share2, UserCheck, UserPlus, Clapperboard } from "lucide-react";
 import type { CommunityPost } from "../../shared/community";
 import { socialApi } from "../lib/social-api";
 import { rememberReturnTo } from "../lib/internal-return";
+import { publicUrl } from "../lib/runtime";
+import { isShareCancellation, sharePublicLink } from "../lib/native-share";
 
 export function PostSocialActions({
   post,
@@ -24,7 +26,7 @@ export function PostSocialActions({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [copyFallback, setCopyFallback] = useState(false);
-  const url = `${window.location.origin}/posts/${post.id}`;
+  const url = publicUrl(`/posts/${post.id}`);
   useEffect(
     () => setFollowing(Boolean(post.viewerFollowing)),
     [post.viewerFollowing],
@@ -86,14 +88,14 @@ export function PostSocialActions({
             setMessage("");
             setCopyFallback(false);
             try {
-              if (navigator.share)
-                await navigator.share({ title: post.quest.title, url });
-              else {
-                await navigator.clipboard.writeText(url);
+              if (
+                (await sharePublicLink({ title: post.quest.title, url })) ===
+                "copied"
+              ) {
                 setMessage("Reel link copied.");
               }
             } catch (cause) {
-              if ((cause as Error).name !== "AbortError") {
+              if (!isShareCancellation(cause)) {
                 setCopyFallback(true);
                 setError("Copy this public reel link to share it.");
               }

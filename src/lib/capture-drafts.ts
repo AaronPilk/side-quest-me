@@ -9,6 +9,8 @@ export type CaptureDraft = {
   slot: number;
   baseClipId: string | null;
   file: Blob;
+  takes?: { file: Blob; duration: number }[];
+  overlay?: import("./recording-session").ImageOverlay;
   duration: number;
   start: number;
   end: number;
@@ -81,7 +83,18 @@ export async function saveCaptureDraft(
   draft: CaptureDraft,
   expectedGeneration: number,
 ) {
-  if (draft.file.size > 40 * 1024 * 1024 || !draft.file.size)
+  if (
+    draft.overlay &&
+    (!draft.overlay.file.size || draft.overlay.file.size > 5 * 1024 * 1024)
+  )
+    throw new Error("Choose an overlay image no larger than 5 MB.");
+  const files = draft.takes?.map((take) => take.file) || [draft.file];
+  if (
+    !files.length ||
+    files.length > 30 ||
+    files.some((file) => !file.size) ||
+    files.reduce((sum, file) => sum + file.size, 0) > 40 * 1024 * 1024
+  )
     throw new Error("This video cannot be kept as a local draft.");
   await write((store) => {
     // A recorder stopping during sign-out must not recreate deleted footage.

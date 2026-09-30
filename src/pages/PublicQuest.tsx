@@ -7,6 +7,9 @@ import {
   type QuestVariant,
 } from "../../shared/domain";
 import { api } from "../lib/api";
+import { currentActivityTemplateId } from "../../shared/activity-history";
+import { publicUrl } from "../lib/runtime";
+import { isShareCancellation, sharePublicLink } from "../lib/native-share";
 import {
   Back,
   Button,
@@ -37,6 +40,7 @@ export default function PublicQuest() {
       </>
     );
   if (!data) return <Loading />;
+  const replacement = currentActivityTemplateId(data.id);
   return (
     <>
       <Back to="/discover">Discover</Back>
@@ -47,6 +51,12 @@ export default function PublicQuest() {
       >
         {data.hook}
       </PageTitle>
+      {replacement && (
+        <Notice>
+          This is the original version shown in older stories. Updated
+          instructions are available for your next attempt.
+        </Notice>
+      )}
       {data.sponsorDisclosure && (
         <Notice>Sponsored · {data.sponsorDisclosure}</Notice>
       )}
@@ -93,33 +103,35 @@ export default function PublicQuest() {
       </details>
       <Button
         onClick={() => {
-          navigate(`/create?template=${encodeURIComponent(data.id)}`);
+          navigate(
+            `/create?template=${encodeURIComponent(replacement || data.id)}`,
+          );
         }}
       >
-        Try this quest <ArrowRight size={18} />
+        {replacement ? "Try the updated quest" : "Try this quest"}{" "}
+        <ArrowRight size={18} />
       </Button>
       <Button
         secondary
         onClick={async () => {
           setShareMessage("");
           setShareError(false);
-          const url = `${window.location.origin}/quests/${encodeURIComponent(data.id)}`;
+          const url = publicUrl(`/quests/${encodeURIComponent(data.id)}`);
           try {
-            if (navigator.share) {
-              await navigator.share({
+            if (
+              (await sharePublicLink({
                 title: data.title,
                 text: data.hook,
                 url,
-              });
-            } else {
-              await navigator.clipboard.writeText(url);
+              })) === "copied"
+            ) {
               setShareMessage("Quest link copied. Send it to your people.");
             }
           } catch (cause) {
-            if (cause instanceof Error && cause.name === "AbortError") return;
+            if (isShareCancellation(cause)) return;
             setShareError(true);
             setShareMessage(
-              "Sharing is unavailable here. Copy this page’s address to share the quest.",
+              `Sharing is unavailable here. Share this link: ${url}`,
             );
           }
         }}
@@ -129,7 +141,8 @@ export default function PublicQuest() {
       {shareMessage && <Notice error={shareError}>{shareMessage}</Notice>}
       <p className="fine-print">
         Set your own group, budget and setting before accepting. This is the
-        published quest; nobody else’s private clips or account are shared.
+        {replacement ? "original published version" : "published quest"}; nobody
+        else’s private clips or account are shared.
       </p>
     </>
   );

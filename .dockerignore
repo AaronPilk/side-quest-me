@@ -3,3 +3,5 @@
 !package-lock.json
 !renderer/
 !renderer/**
+!shared/
+!shared/brand.mjs

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   NavLink,
   Route,
@@ -24,6 +24,8 @@ import { useCommunity } from "./components/Community";
 import { BrandMark } from "./components/BrandMark";
 import "./navigation-design.css";
 import { supabase, DEMO } from "./lib/auth";
+import { emailSignInRedirect, startNativeApp } from "./lib/native-app";
+import { isNativeApp } from "./lib/runtime";
 import { clearCaptureDrafts } from "./lib/capture-drafts";
 import { APP_CONFIG } from "../shared/domain";
 import {
@@ -31,7 +33,8 @@ import {
   rememberReturnTo,
   validateReturnTo,
 } from "./lib/internal-return";
-import { Button, Loading, Notice, QuestArt } from "./components/ui";
+import { Button, Loading, Notice } from "./components/ui";
+import { AdventureCarousel } from "./components/AdventureCarousel";
 import Quest from "./pages/Quest";
 import Profile from "./pages/Profile";
 import Onboarding from "./pages/Onboarding";
@@ -67,10 +70,34 @@ export default function App() {
   const [signedIn, setSignedIn] = useState(DEMO);
   const [identity, setIdentity] = useState<string | null>(DEMO ? "demo" : null);
   const [authError, setAuthError] = useState("");
+  const [nativeError, setNativeError] = useState("");
   const [authRevision, setAuthRevision] = useState(0);
   const [loading, setLoading] = useState(!DEMO && !!supabase);
   const location = useLocation();
   const navigate = useNavigate();
+  const nativeNavigate = useRef(navigate);
+  useEffect(() => {
+    nativeNavigate.current = navigate;
+  }, [navigate]);
+  useEffect(
+    () =>
+      startNativeApp({
+        auth: supabase?.auth ?? null,
+        onNavigate: (route, replace) => {
+          setNativeError("");
+          if (replace) {
+            try {
+              sessionStorage.removeItem("sq-return-to");
+            } catch {
+              /* The native callback already has its validated destination. */
+            }
+          }
+          void nativeNavigate.current(route, { replace });
+        },
+        onError: setNativeError,
+      }),
+    [],
+  );
   const isReel = /^\/posts\/[^/]+$/.test(location.pathname);
   const publicPage =
     /^\/(?:discover|posts\/|creators\/|quests\/)/.test(location.pathname) ||
@@ -210,6 +237,14 @@ export default function App() {
         </div>
       )}
       <main id="main" tabIndex={-1}>
+        {nativeError && (
+          <Notice error>
+            {nativeError}{" "}
+            <button className="text-button" onClick={() => setNativeError("")}>
+              Dismiss
+            </button>
+          </Notice>
+        )}
         {loading && !publicPage ? (
           <Loading />
         ) : authError && !publicPage ? (
@@ -300,10 +335,10 @@ export default function App() {
       {navigationVisible && (
         <nav className="bottom-nav" aria-label="Primary">
           {[
-            { to: "/create", label: "Create", icon: PlusCircle },
             { to: "/discover", label: "Discover", icon: Compass },
-            { to: "/rewards", label: "Rewards", icon: Gift },
             { to: "/activity", label: "Activity", icon: Bell },
+            { to: "/create", label: "Create", icon: PlusCircle },
+            { to: "/rewards", label: "Rewards", icon: Gift },
             { to: "/profile", label: "Profile", icon: UserRound },
           ].map((item) => (
             <NavLink key={item.to} to={item.to} end>
@@ -350,10 +385,14 @@ function Welcome({ onStart }: { onStart: () => void }) {
     try {
       const { error } = await supabase!.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: `${location.origin}/auth/callback` },
+        options: { emailRedirectTo: emailSignInRedirect() },
       });
       if (error) throw error;
-      setMessage("Check your email. Your private sign-in link is on its way.");
+      setMessage(
+        isNativeApp()
+          ? "Check your email on this phone. Tap the sign-in link to return to Sidequest."
+          : "Check your email. Your private sign-in link is on its way.",
+      );
     } catch {
       setError(
         "Could not send your sign-in link. Check your email and try again.",
@@ -374,10 +413,7 @@ function Welcome({ onStart }: { onStart: () => void }) {
         <br className="desktop-break" /> Leave with a reel and a little more
         you.
       </p>
-      <QuestArt />
-      <div className="example-label">
-        An illustrated preview. Your actual story comes next.
-      </div>
+      <AdventureCarousel />
       <div className="three-steps">
         <span>
           <b>01</b> Pick a quest

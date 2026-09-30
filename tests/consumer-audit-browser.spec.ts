@@ -383,7 +383,7 @@ test("public quest preview includes accurate filming and preparation, shares onl
   );
   await page.getByRole("button", { name: "Share quest", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText(
-    "Copy this page’s address",
+    `Share this link: http://127.0.0.1:5173/quests/${quest.id}`,
   );
   await page.evaluate(() =>
     Object.defineProperty(navigator, "share", {

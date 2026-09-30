@@ -1,5 +1,6 @@
-import type { MapKit, Place } from "@apple/mapkit-loader";
+import type { MapKit } from "@apple/mapkit-loader";
 import { applePlaceIdSchema } from "../../shared/places";
+import { apiUrl } from "./runtime";
 
 declare global {
   interface Window {
@@ -11,7 +12,7 @@ let loading: Promise<MapKit | null> | undefined;
 export async function loadAppleMaps(): Promise<MapKit | null> {
   if (loading) return loading;
   loading = (async () => {
-    const response = await fetch("/api/maps/config", {
+    const response = await fetch(apiUrl("/api/maps/config"), {
       signal: AbortSignal.timeout(10000),
     });
     if (!response.ok)
@@ -57,7 +58,15 @@ export async function loadAppleMaps(): Promise<MapKit | null> {
     );
   }
 }
-export function uniquePlaces(places: Place[]): Place[] {
+export type ApplePlace = {
+  id: string | null;
+  name: string | null;
+  coordinate: { latitude: number; longitude: number } | null;
+  formattedAddress: string | null;
+  pointOfInterestCategory: string | null;
+  alternateIds?: readonly string[] | null;
+};
+export function uniquePlaces<T extends ApplePlace>(places: T[]): T[] {
   const seen = new Set<string>();
   return places
     .filter((place) => {

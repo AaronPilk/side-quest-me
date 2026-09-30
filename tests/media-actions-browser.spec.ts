@@ -16,7 +16,7 @@ async function openQuest(page: Page) {
   await page.getByRole("button", { name: "Accept quest", exact: true }).click();
 }
 
-test("editing preserves a later source trim, previews the selected range, restores camera cancel and saves framing/audio/label", async ({
+test("a finished video stays whole, replacement drafts restore, and saving replaces rather than appends", async ({
   page,
 }, testInfo) => {
   test.skip(!existsSync(longFixture), "Run npm run render:fixtures first.");
@@ -24,111 +24,90 @@ test("editing preserves a later source trim, previews the selected range, restor
   page.on("pageerror", (error) => errors.push(error.message));
   await openQuest(page);
   await page
-    .getByRole("button", { name: "Record or upload", exact: true })
-    .first()
+    .getByRole("button", { name: "Record or import video", exact: true })
     .click();
-  let dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Upload a clip").setInputFiles(longFixture);
+  let capture = page.getByRole("dialog", { name: "Record your quest" });
+  await capture.getByLabel("Import video").setInputFiles({
+    name: "invalid.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.from("not a playable video"),
+  });
+  await expect(capture.getByRole("alert")).toContainText(
+    "could not be previewed",
+  );
+  await expect(
+    capture.getByRole("button", { name: "Save video", exact: true }),
+  ).toBeDisabled();
+  page.once("dialog", (dialog) => dialog.accept());
+  await capture.getByLabel("Import video").setInputFiles(longFixture);
   await expect
     .poll(() =>
-      dialog
-        .getByLabel("Clip preview")
+      capture
+        .getByLabel("Your video preview")
         .evaluate((video: HTMLVideoElement) => video.duration),
     )
     .toBeGreaterThan(20);
-  await dialog.getByRole("spinbutton", { name: "Start (seconds)" }).fill("10");
-  await dialog.getByRole("spinbutton", { name: "End (seconds)" }).fill("18");
-  await dialog
-    .getByRole("button", { name: "Use clip · Upload & validate" })
+  await expect(capture.getByRole("spinbutton")).toHaveCount(0);
+  await capture
+    .getByRole("button", { name: "Save video", exact: true })
     .click();
-  await expect(dialog).toBeHidden();
-  await page
-    .getByRole("button", { name: "Review or replace", exact: true })
-    .click();
-  dialog = page.getByRole("dialog");
-  await expect
-    .poll(() =>
-      dialog
-        .getByLabel("Clip preview")
-        .evaluate((video: HTMLVideoElement) => video.readyState),
-    )
-    .toBeGreaterThanOrEqual(1);
-  await expect(
-    dialog.getByRole("spinbutton", { name: "End (seconds)" }),
-  ).toHaveValue("18");
-  await dialog
-    .getByLabel("Clip preview")
-    .evaluate((video: HTMLVideoElement) => {
-      video.playbackRate = 4;
-    });
-  await dialog.getByRole("button", { name: "Preview selected 8.0s" }).click();
-  await expect
-    .poll(() =>
-      dialog
-        .getByLabel("Clip preview")
-        .evaluate((video: HTMLVideoElement) => video.currentTime),
-    )
-    .toBeGreaterThanOrEqual(10);
-  await expect
-    .poll(() =>
-      dialog
-        .getByLabel("Clip preview")
-        .evaluate((video: HTMLVideoElement) => video.paused),
-    )
-    .toBe(true);
-  expect(
-    await dialog
-      .getByLabel("Clip preview")
-      .evaluate((video: HTMLVideoElement) => video.currentTime),
-  ).toBeLessThan(19.5);
-  await dialog.getByRole("button", { name: "Retake or replace" }).click();
-  await dialog.getByRole("button", { name: "Record this moment" }).click();
-  await dialog.getByRole("button", { name: "Cancel camera" }).click();
-  await expect(dialog.getByLabel("Clip preview")).toBeVisible();
-  await expect(
-    dialog.getByRole("spinbutton", { name: "End (seconds)" }),
-  ).toHaveValue("18");
-  await dialog.getByRole("combobox", { name: "Framing" }).selectOption("fill");
-  await dialog
-    .getByRole("slider", { name: "Horizontal crop position" })
-    .fill("0.75");
-  await dialog.getByRole("checkbox", { name: "Mute recorded audio" }).check();
-  await dialog
-    .getByRole("textbox", { name: "Story label (not a transcript)" })
-    .fill("The first moment of our quest");
-  await dialog.getByRole("button", { name: "Use clip · Save changes" }).click();
-  await expect(dialog).toBeHidden();
+  await expect(capture).toBeHidden();
+  const saved = await page.evaluate(
+    () =>
+      JSON.parse(localStorage.getItem("sidequest-demo-v1")!).runs[0].clips[0],
+  );
+  expect(saved).toMatchObject({ mode: "session", slot: 0, start: 0 });
+  expect(saved.end).toBeGreaterThan(20);
+  expect(saved.end).toBeCloseTo(saved.duration, 1);
   await page.reload();
-  await expect(
-    page.getByText("The first moment of our quest", { exact: true }),
-  ).toBeVisible();
-  await page.locator(".story-review > summary").click();
-  await expect(page.locator(".story-review")).toContainText(
-    "1 of 3 parts saved · 8.0s selected",
-  );
-  await expect(page.locator(".story-review")).toContainText(
-    "This part is muted",
-  );
-  await expect(page.locator(".story-review")).toContainText(
-    "does not analyze what’s in the video",
-  );
+  await expect(page.getByLabel("Saved quest video")).toBeVisible();
   await page
-    .getByRole("button", { name: "Review opening", exact: true })
+    .getByRole("button", { name: "Record or import a new video", exact: true })
     .click();
+  capture = page.getByRole("dialog", { name: "Record your quest" });
+  await capture
+    .getByLabel("Import video")
+    .setInputFiles(path.resolve(".local/fixtures/portrait-silent.mp4"));
   await expect(
-    page.getByRole("dialog").getByRole("combobox", { name: "Framing" }),
-  ).toHaveValue("fill");
+    capture.getByRole("button", { name: "Save video", exact: true }),
+  ).toBeEnabled();
+  await capture.getByRole("button", { name: "Exit capture" }).click();
+  await expect(capture).toBeHidden();
+  // Leaving a replacement draft must not destroy the already saved video.
+  expect(
+    await page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem("sidequest-demo-v1")!).runs[0].clips[0]
+          .id,
+    ),
+  ).toBe(saved.id);
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Continue recording", exact: true })
+    .click();
+  capture = page.getByRole("dialog", { name: "Record your quest" });
+  await expect(capture.getByText(/Your draft is here/)).toBeVisible();
+  await capture
+    .getByRole("button", { name: "Preview video", exact: true })
+    .click();
+  await capture
+    .getByRole("button", { name: "Save video", exact: true })
+    .click();
+  await expect(capture).toBeHidden();
+  const replaced = await page.evaluate(
+    () => JSON.parse(localStorage.getItem("sidequest-demo-v1")!).runs[0].clips,
+  );
+  expect(replaced).toHaveLength(1);
+  expect(replaced[0]).toMatchObject({ mode: "session", slot: 0, start: 0 });
+  expect(replaced[0].end).toBeCloseTo(8, 1);
+  expect(replaced[0].id).not.toBe(saved.id);
+  await page.reload();
+  await expect(page.getByLabel("Saved quest video")).toBeVisible();
   await expect(
-    page
-      .getByRole("dialog")
-      .getByRole("slider", { name: "Horizontal crop position" }),
-  ).toHaveValue("0.75");
-  await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Add ending", exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText("Pay it off, then loop");
-  await page.keyboard.press("Escape");
+    page.getByRole("button", { name: "Continue recording", exact: true }),
+  ).toHaveCount(0);
   await page.screenshot({
-    path: testInfo.outputPath("story-review-390.png"),
+    path: testInfo.outputPath("saved-video-390.png"),
     fullPage: true,
   });
   expect(errors).toEqual([]);
@@ -412,7 +391,14 @@ test("abandon failure stays actionable and a successful retry leaves clips in th
   await expect(
     page.getByRole("button", { name: "Review or replace", exact: true }),
   ).toHaveCount(0);
-  await expect(page.getByText("Uploaded", { exact: true })).toHaveCount(3);
+  await page.locator(".legacy-saved-moments > summary").click();
+  await expect(page.locator(".legacy-saved-moments video")).toHaveCount(3);
+  await expect(
+    page.getByRole("button", {
+      name: "Record or import a new video",
+      exact: true,
+    }),
+  ).toHaveCount(0);
 });
 
 test("journal search, status filters, resume links and no-result reset work without hiding a fetch error", async ({

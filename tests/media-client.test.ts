@@ -15,11 +15,43 @@ beforeEach(() => {
   vi.mocked(accessToken).mockResolvedValue("session-test-token");
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 
 describe("private media transport", () => {
+  it("authenticates only the trusted native API while resolving relative media URLs", async () => {
+    vi.stubEnv("VITE_NATIVE", "true");
+    vi.stubEnv("VITE_API_ORIGIN", "https://api.sidequest.test");
+    vi.stubGlobal("window", {
+      location: {
+        href: "capacitor://localhost/journal",
+        origin: "capacitor://localhost",
+      },
+    });
+    const fetcher = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(new Uint8Array([1]), {
+          headers: { "content-type": "video/mp4" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    await fetchMediaBlob("/api/media/one/playback");
+    expect(fetcher.mock.calls[0]?.[0]).toBe(
+      "https://api.sidequest.test/api/media/one/playback",
+    );
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toEqual({
+      Authorization: "Bearer session-test-token",
+    });
+    expect(
+      mediaNeedsAuth("https://api.sidequest.test.evil/api/media/one/playback"),
+    ).toBe(false);
+    vi.mocked(accessToken).mockClear();
+    await fetchMediaBlob("https://untrusted.test/api/media/one/playback");
+    expect(accessToken).not.toHaveBeenCalled();
+    expect(fetcher.mock.calls[1]?.[1]?.headers).toEqual({});
+  });
   it("attaches a session only to the same-origin private media API", async () => {
     const request = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>

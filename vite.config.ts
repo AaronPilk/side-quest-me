@@ -85,6 +85,8 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: 5173,
     strictPort: true,
+    // Only the explicitly installed local Simulator demo may use this origin.
+    cors: mode === "demo" ? { origin: "capacitor://localhost" } : undefined,
     watch: {
       ignored: [
         "**/output/**",
@@ -98,6 +100,12 @@ export default defineConfig(({ mode }) => ({
             "/api/local-media": {
               target: "http://127.0.0.1:8789",
               changeOrigin: true,
+              configure(proxy) {
+                proxy.on("proxyReq", (proxyReq, req) => {
+                  if (req.headers.origin === "capacitor://localhost")
+                    proxyReq.setHeader("Origin", "http://127.0.0.1:5173");
+                });
+              },
             },
           }
         : undefined,

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { apiUrl } from "../lib/runtime";
 import { CalendarDays, ExternalLink } from "lucide-react";
 import {
   eventbriteBrowseUrl,
@@ -22,7 +23,7 @@ export default function NearbyEvents({
   const pending = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/events/config", {
+    fetch(apiUrl("/api/events/config"), {
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]),
     })
       .then(async (response) => {
@@ -52,7 +53,7 @@ export default function NearbyEvents({
     setError("");
     setResult(undefined);
     try {
-      const response = await fetch("/api/events/nearby", {
+      const response = await fetch(apiUrl("/api/events/nearby"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ area, ...(center ? { center } : {}), days }),
@@ -151,9 +152,12 @@ export default function NearbyEvents({
           ))}
           {result.events.length > 0 && (
             <p className="fine-print">
-              Listings via Ticketmaster Discovery, checked just now. Confirm the
-              event’s total cost, availability and recording rules. Event
-              listings don’t change your quest answers.
+              Listings via Ticketmaster Discovery.
+              {result.checkedAt && Number.isFinite(Date.parse(result.checkedAt))
+                ? ` Checked ${new Date(result.checkedAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}.`
+                : ""}{" "}
+              Confirm the event’s total cost, availability and recording rules.
+              Event listings don’t change your quest answers.
             </p>
           )}
         </div>

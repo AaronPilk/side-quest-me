@@ -1,0 +1,63 @@
+.quest-progress {
+  border: 1px solid var(--border, #e7e2f0);
+  border-radius: 24px;
+  padding: 22px;
+  margin: 20px 0;
+  background: var(--surface, #fff);
+}
+.quest-progress-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.quest-progress-title h2 {
+  margin: 5px 0 0;
+  font-size: 1.2rem;
+}
+.quest-progress-title .eyebrow {
+  font-size: 0.65rem;
+}
+.quest-progress-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border-radius: 16px;
+  background: #f0eafa;
+  color: #6741ce;
+}
+.quest-progress-icon.earned {
+  color: #7b5200;
+  background: #fff0ca;
+}
+.quest-progress-stats {
+  display: flex;
+  gap: 28px;
+  margin: 20px 0;
+}
+.quest-progress-stats strong {
+  font-size: 1.35rem;
+}
+.quest-progress-stats small {
+  display: block;
+  font-weight: 400;
+  font-size: 0.78rem;
+  color: var(--muted, #686375);
+  margin-top: 3px;
+}
+.quest-progress progress {
+  width: 100%;
+  height: 7px;
+  accent-color: #7950e8;
+}
+.quest-progress p {
+  font-size: 0.9rem;
+  margin: 9px 0;
+}
+.quest-progress > small {
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--muted, #686375);
+}

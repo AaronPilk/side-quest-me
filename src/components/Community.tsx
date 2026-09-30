@@ -8,6 +8,7 @@ import type {
   CommunityView,
 } from "../../shared/community";
 import { communityApi } from "../lib/community-api";
+import { mediaCrossOrigin, mediaUrl } from "../lib/runtime";
 import { Button, Notice } from "./ui";
 
 export function useCommunity<V extends CommunityView>(
@@ -113,7 +114,12 @@ export function CreatorAvatar({
       aria-hidden="true"
     >
       {photoUrl ? (
-        <img src={photoUrl} alt="" loading="lazy" />
+        <img
+          src={mediaUrl(photoUrl)}
+          crossOrigin={mediaCrossOrigin(photoUrl)}
+          alt=""
+          loading="lazy"
+        />
       ) : name ? (
         name.trim().slice(0, 1).toUpperCase()
       ) : (
@@ -142,8 +148,9 @@ export function PublicVideo({
     <div className="public-video">
       <video
         ref={ref}
-        src={src}
-        poster={poster}
+        src={mediaUrl(src)}
+        poster={poster ? mediaUrl(poster) : undefined}
+        crossOrigin={mediaCrossOrigin(src || poster)}
         aria-label={title}
         controls
         playsInline

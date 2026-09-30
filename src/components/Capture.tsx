@@ -1,317 +1,308 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Camera,
-  Upload,
-  Square,
-  RotateCcw,
-  X,
-  Video,
   Check,
-  Plus,
-  Bookmark,
+  RotateCcw,
+  Square,
+  X,
+  SwitchCamera,
+  Zap,
+  Timer,
+  Captions,
+  ImagePlus,
+  Image as ImageIcon,
+  ChevronUp,
   Play,
 } from "lucide-react";
 import { DEMO, supabase } from "../lib/auth";
 import { demoActor } from "../lib/demo-identity";
-import { TakeClock, filmingGuide } from "../lib/capture-session";
 import {
   captureDraftGeneration,
+  deleteCaptureDraft,
   loadCaptureDraft,
   saveCaptureDraft,
-  deleteCaptureDraft,
 } from "../lib/capture-drafts";
+import { watchCaptureActivity } from "../lib/capture-lifecycle";
+import {
+  SESSION_DRAFT_SLOT,
+  sessionSeconds,
+  validSession,
+  type RecordedTake,
+  type ImageOverlay,
+} from "../lib/recording-session";
+import { saveRecordingSession } from "../lib/session-media";
+import type { Run } from "../lib/types";
+import { Button } from "./ui";
 import "./capture-session.css";
-import { api, request } from "../lib/api";
-import type { Clip, Run } from "../lib/types";
-import { Button, Notice } from "./ui";
-import { AuthVideo } from "./PrivateMedia";
-
-/** Reconcile a browser's tentative trim with the duration measured from sealed bytes. */
-export function measuredSelection(start: number, end: number, seconds: number) {
-  if (!Number.isFinite(seconds) || seconds < 5 || seconds > 60)
-    throw new Error("The validated clip must be between 5 and 60 seconds.");
-  const duration = Math.floor(seconds * 1000) / 1000;
-  const safeStart = Math.max(
-    0,
-    Math.min(Math.floor(start * 1000) / 1000, duration - 5),
-  );
-  const safeEnd = Math.min(
-    duration,
-    safeStart + 15,
-    Math.max(safeStart + 5, Math.floor(end * 1000) / 1000),
-  );
-  return { start: safeStart, end: safeEnd };
-}
+import "./unified-capture.css";
+export { measuredSelection } from "../lib/clip-selection";
 
 export default function Capture({
   run,
-  slot,
-  existing,
   onSaved,
   onClose,
 }: {
   run: Run;
-  slot: number;
-  existing?: Clip;
   onSaved: () => void;
   onClose: () => void;
 }) {
-  const [file, setFile] = useState<Blob>();
-  const [preview, setPreview] = useState(existing?.previewUrl || "");
-  const [duration, setDuration] = useState(existing?.duration || 0);
-  const [start, setStart] = useState(existing?.start || 0);
-  const [end, setEnd] = useState(existing?.end || 10);
-  const [fit, setFit] = useState<"fit" | "fill">(existing?.fit || "fit");
-  const [crop, setCrop] = useState(existing?.crop ?? 0.5);
-  const [mute, setMute] = useState(existing?.mute || false);
-  const [caption, setCaption] = useState(
-    existing?.caption ?? run.quest.beats[slot].caption,
-  );
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [takes, setTakes] = useState<RecordedTake[]>([]);
   const [camera, setCamera] = useState(false);
+  const [opening, setOpening] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [paused, setPaused] = useState(false);
   const [finishing, setFinishing] = useState(false);
-  const [takes, setTakes] = useState<number[]>([]);
-  const [draftMessage, setDraftMessage] = useState("");
-  const [draftReady, setDraftReady] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [previewUrl, setPreviewUrl] = useState("");
   const [elapsed, setElapsed] = useState(0);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [device, setDevice] = useState("");
+  const [torchAvailable, setTorchAvailable] = useState(false);
+  const [torch, setTorch] = useState(false);
+  const [delay, setDelay] = useState<0 | 3 | 10>(0);
   const [countdown, setCountdown] = useState(0);
-  const [source, setSource] = useState("gallery");
-  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
-  const [cameraDevice, setCameraDevice] = useState("");
-  const [cameraBusy, setCameraBusy] = useState(false);
-  const video = useRef<HTMLVideoElement>(null);
-  const clipPreview = useRef<HTMLVideoElement | null>(null);
-  const previewingSelection = useRef(false);
+  const [limit, setLimit] = useState<15 | 30 | 60>(60);
+  const [sheet, setSheet] = useState<"quest" | "prompt" | "overlay" | null>(
+    null,
+  );
+  const [promptText, setPromptText] = useState(run.quest.hook);
+  const [promptOn, setPromptOn] = useState(false);
+  const [promptSpeed, setPromptSpeed] = useState<"slow" | "normal" | "fast">(
+    "normal",
+  );
+  const [overlay, setOverlay] = useState<ImageOverlay>();
+  const [overlayUrl, setOverlayUrl] = useState("");
+  const [galleryUrl, setGalleryUrl] = useState("");
+  const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
+  const liveVideo = useRef<HTMLVideoElement>(null);
+  const previewVideo = useRef<HTMLVideoElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const sheetElement = useRef<HTMLElement>(null);
   const stream = useRef<MediaStream | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
-  const chunks = useRef<Blob[]>([]);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const source = useRef<"camera" | "gallery">("camera");
+  const savedTakes = useRef<RecordedTake[]>([]);
+  const owner = useRef<string | undefined>(undefined);
+  const generation = useRef(captureDraftGeneration());
   const closed = useRef(false);
-  const clock = useRef(new TakeClock());
-  const draftOwner = useRef<string | null>(null);
-  const draftGeneration = useRef(captureDraftGeneration());
-  const leaveAfterFinish = useRef(false);
-  const draftWrite = useRef<Promise<void>>(Promise.resolve());
-  const guide = filmingGuide(run.quest, slot);
-  const closeButton = useRef<HTMLButtonElement>(null);
-  function release() {
-    if (timer.current) clearInterval(timer.current);
-    if (countdownTimer.current) clearInterval(countdownTimer.current);
-    stream.current?.getTracks().forEach((t) => {
-      try {
-        t.stop();
-      } catch {
-        /* Already ended tracks need no further cleanup. */
-      }
-    });
+  const active = useRef(true);
+  const requestId = useRef(0);
+  const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const write = useRef(Promise.resolve());
+  const stopped = useRef(Promise.resolve());
+  const recordingStarted = useRef(0);
+  const recordingStopped = useRef(0);
+  const overlayRef = useRef<ImageOverlay | undefined>(undefined);
+  const autoOpened = useRef(false);
+  const countdownTimer = useRef<ReturnType<typeof setInterval> | undefined>(
+    undefined,
+  );
+  const timedRecording = useRef(false);
+  const touchStart = useRef<{ x: number; y: number } | undefined>(undefined);
+  const baseClipId =
+    run.clips.length === 1 && run.clips[0].mode === "session"
+      ? run.clips[0].id
+      : null;
+  const seconds = sessionSeconds(takes);
+
+  function releaseCamera() {
+    clearInterval(countdownTimer.current);
+    countdownTimer.current = undefined;
+    if (!closed.current) {
+      setCountdown(0);
+      setTorch(false);
+      setTorchAvailable(false);
+    }
+    requestId.current++;
+    stream.current?.getTracks().forEach((track) => track.stop());
     stream.current = null;
+    if (!closed.current) setCamera(false);
+  }
+  async function persist(next: RecordedTake[]) {
+    savedTakes.current = next;
+    if (!closed.current) setTakes(next);
+    if (!owner.current)
+      throw new Error(
+        "Local draft storage is unavailable. Keep this screen open and save your video.",
+      );
+    const draftOwner = owner.current;
+    write.current = write.current
+      .catch(() => {})
+      .then(() =>
+        next.length
+          ? saveCaptureDraft(
+              {
+                owner: draftOwner,
+                run: run.id,
+                slot: SESSION_DRAFT_SLOT,
+                baseClipId,
+                file: next[0].file,
+                takes: next,
+                ...(overlayRef.current ? { overlay: overlayRef.current } : {}),
+                duration: sessionSeconds(next),
+                start: 0,
+                end: sessionSeconds(next),
+                fit: "fit",
+                crop: 0.5,
+                mute: false,
+                caption: "",
+                source: source.current,
+                updatedAt: Date.now(),
+              },
+              generation.current,
+            )
+          : deleteCaptureDraft(draftOwner, run.id, SESSION_DRAFT_SLOT),
+      );
+    await write.current;
+    if (!closed.current)
+      setMessage(next.length ? "Draft saved on this device." : "");
+  }
+  function stopRecording() {
+    const current = recorder.current;
+    if (!current || current.state === "inactive") return stopped.current;
+    recordingStopped.current = performance.now();
+    clearInterval(timer.current);
+    timer.current = undefined;
+    if (!closed.current) {
+      setRecording(false);
+      setFinishing(true);
+    }
+    try {
+      current.stop();
+    } catch {
+      releaseCamera();
+    }
+    return stopped.current;
   }
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement;
-    closeButton.current?.focus();
     closed.current = false;
-    return () => {
-      closed.current = true;
-      try {
-        if (recorder.current && recorder.current.state !== "inactive") {
-          clock.current.pause(performance.now());
-          recorder.current.stop();
-        }
-      } catch {
-        /* A browser interruption may already have stopped it. */
-      } finally {
-        release();
-      }
-      previous?.focus();
-    };
-  }, []);
-  useEffect(() => {
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-  useEffect(() => {
-    if (camera && video.current && stream.current)
-      video.current.srcObject = stream.current;
-  }, [camera]);
-  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    closeButton.current?.focus();
     let canceled = false;
-    const prepare = async () => {
+    void (async () => {
       try {
-        const owner = DEMO
+        owner.current = DEMO
           ? `demo:${demoActor().id}`
           : (await supabase?.auth.getSession())?.data.session?.user.id;
-        if (canceled || !owner) return;
-        draftOwner.current = owner;
-        const saved = await loadCaptureDraft(owner, run.id, slot);
-        if (canceled || !saved) return;
-        if (saved.baseClipId !== (existing?.id || null)) {
-          await deleteCaptureDraft(owner, run.id, slot);
-          return;
-        }
-        setFile(saved.file);
-        setDuration(saved.duration);
-        setStart(saved.start);
-        setEnd(saved.end);
-        setFit(saved.fit);
-        setCrop(saved.crop);
-        setMute(saved.mute);
-        setCaption(saved.caption);
-        setSource(saved.source);
-        setDraftMessage(
-          "Draft restored from this device. Review and save this part, then film your next part.",
+        if (!owner.current || canceled) return;
+        const draft = await loadCaptureDraft(
+          owner.current,
+          run.id,
+          SESSION_DRAFT_SLOT,
         );
+        if (canceled || !draft || draft.baseClipId !== baseClipId) return;
+        savedTakes.current = draft.takes || [
+          { file: draft.file, duration: draft.duration },
+        ];
+        overlayRef.current = draft.overlay;
+        setOverlay(draft.overlay);
+        source.current = draft.source === "gallery" ? "gallery" : "camera";
+        setTakes(savedTakes.current);
+        setMessage("Your draft is here. Keep filming.");
       } catch {
         if (!canceled)
-          setDraftMessage(
-            "Local drafts are unavailable. Upload each part before leaving.",
+          setError(
+            "Local draft storage is unavailable. Save your video before leaving.",
           );
       } finally {
-        if (!canceled) setDraftReady(true);
+        if (!canceled) setReady(true);
       }
-    };
-    void prepare();
+    })();
+    const unwatch = watchCaptureActivity((isActive) => {
+      active.current = isActive;
+      if (!isActive) {
+        void stopRecording();
+        releaseCamera();
+      }
+    });
     return () => {
       canceled = true;
+      closed.current = true;
+      unwatch();
+      void stopRecording();
+      releaseCamera();
+      previousFocus?.focus();
     };
-  }, [run.id, slot, existing?.id]);
-
-  // Finishing on background/track loss makes one playable container, including
-  // paused takes. Independent MP4/WebM recordings are never concatenated.
+  }, [run.id, baseClipId]);
   useEffect(() => {
-    const interrupt = () => {
-      if (
-        document.hidden &&
-        recorder.current?.state !== "inactive" &&
-        recorder.current
-      ) {
-        finishPart();
-        setError(
-          "Camera interrupted. Your captured takes are now a draft to review. Save this part before filming another.",
-        );
-      }
-    };
-    const pageLeaving = () => {
-      if (recorder.current && recorder.current.state !== "inactive")
-        finishPart();
-    };
-    document.addEventListener("visibilitychange", interrupt);
-    window.addEventListener("pagehide", pageLeaving);
-    return () => {
-      document.removeEventListener("visibilitychange", interrupt);
-      window.removeEventListener("pagehide", pageLeaving);
-    };
-  }, []);
-
-  async function keepDraft(
-    blob: Blob,
-    seconds: number,
-    selectedStart = start,
-    selectedEnd = end,
-  ) {
-    if (!draftOwner.current)
-      throw new Error(
-        "Your local draft identity is unavailable. Upload this part before leaving.",
-      );
-    const owner = draftOwner.current;
-    const write = () =>
-      saveCaptureDraft(
-        {
-          owner,
-          run: run.id,
-          slot,
-          baseClipId: existing?.id || null,
-          file: blob,
-          duration: seconds,
-          start: selectedStart,
-          end: selectedEnd,
-          fit,
-          crop,
-          mute,
-          caption,
-          source,
-          updatedAt: Date.now(),
-        },
-        draftGeneration.current,
-      );
-    // Serialize the initial recording save and later trim edits.
-    draftWrite.current = draftWrite.current.catch(() => {}).then(write);
-    await draftWrite.current;
-    if (!closed.current)
-      setDraftMessage(
-        "Draft saved on this device for 7 days. Upload it to keep it with your quest.",
-      );
-  }
-
-  function finishPart() {
-    const active = recorder.current;
-    if (!active || active.state === "inactive") return;
-    clock.current.pause(performance.now());
-    setElapsed(clock.current.seconds(performance.now()));
-    setTakes([...clock.current.takes]);
-    setFinishing(true);
-    setRecording(false);
-    setPaused(false);
-    try {
-      active.stop();
-    } catch {
-      setFinishing(false);
-      release();
-      setCamera(false);
-      setError(
-        "The camera stopped before it could finish this part. Your uploaded parts are still saved.",
-      );
-    }
-  }
-
-  function pauseTake() {
-    const active = recorder.current;
-    if (!active || active.state !== "recording") return;
-    try {
-      active.pause();
-      clock.current.pause(performance.now());
-      setElapsed(clock.current.seconds(performance.now()));
-      setTakes([...clock.current.takes]);
-      setRecording(false);
-      setPaused(true);
-    } catch {
-      finishPart();
-    }
-  }
-
-  function resumeTake() {
-    const active = recorder.current;
-    if (!active || active.state !== "paused") return;
-    try {
-      active.resume();
-      clock.current.resume(performance.now());
-      setRecording(true);
-      setPaused(false);
-    } catch {
-      finishPart();
-      setError(
-        "This camera cannot continue that take. Review the footage already captured.",
-      );
-    }
-  }
-  async function openCamera(deviceId?: string) {
-    setError("");
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-      setError(
-        "In-page recording is unavailable. Use your phone camera or upload a clip below.",
-      );
+    if (camera && liveVideo.current)
+      liveVideo.current.srcObject = stream.current;
+  }, [camera, preview]);
+  useEffect(() => {
+    const file = takes[previewIndex]?.file;
+    if (!file || !preview) {
+      setPreviewUrl("");
       return;
     }
-    if (cameraBusy || recording || paused || finishing || countdown > 0) return;
-    setCameraBusy(true);
-    release();
-    setCamera(false);
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [takes, previewIndex, preview]);
+
+  useEffect(() => {
+    if (!ready || autoOpened.current) return;
+    autoOpened.current = true;
+    void openCamera();
+  }, [ready]);
+  useEffect(() => {
+    if (!overlay) {
+      setOverlayUrl("");
+      return;
+    }
+    const url = URL.createObjectURL(overlay.file);
+    setOverlayUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [overlay]);
+  useEffect(() => {
+    const file = takes.at(-1)?.file;
+    if (!file) {
+      setGalleryUrl("");
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setGalleryUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [takes]);
+
+  useEffect(() => {
+    if (!sheet) return;
+    const previous = document.activeElement as HTMLElement | null;
+    sheetElement.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    return () => {
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [sheet]);
+
+  function finishSwipe(x: number, y: number) {
+    const from = touchStart.current;
+    touchStart.current = undefined;
+    if (from && from.y - y > 70 && Math.abs(from.x - x) < 80 && !recording)
+      setSheet("quest");
+  }
+
+  async function openCamera(deviceId?: string) {
+    if (
+      opening ||
+      busy ||
+      finishing ||
+      recording ||
+      countdown ||
+      !active.current ||
+      !ready
+    )
+      return;
+    setError("");
+    setPreview(false);
+    setOpening(true);
+    releaseCamera();
+    const id = ++requestId.current;
     try {
+      if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder)
+        throw new Error();
       const acquired = await navigator.mediaDevices.getUserMedia({
         video: {
           ...(deviceId
@@ -322,734 +313,932 @@ export default function Capture({
         },
         audio: true,
       });
-      if (closed.current) {
-        acquired.getTracks().forEach((t) => t.stop());
+      if (closed.current || !active.current || id !== requestId.current) {
+        acquired.getTracks().forEach((track) => track.stop());
         return;
       }
       stream.current = acquired;
       acquired.getTracks().forEach((track) => {
         track.onended = () => {
-          if (recorder.current && recorder.current.state !== "inactive") {
-            finishPart();
-            setError(
-              "Camera disconnected. Review the takes captured before it stopped.",
-            );
-          }
+          void stopRecording();
+          releaseCamera();
         };
       });
-      setCameraDevice(
-        acquired.getVideoTracks()[0]?.getSettings().deviceId || deviceId || "",
-      );
       setCamera(true);
-      setSource("camera");
-      // Enumerating after the existing permission grant reveals supported devices without a new permission request.
+      const track = acquired.getVideoTracks()[0];
+      setDevice(track?.getSettings().deviceId || deviceId || "");
+      setTorchAvailable(
+        Boolean(
+          (
+            track?.getCapabilities?.() as MediaTrackCapabilities & {
+              torch?: boolean;
+            }
+          )?.torch,
+        ),
+      );
       const available =
-        typeof navigator.mediaDevices.enumerateDevices === "function"
-          ? await navigator.mediaDevices.enumerateDevices().catch(() => [])
-          : [];
-      if (!closed.current)
-        setCameras(
+        (await navigator.mediaDevices.enumerateDevices?.().catch(() => [])) ||
+        [];
+      if (!closed.current && id === requestId.current)
+        setDevices(
           available.filter(
-            (device) => device.kind === "videoinput" && device.deviceId,
+            (entry) => entry.kind === "videoinput" && entry.deviceId,
           ),
         );
     } catch {
-      setError(
-        deviceId
-          ? "That camera is unavailable. Try recording again or upload a clip instead."
-          : "Camera access is off or unavailable. You can use your phone camera or upload a clip instead.",
-      );
-      release();
-      setCamera(false);
+      if (!closed.current)
+        setError(
+          "Camera access is unavailable. Import a video below or enable camera and microphone access in Settings.",
+        );
     } finally {
-      if (!closed.current) setCameraBusy(false);
+      if (!closed.current) setOpening(false);
     }
   }
-  function switchCamera() {
-    const current = cameras.findIndex(
-      (device) => device.deviceId === cameraDevice,
-    );
-    const next = cameras[(current + 1) % cameras.length];
-    if (next) void openCamera(next.deviceId);
-  }
-  function record() {
-    if (!stream.current || countdown > 0 || recording || paused || finishing)
+  function startRecording() {
+    if (
+      !active.current ||
+      !stream.current ||
+      finishing ||
+      busy ||
+      recorder.current?.state === "recording"
+    )
       return;
-    setCountdown(3);
-    let left = 3;
-    countdownTimer.current = setInterval(() => {
-      left--;
-      setCountdown(left);
-      if (left > 0) return;
-      clearInterval(countdownTimer.current!);
-      if (!stream.current || closed.current) return;
-      const mime = [
-        "video/mp4;codecs=avc1.424028,mp4a.40.2",
-        "video/webm;codecs=vp9,opus",
-        "video/webm;codecs=vp8,opus",
-        "video/mp4",
-      ].find((m) => MediaRecorder.isTypeSupported(m));
-      try {
-        const active = new MediaRecorder(
-          stream.current,
-          mime ? { mimeType: mime, videoBitsPerSecond: 4_000_000 } : undefined,
+    const total = sessionSeconds(savedTakes.current);
+    if (total >= limit - 0.2 || savedTakes.current.length >= 30) {
+      setError("Your session is full. Preview and save your video.");
+      return;
+    }
+    setError("");
+    setMessage("");
+    source.current = "camera";
+    const chunks: Blob[] = [];
+    const mime = [
+      "video/mp4;codecs=avc1.424028,mp4a.40.2",
+      "video/webm;codecs=vp8,opus",
+      "video/mp4",
+    ].find((type) => MediaRecorder.isTypeSupported(type));
+    try {
+      const current = new MediaRecorder(
+        stream.current,
+        mime ? { mimeType: mime, videoBitsPerSecond: 3_000_000 } : undefined,
+      );
+      recorder.current = current;
+      let resolveStop: () => void;
+      stopped.current = new Promise<void>((resolve) => {
+        resolveStop = resolve;
+      });
+      current.ondataavailable = (event) => {
+        if (event.data.size) chunks.push(event.data);
+      };
+      current.onerror = () => {
+        void stopRecording();
+        setError("Recording was interrupted. Your earlier takes are saved.");
+      };
+      current.onstop = async () => {
+        clearInterval(timer.current);
+        const duration = Math.max(
+          0,
+          ((recordingStopped.current || performance.now()) -
+            recordingStarted.current) /
+            1000,
         );
-        recorder.current = active;
-        clock.current = new TakeClock();
-        setTakes([]);
-        chunks.current = [];
-        active.ondataavailable = (e) => {
-          if (e.data.size) chunks.current.push(e.data);
-        };
-        active.onerror = () => {
-          clock.current.pause(performance.now());
-          setError(
-            "Recording stopped unexpectedly. Review any captured footage or try again.",
-          );
-          if (active.state !== "inactive") finishPart();
-          else release();
-          setRecording(false);
-          setPaused(false);
-        };
-        active.onstop = async () => {
-          clock.current.pause(performance.now());
-          const blob = new Blob(chunks.current, {
-            type: active.mimeType || chunks.current[0]?.type,
-          });
-          const measuredElapsed =
-            Math.floor(clock.current.seconds(performance.now()) * 1000) / 1000;
-          release();
-          if (!closed.current) {
-            setCamera(false);
-            setRecording(false);
-            setPaused(false);
-            setFinishing(false);
-          }
-          if (blob.size) {
-            if (!closed.current) {
-              setFile(blob);
-              setDuration(measuredElapsed);
-              setStart(0);
-              setEnd(Math.min(15, measuredElapsed));
-            }
-            try {
-              await keepDraft(
-                blob,
-                measuredElapsed,
-                0,
-                Math.min(15, measuredElapsed),
+        const file = new Blob(chunks, {
+          type: current.mimeType || chunks[0]?.type,
+        });
+        recorder.current = null;
+        if (!closed.current) setElapsed(0);
+        try {
+          if (duration >= 0.1 && file.size) {
+            const next = [...savedTakes.current, { file, duration }];
+            if (
+              next.reduce((sum, take) => sum + take.file.size, 0) >
+              40 * 1024 * 1024
+            )
+              throw new Error(
+                "This take exceeds the 40 MB session limit. Your earlier takes are saved.",
               );
-              if (leaveAfterFinish.current && !closed.current) onClose();
-            } catch {
-              if (!closed.current)
-                setError(
-                  "This browser could not save the local draft. Keep this screen open and upload the part to save it.",
-                );
-            }
-          } else if (!closed.current)
-            setError("No video was recorded. Try again or upload a clip.");
-        };
-        active.start(250);
-        clock.current.resume(performance.now());
-        setRecording(true);
-        setPaused(false);
-        setElapsed(0);
-        timer.current = setInterval(() => {
-          const seconds = clock.current.seconds(performance.now());
-          setElapsed(seconds);
-          if (seconds >= 15 && active.state === "recording") finishPart();
-        }, 100);
-      } catch {
-        release();
-        setCamera(false);
-        setError(
-          "This browser could not start recording. Use the file capture option below.",
-        );
+            await persist(next);
+          }
+        } catch (cause) {
+          if (!closed.current) setError((cause as Error).message);
+        } finally {
+          if (!closed.current) {
+            setRecording(false);
+            setFinishing(false);
+            setElapsed(0);
+          }
+          resolveStop!();
+        }
+      };
+      recordingStarted.current = performance.now();
+      recordingStopped.current = 0;
+      current.start(250);
+      setRecording(true);
+      timer.current = setInterval(() => {
+        const now = (performance.now() - recordingStarted.current) / 1000;
+        setElapsed(now);
+        if (total + now >= limit - 0.2) void stopRecording();
+      }, 50);
+    } catch {
+      recorder.current = null;
+      stopped.current = Promise.resolve();
+      setError("Recording could not start. Try again or import a video.");
+    }
+  }
+  function beginRecording() {
+    if (recording) {
+      void stopRecording();
+      return;
+    }
+    if (countdownTimer.current || !camera) return;
+    timedRecording.current = delay > 0;
+    if (!delay) {
+      startRecording();
+      return;
+    }
+    let remaining: number = delay;
+    setCountdown(remaining);
+    countdownTimer.current = setInterval(() => {
+      remaining--;
+      setCountdown(remaining);
+      if (!remaining) {
+        clearInterval(countdownTimer.current);
+        countdownTimer.current = undefined;
+        if (active.current && !closed.current) startRecording();
       }
     }, 1000);
   }
-  function selectFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
+  async function toggleTorch() {
+    const track = stream.current?.getVideoTracks()[0];
+    if (!track || !torchAvailable) return;
+    try {
+      await track.applyConstraints({
+        advanced: [{ torch: !torch }],
+      } as unknown as MediaTrackConstraints);
+      setTorch(!torch);
+    } catch {
+      setError("Torch is unavailable on this camera.");
+      setTorchAvailable(false);
+    }
+  }
+  async function chooseOverlay(next?: ImageOverlay) {
+    if (
+      next &&
+      (!next.file.size ||
+        next.file.size > 5 * 1024 * 1024 ||
+        !["image/png", "image/jpeg", "image/webp"].includes(next.file.type))
+    ) {
+      setError("Choose a JPG, PNG or WebP image up to 5 MB.");
+      return;
+    }
+    overlayRef.current = next;
+    setOverlay(next);
     setError("");
-    if (f.size > 40 * 1024 * 1024) {
-      setError(
-        "This clip is over 40 MB. Trim it in your phone’s video app, then upload again.",
-      );
+    if (savedTakes.current.length)
+      try {
+        await persist(savedTakes.current);
+      } catch (cause) {
+        setError((cause as Error).message);
+      }
+    if (next) setSheet("overlay");
+  }
+  async function showPreview() {
+    await stopRecording();
+    releaseCamera();
+    setPreviewIndex(0);
+    setPreview(true);
+  }
+  async function importVideo(file?: File) {
+    if (!file) return;
+    setError("");
+    if (!file.size || file.size > 40 * 1024 * 1024) {
+      setError("Choose a video no larger than 40 MB.");
       return;
     }
-    if (!f.size) {
-      setError("This file is empty. Choose a playable video.");
+    if (
+      savedTakes.current.length &&
+      !confirm("Replace this device’s recording draft with the imported video?")
+    )
       return;
+    releaseCamera();
+    source.current = "gallery";
+    const next = [{ file, duration: 0 }];
+    savedTakes.current = next;
+    setTakes(next);
+    setPreviewIndex(0);
+    setPreview(true);
+    try {
+      await persist(next);
+    } catch (cause) {
+      setError((cause as Error).message);
     }
-    setSource("gallery");
-    setFile(f);
-    setDuration(0);
-    setStart(0);
-    setEnd(10);
-    void keepDraft(f, 0, 0, 10).catch(() =>
-      setDraftMessage(
-        "Local draft unavailable. Upload this part before leaving.",
-      ),
-    );
   }
   async function close() {
     if (busy || finishing) return;
-    if (recorder.current && recorder.current.state !== "inactive") {
-      leaveAfterFinish.current = true;
-      finishPart();
-      return;
+    await stopRecording();
+    try {
+      await write.current;
+      releaseCamera();
+      onClose();
+    } catch {
+      setError(
+        "Your draft could not be saved. Keep this screen open and save the video first.",
+      );
     }
-    if (file) {
-      try {
-        await keepDraft(file, duration);
-      } catch {
-        setError(
-          "Your draft could not be saved. Upload this part or discard it before leaving.",
-        );
-        return;
-      }
-    }
-    onClose();
   }
   async function save() {
     setBusy(true);
     setError("");
     try {
-      let clip = existing,
-        selected = { start, end };
-      if (file) {
-        if (DEMO) {
-          const result = await request<{
-            assetId: string;
-            generation: number;
-            mime: string;
-            probe: { duration: number; durationSeconds?: number };
-            previewUrl: string;
-          }>(`/api/local-media/uploads?runId=${run.id}&slot=${slot}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": file.type || "application/octet-stream",
-              "X-Sidequest-Demo": "1",
-            },
-            body: file,
-          });
-          const measuredDuration =
-            result.probe.durationSeconds ?? result.probe.duration;
-          selected = measuredSelection(start, end, measuredDuration);
-          setDuration(measuredDuration);
-          setStart(selected.start);
-          setEnd(selected.end);
-          clip = {
-            id: result.assetId,
-            generation: result.generation,
-            slot,
-            duration: measuredDuration,
-            mime: result.mime,
-            previewUrl: result.previewUrl,
-            ...selected,
-            fit,
-            crop,
-            mute,
-            caption,
-          };
-        } else {
-          const reservation = await request<{ id: string; uploadUrl: string }>(
-            `/api/quest-runs/${run.id}/uploads`,
-            {
-              method: "POST",
-              headers: {
-                "Idempotency-Key": crypto.randomUUID(),
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                slot,
-                bytes: file.size,
-                mime: file.type,
-                source,
-              }),
-            },
-          );
-          const uploaded = await request<{ duration_ms: number }>(
-            reservation.uploadUrl,
-            {
-              method: "PUT",
-              headers: { "Content-Type": file.type },
-              body: file,
-            },
-          );
-          const measuredDuration = uploaded.duration_ms / 1000;
-          selected = measuredSelection(start, end, measuredDuration);
-          setDuration(measuredDuration);
-          setStart(selected.start);
-          setEnd(selected.end);
-          clip = await request<Clip>(`/api/media/${reservation.id}/finalize`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Idempotency-Key": crypto.randomUUID(),
-            },
-            body: JSON.stringify({ ...selected, fit, crop, mute, caption }),
-          });
-        }
-      }
-      if (!clip) throw new Error("Record or upload a clip first.");
-      await api.saveClip(run.id, {
-        ...clip,
-        ...selected,
-        fit,
-        crop,
-        mute,
-        caption,
-      });
-      await draftWrite.current.catch(() => {});
-      if (draftOwner.current)
-        await deleteCaptureDraft(draftOwner.current, run.id, slot).catch(
-          () => {},
-        );
+      await saveRecordingSession(
+        run.id,
+        savedTakes.current,
+        source.current,
+        overlayRef.current,
+      );
+      await write.current.catch(() => {});
+      if (owner.current)
+        await deleteCaptureDraft(
+          owner.current,
+          run.id,
+          SESSION_DRAFT_SLOT,
+        ).catch(() => {});
       onSaved();
       onClose();
-    } catch (e) {
-      setError(
-        `Couldn’t save clip ${slot + 1}. Your other clips are saved. ${(e as Error).message}`,
-      );
+    } catch (cause) {
+      setError((cause as Error).message);
     } finally {
       setBusy(false);
     }
   }
+  const locked = busy || finishing || recording || countdown > 0;
+  const positions: { value: ImageOverlay["position"]; label: string }[] = [
+    { value: "top_left", label: "Top left" },
+    { value: "top_right", label: "Top right" },
+    { value: "center", label: "Center" },
+    { value: "bottom_left", label: "Bottom left" },
+    { value: "bottom_right", label: "Bottom right" },
+  ];
   return (
     <div
-      className={`capture-overlay ${camera ? "camera-open" : ""}`}
+      className="capture-overlay session-capture session-fullscreen"
       role="dialog"
       aria-modal="true"
-      aria-label={`Capture ${run.quest.beats[slot].label}`}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") close();
-        if (e.key === "Tab") {
+      aria-label="Record your quest"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          if (sheet) setSheet(null);
+          else void close();
+        }
+        if (event.key === "Tab") {
           const controls = Array.from(
-            e.currentTarget.querySelectorAll<HTMLElement>(
-              'button:not(:disabled), input:not(:disabled), select, summary, video[controls], [tabindex="0"]',
+            (
+              sheetElement.current || event.currentTarget
+            ).querySelectorAll<HTMLElement>(
+              'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), summary, video[controls], [tabindex="0"]',
             ),
-          );
+          ).filter((element) => element.getClientRects().length > 0);
           const first = controls[0],
-            last = controls[controls.length - 1];
-          if (e.shiftKey && document.activeElement === first) {
-            e.preventDefault();
+            last = controls.at(-1);
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
             last?.focus();
-          } else if (!e.shiftKey && document.activeElement === last) {
-            e.preventDefault();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
             first?.focus();
           }
         }
       }}
     >
-      <div className="capture-content">
-        <div className="section-heading">
-          <span className="eyebrow">MOMENT {slot + 1} OF 3</span>
-          <button
-            ref={closeButton}
-            className="icon-button"
-            aria-label="Exit capture"
-            onClick={close}
-            disabled={busy || finishing}
-          >
-            <X />
-          </button>
-        </div>
-        <h1>{run.quest.beats[slot].label}</h1>
-        <div className="filming-guide">
-          <strong>{guide.title}</strong>
-          <p>{guide.prompt}</p>
-          <p className="shot-direction">{guide.shot}</p>
-          <details>
-            <summary>Story tip</summary>
-            <p>{guide.tip}</p>
-          </details>
-        </div>
-        {camera && (
-          <div
-            className="take-progress"
-            aria-label={`${takes.length} completed takes, ${elapsed.toFixed(1)} of 15 seconds`}
-          >
-            {takes.map((take, index) => (
-              <span key={index} style={{ width: `${(take / 15) * 100}%` }} />
-            ))}
-            {recording && (
-              <span
-                className="current-take"
-                style={{
-                  width: `${(Math.max(0, elapsed - takes.reduce((sum, take) => sum + take, 0)) / 15) * 100}%`,
-                }}
-              />
-            )}
-          </div>
+      <header className="session-capture-header">
+        <button
+          ref={closeButton}
+          className="session-tool-icon"
+          aria-label="Exit capture"
+          onClick={() => void close()}
+          disabled={busy || finishing}
+        >
+          <X />
+        </button>
+        <h1>{run.quest.title}</h1>
+        <span className="session-duration" role="timer">
+          {(seconds + elapsed).toFixed(1)}s / {preview ? 60 : limit}s
+        </span>
+      </header>
+      <div
+        className="session-timeline"
+        aria-label={`${takes.length} takes saved`}
+      >
+        {takes.map((take, index) => (
+          <span
+            key={index}
+            style={{ width: `${(take.duration / limit) * 100}%` }}
+          />
+        ))}
+        {recording && (
+          <span
+            className="live-take"
+            style={{ width: `${(elapsed / limit) * 100}%` }}
+          />
         )}
-        <div className="capture-frame">
+      </div>
+      <div
+        className={`session-camera-stage ${preview ? "is-preview" : ""}`}
+        onPointerDown={(event) => {
+          if (
+            (event.target as HTMLElement).closest(
+              "button, input, label, textarea, a",
+            )
+          )
+            return;
+          touchStart.current = { x: event.clientX, y: event.clientY };
+          if (!preview) event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerUp={(event) => finishSwipe(event.clientX, event.clientY)}
+        onPointerCancel={() => {
+          touchStart.current = undefined;
+        }}
+        onTouchStart={(event) => {
+          if (
+            (event.target as HTMLElement).closest(
+              "button, input, label, textarea, a",
+            )
+          )
+            return;
+          const touch = event.touches[0];
+          touchStart.current = { x: touch.clientX, y: touch.clientY };
+        }}
+        onTouchEnd={(event) => {
+          const touch = event.changedTouches[0];
+          if (touch) finishSwipe(touch.clientX, touch.clientY);
+        }}
+      >
+        <div className="session-video-canvas">
           {camera ? (
             <video
-              ref={video}
+              ref={liveVideo}
               autoPlay
               playsInline
               muted
               aria-label="Live camera preview"
             />
-          ) : preview ? (
-            <AuthVideo
-              key={preview}
-              src={preview}
+          ) : preview && previewUrl ? (
+            <video
+              ref={previewVideo}
+              key={previewUrl}
+              src={previewUrl}
               controls
               playsInline
-              muted={mute}
-              style={{
-                objectFit: fit === "fit" ? "contain" : "cover",
-                objectPosition: `${crop * 100}% center`,
-              }}
-              onLoadedMetadata={(e) => {
-                clipPreview.current = e.currentTarget;
-                const d = e.currentTarget.duration;
-                if (Number.isFinite(d)) {
-                  setDuration(d);
-                  setEnd((prev) => Math.min(prev, d));
-                }
-              }}
-              onTimeUpdate={(event) => {
-                if (
-                  previewingSelection.current &&
-                  event.currentTarget.currentTime >= end
-                ) {
-                  event.currentTarget.pause();
-                  previewingSelection.current = false;
-                }
-              }}
+              autoPlay
               onError={() =>
                 setError(
-                  "This browser cannot preview this video. Use an MP4 or record a new clip.",
+                  "This video could not be previewed. Choose a playable MP4, MOV, or WebM video.",
                 )
               }
-              aria-label="Clip preview"
+              onLoadedMetadata={(event) => {
+                const measured = event.currentTarget.duration;
+                if (
+                  !takes[previewIndex]?.duration &&
+                  Number.isFinite(measured)
+                ) {
+                  const next = savedTakes.current.map((take, index) =>
+                    index === previewIndex
+                      ? { ...take, duration: measured }
+                      : take,
+                  );
+                  void persist(next).catch((cause) =>
+                    setError((cause as Error).message),
+                  );
+                  if (measured < 5 || measured > 60.1)
+                    setError(
+                      "Choose a finished video between 5 and 60 seconds.",
+                    );
+                }
+              }}
+              onEnded={() => {
+                if (previewIndex + 1 < takes.length)
+                  setPreviewIndex(previewIndex + 1);
+              }}
+              aria-label="Your video preview"
             />
           ) : (
-            <div className="capture-placeholder">
-              <Video size={40} />
-              <span>Your next moment goes here.</span>
-              <small>Portrait · Aim for 10 seconds</small>
-            </div>
-          )}
-          {countdown > 0 && (
-            <div className="countdown" role="status">
-              {countdown}
-            </div>
-          )}
-          {(recording || paused || finishing) && (
-            <div
-              className="record-timer"
-              role="timer"
-              aria-label={`${Math.floor(elapsed)} seconds recorded`}
-            >
-              {recording && <span />} {elapsed.toFixed(1)}s / 15s
-              {paused ? " · Take stopped" : ""}
-            </div>
-          )}
-        </div>
-        {camera ? (
-          <div className="capture-actions">
-            <p className="support">
-              Film a little, stop, then add another take. Keep 5–15 seconds in
-              this part.
-            </p>
-            <div className="take-controls">
-              {recording ? (
-                <button
-                  className="record-control is-recording"
-                  onClick={pauseTake}
-                  aria-label="Stop take"
-                >
-                  <Square fill="currentColor" size={26} />
-                </button>
-              ) : paused ? (
-                <button
-                  className="record-control"
-                  onClick={resumeTake}
-                  aria-label="Add take"
-                >
-                  <Plus size={30} />
-                </button>
-              ) : (
-                <button
-                  className="record-control"
-                  disabled={countdown > 0 || cameraBusy || finishing}
-                  onClick={record}
-                  aria-label="Start recording"
-                >
-                  <Camera size={28} />
-                </button>
-              )}
-              {(recording || paused) && (
-                <Button secondary disabled={elapsed < 5} onClick={finishPart}>
-                  <Check size={18} />
-                  Finish part
+            <div className="session-camera-empty">
+              <Camera size={38} />
+              <p>{opening ? "Opening camera…" : "Your moment starts here."}</p>
+              {!opening && (
+                <Button onClick={() => void openCamera()} busy={!ready}>
+                  {takes.length ? "Continue recording" : "Open camera"}
                 </Button>
               )}
             </div>
-            <p className="record-control-label">
-              {recording
-                ? "Stop take"
-                : paused
-                  ? "Add take"
-                  : finishing
-                    ? "Finishing your part…"
-                    : "Start recording"}
-            </p>
-            {paused && elapsed < 5 && (
-              <p className="support">
-                Add at least {(5 - elapsed).toFixed(1)} more seconds to use this
-                part.
-              </p>
-            )}
-            {cameras.length > 1 && (
-              <button
-                className="text-button"
-                disabled={
-                  cameraBusy ||
-                  recording ||
-                  paused ||
-                  finishing ||
-                  countdown > 0
+          )}
+          {overlayUrl && overlay && (
+            <div
+              className="session-overlay-frame"
+              aria-label="Image overlay preview"
+            >
+              <img
+                className={`session-image-overlay position-${overlay.position}`}
+                src={overlayUrl}
+                alt="Your image overlay"
+                style={
+                  overlaySize.width
+                    ? {
+                        width: `${((Math.min(1, (overlay.position === "center" ? 650 : 360) / overlaySize.width, (overlay.position === "center" ? 800 : 480) / overlaySize.height) * overlaySize.width) / 1080) * 100}%`,
+                      }
+                    : undefined
                 }
-                onClick={switchCamera}
+                onLoad={(event) =>
+                  setOverlaySize({
+                    width: event.currentTarget.naturalWidth,
+                    height: event.currentTarget.naturalHeight,
+                  })
+                }
+                onError={() => {
+                  void chooseOverlay();
+                  setError(
+                    "This image could not be opened. Choose a different JPG, PNG or WebP image.",
+                  );
+                }}
+              />
+            </div>
+          )}
+        </div>
+        {promptOn && !preview && (
+          <div
+            className="session-teleprompter"
+            aria-label="Teleprompter script"
+          >
+            <p
+              key={`${promptText}-${promptSpeed}`}
+              style={{
+                animationDuration: `${promptSpeed === "slow" ? 65 : promptSpeed === "fast" ? 25 : 45}s`,
+                animationPlayState: recording ? "running" : "paused",
+              }}
+            >
+              {promptText}
+            </p>
+          </div>
+        )}
+      </div>
+      {!preview && (
+        <aside className="session-tools" aria-label="Camera tools">
+          <button
+            className="session-tool-icon"
+            aria-label="Flip camera"
+            disabled={locked || !camera || devices.length < 2}
+            title={
+              devices.length < 2
+                ? "Only one camera is available"
+                : "Flip camera"
+            }
+            onClick={() => {
+              const next = devices.find((entry) => entry.deviceId !== device);
+              if (next) void openCamera(next.deviceId);
+            }}
+          >
+            <SwitchCamera />
+            <span>Flip</span>
+          </button>
+          <button
+            className="session-tool-icon"
+            aria-label="Flash"
+            aria-pressed={torch}
+            disabled={locked || !torchAvailable}
+            title={
+              torchAvailable
+                ? "Toggle camera light"
+                : "Flash is unavailable on this camera"
+            }
+            onClick={() => void toggleTorch()}
+          >
+            <Zap />
+            <span>{torch ? "Light on" : "Flash"}</span>
+          </button>
+          <button
+            className="session-tool-icon"
+            aria-label={`Timer ${delay}s`}
+            disabled={locked}
+            onClick={() => setDelay(delay === 0 ? 3 : delay === 3 ? 10 : 0)}
+          >
+            <Timer />
+            <span>{delay ? `${delay}s` : "Timer"}</span>
+          </button>
+          <button
+            className="session-tool-icon"
+            aria-label="Teleprompter"
+            aria-pressed={promptOn}
+            disabled={locked}
+            onClick={() => setSheet("prompt")}
+          >
+            <Captions />
+            <span>Prompt</span>
+          </button>
+          <label
+            className={`session-tool-icon session-file-tool ${locked ? "is-disabled" : ""}`}
+          >
+            <ImagePlus />
+            <span>Photo</span>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              aria-label="Add image overlay"
+              disabled={locked}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file)
+                  void chooseOverlay({
+                    file,
+                    position: overlayRef.current?.position || "center",
+                  });
+                event.target.value = "";
+              }}
+            />
+          </label>
+          {overlay && (
+            <button
+              className="session-tool-icon"
+              aria-label="Edit image overlay"
+              disabled={locked}
+              onClick={() => setSheet("overlay")}
+            >
+              <ImageIcon />
+              <span>Position</span>
+            </button>
+          )}
+          {!!takes.length && (
+            <button
+              className="session-tool-icon"
+              aria-label="Delete last take"
+              disabled={locked}
+              onClick={async () => {
+                if (!confirm("Delete your last take?")) return;
+                try {
+                  await persist(savedTakes.current.slice(0, -1));
+                } catch (cause) {
+                  setError((cause as Error).message);
+                }
+              }}
+            >
+              <RotateCcw />
+              <span>Undo</span>
+            </button>
+          )}
+        </aside>
+      )}
+      {countdown > 0 && (
+        <div className="session-countdown" role="status">
+          <strong>{countdown}</strong>
+          <button
+            className="session-pill"
+            onClick={() => {
+              clearInterval(countdownTimer.current);
+              countdownTimer.current = undefined;
+              setCountdown(0);
+            }}
+          >
+            Cancel timer
+          </button>
+        </div>
+      )}
+      <footer
+        className={`session-camera-footer ${preview ? "is-preview" : ""}`}
+      >
+        {error ? (
+          <div className="session-feedback" role="alert">
+            {error}
+            <button aria-label="Dismiss message" onClick={() => setError("")}>
+              <X size={16} />
+            </button>
+          </div>
+        ) : (
+          message &&
+          !recording && (
+            <p className="session-draft-message" role="status">
+              {message}
+            </p>
+          )
+        )}
+        {preview ? (
+          <>
+            <div className="session-review-actions">
+              <Button
+                onClick={save}
+                busy={busy}
+                disabled={!validSession(takes)}
               >
-                <RotateCcw size={16} />
-                Switch camera
-              </button>
-            )}
-            {paused && (
-              <button className="text-button" onClick={close}>
-                <Bookmark size={16} />
-                Save draft & leave
-              </button>
-            )}
-            {!recording && !paused && !finishing && (
+                Save video <Check size={18} />
+              </Button>
+              <Button
+                secondary
+                onClick={() => void openCamera()}
+                disabled={busy || seconds >= 59.8}
+              >
+                Add more takes
+              </Button>
+            </div>
+            {takes.length > 1 && (
               <button
-                className="text-button"
+                className="session-pill"
+                disabled={busy}
                 onClick={() => {
-                  release();
-                  setCamera(false);
-                  setCountdown(0);
-                  if (existing) {
-                    setPreview(existing.previewUrl);
-                    setDuration(existing.duration);
-                    setStart(existing.start);
-                    setEnd(existing.end);
-                    setFit(existing.fit);
-                    setCrop(existing.crop);
-                    setMute(existing.mute);
-                    setCaption(existing.caption);
-                  }
+                  setPreviewIndex(0);
+                  if (previewVideo.current)
+                    previewVideo.current.currentTime = 0;
+                  void previewVideo.current?.play().catch(() => {});
                 }}
               >
-                Cancel camera
+                <Play size={15} />
+                Replay from start
               </button>
             )}
-          </div>
-        ) : preview ? (
+            <p className="session-preview-note">
+              {seconds < 5
+                ? `Record ${Math.max(0, 5 - seconds).toFixed(1)}s more to save. 5s minimum.`
+                : takes.length > 1
+                  ? `${takes.length} takes become one video.`
+                  : "Your complete video."}
+              {overlay ? " Photo is included when you save." : ""}
+            </p>
+            <label className="session-pill session-file-tool">
+              Replace video
+              <input
+                type="file"
+                accept="video/*,image/png,image/jpeg,image/webp"
+                aria-label="Import video"
+                disabled={!ready || busy || finishing}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file?.type.startsWith("image/"))
+                    void chooseOverlay({
+                      file,
+                      position: overlayRef.current?.position || "center",
+                    });
+                  else void importVideo(file);
+                  event.target.value = "";
+                }}
+              />
+            </label>
+          </>
+        ) : (
           <>
-            {file && duration > 0 && duration < 5 && (
-              <Notice error>
-                This draft is shorter than 5 seconds. Retake this part or upload
-                a longer clip. Your other parts stay saved.
-              </Notice>
-            )}
-            <div className="form-grid">
-              <label>
-                Start (seconds)
+            <div
+              className="session-duration-choices"
+              aria-label="Recording duration"
+            >
+              {([15, 30, 60] as const).map((value) => (
+                <button
+                  key={value}
+                  className="session-pill"
+                  aria-pressed={limit === value}
+                  disabled={locked || seconds >= value - 0.2}
+                  onClick={() => setLimit(value)}
+                >
+                  {value}s
+                </button>
+              ))}
+            </div>
+            <div className="session-record-row">
+              <label
+                className={`session-gallery session-file-tool ${locked ? "is-disabled" : ""}`}
+                title="Import a video or photo from your phone"
+              >
+                <span>
+                  {galleryUrl ? (
+                    <video
+                      src={galleryUrl}
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : (
+                    <ImageIcon />
+                  )}
+                </span>
+                <small>Gallery</small>
                 <input
-                  type="number"
-                  min="0"
-                  max={Math.max(0, duration - 5)}
-                  step="0.1"
-                  value={start}
-                  onChange={(e) => {
-                    setStart(Number(e.target.value));
+                  type="file"
+                  accept="video/*,image/png,image/jpeg,image/webp"
+                  aria-label="Import video"
+                  disabled={!ready || locked}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file?.type.startsWith("image/"))
+                      void chooseOverlay({
+                        file,
+                        position: overlayRef.current?.position || "center",
+                      });
+                    else void importVideo(file);
+                    event.target.value = "";
                   }}
                 />
               </label>
-              <label>
-                End (seconds)
-                <input
-                  type="number"
-                  min="5"
-                  max={duration || 60}
-                  step="0.1"
-                  value={end}
-                  onChange={(e) => setEnd(Number(e.target.value))}
-                />
-              </label>
-            </div>
-            <p className="support">
-              Selected: {(end - start).toFixed(1)}s ·{" "}
-              {duration > 0
-                ? "Choose 5–15 seconds within your clip."
-                : "The upload will confirm the clip’s duration and trim."}
-            </p>
-            <button
-              className="button secondary"
-              disabled={busy || !duration || end <= start || end > duration}
-              onClick={async () => {
-                const player = clipPreview.current;
-                if (!player) return;
-                setError("");
-                player.currentTime = start;
-                previewingSelection.current = true;
-                try {
-                  await player.play();
-                } catch {
-                  previewingSelection.current = false;
-                  setError(
-                    "The preview could not play. Try the video’s play control.",
-                  );
-                }
-              }}
-            >
-              <Play size={17} /> Preview selected{" "}
-              {Math.max(0, end - start).toFixed(1)}s
-            </button>
-            <div className="form-grid">
-              <label>
-                Framing
-                <select
-                  value={fit}
-                  onChange={(e) => setFit(e.target.value as "fit" | "fill")}
+              {camera ? (
+                <button
+                  className={`session-shutter ${recording ? "is-recording" : ""}`}
+                  aria-label="Hold to record"
+                  disabled={
+                    finishing ||
+                    busy ||
+                    countdown > 0 ||
+                    (!recording && seconds >= limit - 0.2)
+                  }
+                  onContextMenu={(event) => event.preventDefault()}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    beginRecording();
+                  }}
+                  onPointerUp={() => {
+                    if (!timedRecording.current) void stopRecording();
+                  }}
+                  onPointerCancel={() => {
+                    if (!timedRecording.current) void stopRecording();
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      (event.key === " " || event.key === "Enter") &&
+                      !event.repeat
+                    ) {
+                      event.preventDefault();
+                      beginRecording();
+                    }
+                  }}
+                  onKeyUp={(event) => {
+                    if (event.key === " " || event.key === "Enter") {
+                      event.preventDefault();
+                      if (!timedRecording.current) void stopRecording();
+                    }
+                  }}
                 >
-                  <option value="fit">Fit — keep the whole image</option>
-                  <option value="fill">Fill — crop to portrait</option>
-                </select>
-              </label>
-              <label className="check-row">
-                <input
-                  type="checkbox"
-                  checked={mute}
-                  onChange={(e) => setMute(e.target.checked)}
-                />
-                Mute recorded audio
-              </label>
-            </div>
-            {fit === "fill" && (
-              <label>
-                Horizontal crop position
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={crop}
-                  onChange={(e) => setCrop(Number(e.target.value))}
-                />
-              </label>
-            )}
-            <label>
-              Story label (not a transcript)
-              <input
-                value={caption}
-                maxLength={64}
-                onChange={(e) => setCaption(e.target.value)}
-              />
-            </label>
-            <Button
-              busy={busy}
-              disabled={
-                !draftReady ||
-                end - start < 5 ||
-                end - start > 15 ||
-                start < 0 ||
-                (duration > 0 && end > duration)
-              }
-              onClick={save}
-            >
-              Use clip · {file ? "Upload & validate" : "Save changes"}
-            </Button>
-            <button
-              className="text-button"
-              disabled={busy}
-              onClick={async () => {
-                if (
-                  file &&
-                  !confirm(
-                    "Discard this local draft and record again? Your uploaded parts stay saved.",
-                  )
-                )
-                  return;
-                await draftWrite.current.catch(() => {});
-                if (draftOwner.current)
-                  await deleteCaptureDraft(
-                    draftOwner.current,
-                    run.id,
-                    slot,
-                  ).catch(() => {});
-                setFile(undefined);
-                setPreview("");
-                setDuration(0);
-                setDraftMessage("");
-              }}
-            >
-              <RotateCcw size={16} />
-              Retake or replace
-            </button>
-            {file && (
-              <>
-                <button className="text-button" disabled={busy} onClick={close}>
-                  <Bookmark size={16} />
-                  Save draft & leave
+                  <span />
                 </button>
-                <p className="fine-print">
-                  This part is finished. Save it and return for your next part
-                  whenever you’re ready. Adding takes is available before you
-                  finish a part.
+              ) : (
+                <span className="session-shutter-placeholder" />
+              )}
+              <button
+                className="session-preview-check"
+                aria-label="Preview video"
+                disabled={!takes.length || locked}
+                onClick={() => void showPreview()}
+              >
+                <Check />
+                <small>Next</small>
+              </button>
+            </div>
+            {camera && (
+              <>
+                <p className="session-instruction">
+                  {delay
+                    ? `Record hands-free after ${delay} seconds.`
+                    : "Hold to record. Release to pause."}
                 </p>
+                <button
+                  className="session-tap-record"
+                  disabled={
+                    finishing ||
+                    busy ||
+                    countdown > 0 ||
+                    (!recording && seconds >= limit - 0.2)
+                  }
+                  onClick={() => beginRecording()}
+                >
+                  {recording ? (
+                    <>
+                      <Square size={12} /> Stop recording
+                    </>
+                  ) : (
+                    "Or tap to start recording"
+                  )}
+                </button>
               </>
             )}
           </>
-        ) : (
-          <div className="stack">
-            <Button
-              busy={cameraBusy || !draftReady}
-              onClick={() => openCamera()}
-            >
-              <Camera size={18} />
-              Record this moment
-            </Button>
-            <label className="button secondary file-button">
-              <Upload size={18} />
-              Upload a clip
-              <input
-                type="file"
-                disabled={cameraBusy || !draftReady}
-                accept="video/*"
-                onChange={selectFile}
-              />
-            </label>
-            <label className="text-button file-button">
-              Use phone camera
-              <input
-                type="file"
-                disabled={cameraBusy || !draftReady}
-                accept="video/*"
-                capture="environment"
-                onChange={selectFile}
-              />
-            </label>
-            <p className="fine-print">
-              MP4, MOV or WebM · Up to 40 MB, 60 seconds.
-              <br />A saved clip is confirmed only after server validation.
-            </p>
-          </div>
         )}
-        {draftMessage && (
-          <p className="fine-print" role="status">
-            {draftMessage}
-          </p>
-        )}
-        {error && <Notice error>{error}</Notice>}
-      </div>
+        <button
+          className="session-quest-toggle"
+          aria-label="Quest instructions"
+          disabled={busy}
+          onClick={() => setSheet("quest")}
+        >
+          <ChevronUp size={18} />
+          <span>Quest</span>
+        </button>
+      </footer>
+      {sheet && (
+        <div className="session-sheet-backdrop" onClick={() => setSheet(null)}>
+          <section
+            ref={sheetElement}
+            className="session-tool-sheet"
+            aria-label={
+              sheet === "quest"
+                ? "Quest instructions panel"
+                : sheet === "prompt"
+                  ? "Teleprompter settings"
+                  : "Image overlay settings"
+            }
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header>
+              <h2>
+                {sheet === "quest"
+                  ? "Your quest"
+                  : sheet === "prompt"
+                    ? "Teleprompter"
+                    : "Place your photo"}
+              </h2>
+              <button
+                className="session-tool-icon"
+                aria-label="Close panel"
+                onClick={() => setSheet(null)}
+              >
+                <X />
+              </button>
+            </header>
+            {sheet === "quest" ? (
+              <>
+                <p className="session-sheet-hook">{run.quest.hook}</p>
+                <ol>
+                  {run.quest.beats.map((beat, index) => (
+                    <li key={index}>
+                      <strong>{beat.label}</strong>
+                      <p>{beat.action}</p>
+                      <small>{beat.filming}</small>
+                    </li>
+                  ))}
+                </ol>
+              </>
+            ) : sheet === "prompt" ? (
+              <>
+                <label className="session-prompt-label">
+                  Your script
+                  <textarea
+                    aria-label="Teleprompter script"
+                    value={promptText}
+                    onChange={(event) => setPromptText(event.target.value)}
+                    maxLength={500}
+                    rows={4}
+                  />
+                </label>
+                <p>Only you see this. It won’t appear in your video.</p>
+                <div
+                  className="session-setting-pills"
+                  aria-label="Scroll speed"
+                >
+                  {(["slow", "normal", "fast"] as const).map((speed) => (
+                    <button
+                      className="session-pill"
+                      key={speed}
+                      aria-pressed={promptSpeed === speed}
+                      onClick={() => setPromptSpeed(speed)}
+                    >
+                      {speed}
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  onClick={() => {
+                    setPromptOn(!promptOn);
+                    setSheet(null);
+                  }}
+                  disabled={!promptText.trim()}
+                >
+                  {promptOn ? "Hide teleprompter" : "Show teleprompter"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <p>This photo appears in your saved video.</p>
+                <div className="session-setting-pills">
+                  {positions.map(({ value, label }) => (
+                    <button
+                      className="session-pill"
+                      key={value}
+                      aria-pressed={overlay?.position === value}
+                      onClick={() => {
+                        if (overlay)
+                          void chooseOverlay({ ...overlay, position: value });
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <Button onClick={() => setSheet(null)}>Done</Button>
+                <button
+                  className="session-pill"
+                  onClick={() => {
+                    void chooseOverlay();
+                    setSheet(null);
+                  }}
+                >
+                  Remove photo
+                </button>
+              </>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   );
 }

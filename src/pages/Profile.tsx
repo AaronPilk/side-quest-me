@@ -13,6 +13,7 @@ import { DEMO, supabase } from "../lib/auth";
 import { levelFromXp } from "../../shared/domain";
 import { preferenceChips } from "../../shared/profile";
 import { rememberReturnTo } from "../lib/internal-return";
+import { QuestProgress } from "../components/QuestProgress";
 import {
   Button,
   PageTitle,
@@ -62,6 +63,13 @@ export default function Profile() {
         </div>
         <span className="level-badge">Level {level.level}</span>
       </div>
+      {data.completedQuestCount !== undefined && (
+        <QuestProgress
+          completedQuestCount={data.completedQuestCount}
+          xp={data.wallet.xp}
+          demo={DEMO}
+        />
+      )}
       <div className="level-card">
         <div className="section-heading">
           <h2>{data.wallet.xp.toLocaleString()} lifetime XP</h2>

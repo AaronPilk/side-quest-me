@@ -14,10 +14,20 @@ export async function runActivityCatalogTests(sql) {
   );
   const digest = () =>
     sql(
-      "select md5(string_agg(id || content::text, ',' order by id)) from quest_templates where variant_key='default';",
+      "select md5(string_agg(id || content::text, ',' order by id)) from quest_templates where variant_key='default' or version=1;",
     );
   const before = await digest();
   await sql(migration, null);
+  await sql(
+    await readFile(
+      new URL(
+        "../../supabase/migrations/20260930203052_activity_instructions_v2.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    null,
+  );
   await sql(
     await readFile(new URL("../../supabase/seed.sql", import.meta.url), "utf8"),
     null,
@@ -32,6 +42,18 @@ export async function runActivityCatalogTests(sql) {
   assert.equal(
     await sql(
       "select count(*) from quest_templates where variant_key<>'default';",
+    ),
+    "2160",
+  );
+  assert.equal(
+    await sql(
+      "select count(*) from quest_templates where variant_key<>'default' and published and version=2;",
+    ),
+    "1080",
+  );
+  assert.equal(
+    await sql(
+      "select count(*) from quest_templates where variant_key<>'default' and not published and version=1;",
     ),
     "1080",
   );
@@ -85,6 +107,6 @@ export async function runActivityCatalogTests(sql) {
     /template_version_immutable/,
   );
   console.log(
-    "PASS: 1080 activity variants, 33 historical rows unchanged, valid family/key/version uniqueness, content consistency, RLS, immutable keys, and idempotent migration/seed.",
+    "PASS: 1080 current activity variants, 1113 historical rows unchanged, valid family/key/version uniqueness, content consistency, RLS, immutable keys, and idempotent migration/seed.",
   );
 }

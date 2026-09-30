@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { publicUrl } from "../lib/runtime";
+import { isShareCancellation, sharePublicLink } from "../lib/native-share";
 import {
   Link,
   useLocation,
@@ -28,6 +30,8 @@ import { AuthImage } from "../components/PrivateMedia";
 import { Button, Empty, Loading, Notice, useResource } from "../components/ui";
 import { socialApi } from "../lib/social-api";
 import { api } from "../lib/api";
+import { DEMO } from "../lib/auth";
+import { QuestProgress } from "../components/QuestProgress";
 import { rememberReturnTo } from "../lib/internal-return";
 import type { SocialProfile } from "../../shared/social";
 import type { CreatorProfile } from "../../shared/community";
@@ -48,6 +52,10 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
   const [socialError, setSocialError] = useState("");
   const [revision, setRevision] = useState(0);
   const own = signedIn && (!id || social?.isOwn === true);
+  const progress = useResource(
+    () => (own ? api.me() : Promise.resolve(null)),
+    [own],
+  );
   const me = useCommunity("me", {}, own);
   const publicProfile = useCommunity("creator", { id }, Boolean(id));
   const [busy, setBusy] = useState(false);
@@ -236,19 +244,20 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
             <Button
               secondary
               onClick={async () => {
-                const url = `${window.location.origin}/creators/${creatorId}`;
+                const url = publicUrl(`/creators/${creatorId}`);
+                setMessage("");
+                setError("");
                 try {
-                  if (navigator.share)
-                    await navigator.share({
+                  if (
+                    (await sharePublicLink({
                       title: creator?.displayName || "Sidequest profile",
                       url,
-                    });
-                  else {
-                    await navigator.clipboard.writeText(url);
+                    })) === "copied"
+                  ) {
                     setMessage("Profile link copied.");
                   }
                 } catch (cause) {
-                  if ((cause as Error).name !== "AbortError")
+                  if (!isShareCancellation(cause))
                     setError(
                       "Sharing is unavailable. Copy the profile link below.",
                     );
@@ -265,13 +274,20 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
             {error}
             {creatorId && error.startsWith("Sharing") && (
               <a href={`/creators/${creatorId}`}>
-                {window.location.origin}/creators/{creatorId}
+                {publicUrl(`/creators/${creatorId}`)}
               </a>
             )}
           </Notice>
         )}
         {message && <Notice>{message}</Notice>}
       </section>
+      {own && progress.data?.completedQuestCount !== undefined && (
+        <QuestProgress
+          completedQuestCount={progress.data.completedQuestCount}
+          xp={progress.data.wallet.xp}
+          demo={DEMO}
+        />
+      )}
       {own && (
         <details
           className="community-panel social-edit-panel"

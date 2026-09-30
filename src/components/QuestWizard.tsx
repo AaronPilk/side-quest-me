@@ -420,16 +420,10 @@ export function QuestWizard({
           )}
           {step === "budget" && (
             <>
-              <label>
-                Budget (USD)
-                <div className="money-input quest-budget">
-                  <span>$</span>
-                  <BudgetInput
-                    value={outing.budgetMinor}
-                    onChange={(budgetMinor) => update({ budgetMinor })}
-                  />
-                </div>
-              </label>
+              <BudgetPicker
+                value={outing.budgetMinor}
+                onChange={(budgetMinor) => update({ budgetMinor })}
+              />
               <label>
                 Budget is for
                 <select
@@ -538,18 +532,10 @@ export function QuestWizard({
                 </select>
               </label>
               <div className="quest-location">
-                <label>
-                  Area
-                  <input
-                    value={outing.area}
-                    maxLength={100}
-                    placeholder="A neighborhood or town is enough"
-                    onChange={(e) => update({ area: e.target.value })}
-                  />
-                </label>
                 {outing.setting !== "home" && (
                   <ApplePlacePicker
                     area={outing.area}
+                    onAreaChange={(area) => update({ area })}
                     setting={outing.setting}
                     placeId={outing.applePlaceId}
                     onChange={(id) =>
@@ -810,7 +796,7 @@ export function QuestWizard({
   );
 }
 
-function BudgetInput({
+function BudgetPicker({
   value,
   onChange,
 }: {
@@ -818,30 +804,93 @@ function BudgetInput({
   onChange: (minor: number) => void;
 }) {
   const [draft, setDraft] = useState(String(value / 100));
+  const [exact, setExact] = useState(false);
+  const valid = Number.isFinite(value) && value >= 0;
+  const max = Math.max(500, valid ? Math.ceil(value / 5000) * 50 : 500);
   return (
-    <input
-      aria-label="Budget in dollars"
-      type="number"
-      inputMode="decimal"
-      required
-      min="0"
-      max="10000"
-      step="0.01"
-      value={draft}
-      onFocus={(event) => {
-        if (event.currentTarget.value === "0") event.currentTarget.select();
-      }}
-      onChange={(event) => {
-        const next = event.currentTarget.value.replace(/^(-?)0+(?=\d)/, "$1");
-        setDraft(next);
-        onChange(next === "" ? Number.NaN : Math.round(Number(next) * 100));
-      }}
-      onBlur={() => {
-        if (draft === "") {
-          setDraft("0");
-          onChange(0);
+    <div className="budget-picker">
+      <div className="budget-amount" aria-live="polite">
+        <output htmlFor="quest-budget-slider">
+          {valid ? (value === 0 ? "Free" : money(value)) : "—"}
+        </output>
+      </div>
+      <label className="sr-only" htmlFor="quest-budget-slider">
+        Budget slider in dollars
+      </label>
+      <input
+        id="quest-budget-slider"
+        className="budget-slider"
+        type="range"
+        min="0"
+        max={max}
+        step="5"
+        value={valid ? value / 100 : 0}
+        aria-valuetext={
+          valid
+            ? value === 0
+              ? "Free"
+              : `${money(value)} US dollars`
+            : "Choose a budget"
         }
-      }}
-    />
+        style={
+          {
+            "--budget-fill": `${(valid ? value / 100 / max : 0) * 100}%`,
+          } as React.CSSProperties
+        }
+        onChange={(event) => {
+          const amount = Number(event.target.value);
+          setDraft(String(amount));
+          onChange(amount * 100);
+        }}
+      />
+      <div className="budget-scale" aria-hidden="true">
+        <span>Free</span>
+        <span>{money(max * 50)}</span>
+        <span>{money(max * 100)}</span>
+      </div>
+      <button
+        className="budget-exact text-button"
+        type="button"
+        aria-expanded={exact}
+        onClick={() => setExact((open) => !open)}
+      >
+        {exact ? "Done with exact amount" : "Enter exact amount"}
+      </button>
+      {exact && (
+        <label>
+          Exact budget (USD)
+          <input
+            aria-label="Budget in dollars"
+            type="number"
+            inputMode="decimal"
+            required
+            min="0"
+            max="10000"
+            step="0.01"
+            value={draft}
+            onFocus={(event) => {
+              if (event.currentTarget.value === "0")
+                event.currentTarget.select();
+            }}
+            onChange={(event) => {
+              const next = event.currentTarget.value.replace(
+                /^(-?)0+(?=\d)/,
+                "$1",
+              );
+              setDraft(next);
+              onChange(
+                next === "" ? Number.NaN : Math.round(Number(next) * 100),
+              );
+            }}
+            onBlur={() => {
+              if (draft === "") {
+                setDraft("0");
+                onChange(0);
+              }
+            }}
+          />
+        </label>
+      )}
+    </div>
   );
 }

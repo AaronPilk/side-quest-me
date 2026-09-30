@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { reviewQuestPlans } from "./quest-wizard-helpers";
+import { DEFAULT_OUTING } from "../shared/domain";
 
 // These are explicitly mocked Apple SDK responses. They verify our integration
 // and privacy behavior, not Apple authorization or live place accuracy.
@@ -28,6 +29,9 @@ async function openTravel(
     page.getByRole("heading", { name: "Who’s coming?", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Enter exact amount", exact: true })
+    .click();
   await page.getByRole("spinbutton", { name: "Budget in dollars" }).fill("25");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("button", { name: "1 hour", exact: true }).click();
@@ -522,4 +526,158 @@ test("current area works without Maps configuration and nearby events use that l
   const stored = await storageText(page);
   expect(stored).not.toContain("47.620123");
   expect(stored).not.toContain("MOCK local concert");
+});
+
+test("current area immediately searches real provider categories and keeps place context out of storage", async ({
+  page,
+}) => {
+  await installMockSdk(page);
+  await page.route("**/__apple-maps-fixture/search?*", (route) =>
+    route.fulfill({
+      json: { places: [{ ...mockPlace, pointOfInterestCategory: "Park" }] },
+    }),
+  );
+  await page.addInitScript(() => {
+    Reflect.set(window, "__geoRequests", 0);
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: {
+        getCurrentPosition(success: (value: unknown) => void) {
+          Reflect.set(
+            window,
+            "__geoRequests",
+            Reflect.get(window, "__geoRequests") + 1,
+          );
+          success({ coords: { latitude: 47.620123, longitude: -122.350456 } });
+        },
+      },
+    });
+  });
+  await openTravel(page);
+  expect(await page.evaluate(() => Reflect.get(window, "__geoRequests"))).toBe(
+    0,
+  );
+  const before = await draft(page);
+  await page
+    .getByRole("button", { name: "Use my current area", exact: true })
+    .click();
+  await expect(page.locator(".apple-place-result")).toHaveCount(1);
+  expect(await page.evaluate(() => Reflect.get(window, "__geoRequests"))).toBe(
+    1,
+  );
+  expect(
+    await page.evaluate(() => Reflect.get(window, "__appleMapsMock").searches),
+  ).toEqual([
+    {
+      query: "parks",
+      coordinate: { latitude: 47.620123, longitude: -122.350456 },
+    },
+  ]);
+  expect(await draft(page)).toEqual(before);
+  await page.getByRole("button", { name: new RegExp(mockPlace.name) }).click();
+  expect((await draft(page)).applePlaceId).toBe(mockPlace.id);
+  const stored = await storageText(page);
+  expect(stored).not.toContain("pointOfInterestCategory");
+  expect(stored).not.toContain("47.620123");
+  expect(stored).not.toContain(mockPlace.name);
+});
+
+test("the selected provider place category reaches quest ranking and disappears when unavailable", async ({
+  page,
+}) => {
+  await installMockSdk(page);
+  let category: string | null = "Park";
+  await page.route("**/__apple-maps-fixture/lookup?*", (route) =>
+    route.fulfill({
+      json: { ...mockPlace, pointOfInterestCategory: category },
+    }),
+  );
+  await page.addInitScript(
+    ({ outing }) => {
+      sessionStorage.setItem("sq-demo-started", "1");
+      sessionStorage.setItem("sq-outing", JSON.stringify(outing));
+      sessionStorage.setItem(
+        "sq-quest-flow",
+        JSON.stringify({
+          version: 3,
+          targetId: null,
+          step: "review",
+          editing: false,
+          confirmed: Object.keys(outing),
+          requiredFields: [],
+        }),
+      );
+    },
+    {
+      outing: {
+        ...DEFAULT_OUTING,
+        setting: "outside",
+        applePlaceId: mockPlace.id,
+      },
+    },
+  );
+  await page.goto("/create");
+  await page
+    .getByRole("button", { name: "Find my quests", exact: true })
+    .click();
+  await expect(page.locator(".quest-card").first()).toContainText(
+    "Suggested for a park setting",
+  );
+  const selected = await draft(page);
+  expect(selected).toMatchObject({
+    intensity: "chill",
+    participants: 2,
+    durationMinutes: 60,
+    budgetMinor: 0,
+    setting: "outside",
+  });
+  // A new page has no cached category. Unknown provider data makes no fit claim.
+  category = null;
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Find my quests", exact: true })
+    .click();
+  await expect(page.locator(".quest-card")).toHaveCount(3);
+  await expect(page.locator(".quest-results")).not.toContainText(
+    "Suggested for a park setting",
+  );
+});
+
+test("entering a town takes precedence over a late current-location response", async ({
+  page,
+}) => {
+  await installMockSdk(page);
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: {
+        getCurrentPosition: (success: (value: unknown) => void) =>
+          Reflect.set(window, "__deliverPosition", success),
+      },
+    }),
+  );
+  await openTravel(page);
+  await page
+    .getByRole("button", { name: "Use my current area", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Finding your area…", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("textbox", { name: "Area", exact: true })
+    .fill("Seattle");
+  await page.evaluate(() =>
+    Reflect.get(
+      window,
+      "__deliverPosition",
+    )({ coords: { latitude: 47.62, longitude: -122.35 } }),
+  );
+  await expect(
+    page.getByText(/Using your current area for nearby searches/),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Find places", exact: true }).click();
+  await expect(page.locator(".apple-place-result")).toHaveCount(1);
+  expect(
+    await page.evaluate(() => Reflect.get(window, "__appleMapsMock").searches),
+  ).toEqual([{ query: "parks in Seattle", coordinate: null }]);
 });

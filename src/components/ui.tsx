@@ -1,11 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import {
-  ArrowLeft,
-  ArrowRight,
-  AlertCircle,
-  Sparkles,
-  Check,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, AlertCircle, Check } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BrandMark } from "./BrandMark";
 export function Button({
@@ -176,30 +170,36 @@ export function useResource<T>(fn: () => Promise<T>, deps: unknown[] = []) {
 export function QuestArt({
   variant = "date_night",
   small = false,
+  seed,
 }: {
   variant?: string;
   small?: boolean;
+  seed?: string;
 }) {
+  const images = ["city-detour", "coastal-detour", "make-a-scene"];
+  const index = seed
+    ? [...seed].reduce((sum, letter) => sum + letter.charCodeAt(0), 0) %
+      images.length
+    : variant === "daytime"
+      ? 1
+      : ["demon", "late_night"].includes(variant)
+        ? 2
+        : 0;
   return (
     <div
-      className={`quest-art art-${variant} ${small ? "small" : ""}`}
+      className={`quest-art adventure-art ${small ? "small" : ""}`}
       aria-hidden="true"
     >
-      <div className="art-orbit orbit-one" />
-      <div className="art-orbit orbit-two" />
-      <div className="art-card art-card-back">
-        <span>THE PLAN</span>
-        <BrandMark size={small ? 24 : 40} />
+      <img
+        src={`/artwork/${images[index]}.webp`}
+        alt=""
+        loading="lazy"
+        width="1200"
+        height="800"
+      />
+      <div className="adventure-art-mark">
+        <BrandMark size={25} />
       </div>
-      <div className="art-card art-card-front">
-        <Sparkles size={small ? 24 : 42} />
-        <span>THE STORY</span>
-        <div className="art-lines">
-          <i />
-          <i />
-        </div>
-      </div>
-      <div className="art-spark">✦</div>
     </div>
   );
 }

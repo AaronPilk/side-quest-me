@@ -1,4 +1,8 @@
+import { placeContextSchema } from "../shared/place-matching";
+import { isArchivedActivityTemplate } from "../shared/activity-history";
+import { COMPLETION_REASONS } from "../shared/progress";
 import { cleanupMedia } from "./media";
+import { isNativeOrigin, nativeApiCors } from "./native-cors";
 import { Hono } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
@@ -41,6 +45,7 @@ import {
   downloadAsset,
   servePrivateObject,
   MediaRouteError,
+  rendererFetch,
 } from "./media";
 import { consumeRenderQueue, dispatchPendingRenders } from "./render-queue";
 import {
@@ -79,6 +84,7 @@ app.use("*", async (c, next) => {
   c.header("X-Request-ID", c.get("requestId"));
   await next();
 });
+app.use("/api/*", nativeApiCors);
 app.onError((e, c) => {
   const known = e instanceof ApiError || e instanceof MediaRouteError;
   const status =
@@ -166,12 +172,13 @@ app.post("/api/events/nearby", async (c) => {
 });
 app.get("/api/quests/:templateId", async (c) => {
   const db = serviceDb(c.env);
-  const { data, error } = await db
+  let query = db
     .from("quest_templates")
     .select("content")
-    .eq("id", c.req.param("templateId"))
-    .eq("published", true)
-    .single();
+    .eq("id", c.req.param("templateId"));
+  if (!isArchivedActivityTemplate(c.req.param("templateId")))
+    query = query.eq("published", true);
+  const { data, error } = await query.single();
   if (error || !data)
     throw new ApiError(
       "not_found",
@@ -189,7 +196,7 @@ app.use("/api/*", async (c, next) => {
     SOCIAL_PRIVATE_ROUTE,
     SERIES_PRIVATE_ROUTE,
     /^\/api\/(me|wallet|quests|quests\/recommend|quests\/viability|quest-runs|quest-runs\/active|rewards|redemptions|operator)$/,
-    /^\/api\/quest-runs\/[^/]+(?:\/(abandon|uploads|clips|complete|renders|share|share-links|media))?$/,
+    /^\/api\/quest-runs\/[^/]+(?:\/(abandon|uploads|clips|compose|complete|renders|share|share-links|media))?$/,
     /^\/api\/media\/[^/]+(?:\/(upload|finalize|playback))?$/,
     /^\/api\/render-jobs\/[^/]+$/,
     /^\/api\/redemptions\/[^/]+\/(cancel|token)$/,
@@ -236,7 +243,8 @@ app.use("/api/*", async (c, next) => {
     if (
       origin &&
       origin !== new URL(c.req.url).origin &&
-      origin !== c.env.APP_ORIGIN
+      origin !== c.env.APP_ORIGIN &&
+      !isNativeOrigin(origin, c.env)
     )
       throw new ApiError(
         "origin_rejected",
@@ -289,7 +297,16 @@ async function me(c: AppContext) {
     roles: memberships.map((r) => r.role),
   };
 }
-app.get("/api/me", async (c) => c.json(await me(c)));
+app.get("/api/me", async (c) => {
+  const [current, completed] = await Promise.all([
+    me(c),
+    c.get("userDb").from("quest_runs").select("id", { count: "exact", head: true })
+      .eq("owner_id", c.get("actor")).eq("status", "finalized")
+      .in("reward_decision->>reason", COMPLETION_REASONS),
+  ]);
+  if (completed.error) dbError(completed.error.message);
+  return c.json({ ...current, completedQuestCount: completed.count ?? 0 });
+});
 app.patch("/api/me", async (c) => {
   const p = await json(c, profilePatchSchema);
   const { error } = await c
@@ -343,13 +360,14 @@ app.post("/api/quests/viability", async (c) => {
   );
 });
 app.post("/api/quests/recommend", async (c) => {
-  const { outing, templateId, offset } = await json(
+  const { outing, templateId, offset, placeContext } = await json(
     c,
     z
       .object({
         outing: outingSchema,
         templateId: z.string().max(120).optional(),
         offset: z.number().int().min(0).max(30_000).default(0),
+        placeContext: placeContextSchema.optional(),
       })
       .strict(),
   );
@@ -377,6 +395,7 @@ app.post("/api/quests/recommend", async (c) => {
     new Date(),
     published,
     offset,
+    placeContext,
   );
   for (const q of candidates) {
     const { data: campaigns, error: campaignError } = await c
@@ -558,6 +577,7 @@ app.put("/api/media/:id/upload", async (c) =>
 );
 const clipEditSchema = z
   .object({
+    mode: z.literal("session").optional(),
     start: z.number().min(0).max(60),
     end: z.number().min(5).max(60),
     fit: z.enum(["fit", "fill"]),
@@ -576,6 +596,7 @@ app.post("/api/media/:id/finalize", async (c) => {
       409,
     );
   const result = await rpc(c, "sq_update_clip", {
+    ...(edit.mode ? { mode: edit.mode } : {}),
     run_id: a.run_id,
     asset_id: a.id,
     start_ms: Math.round(edit.start * 1000),
@@ -602,6 +623,40 @@ app.post("/api/quest-runs/:id/clips", async (c) => {
   const runId = id.parse(c.req.param("id"));
   await rpc(c, "sq_update_clip", { run_id: runId, ...selection(clip) });
   return c.json(await runDto(c, await owned(c, "quest_runs", runId)));
+});
+app.post("/api/quest-runs/:id/compose", async (c) => {
+  const run = await owned(c, "quest_runs", c.req.param("id"));
+  if (!["accepted", "in_progress"].includes(String(run.status)))
+    throw new ApiError(
+      "invalid_run_state",
+      "This quest cannot accept a new recording.",
+      409,
+    );
+  const contentType = c.req.header("Content-Type") || "";
+  if (!contentType.startsWith("multipart/form-data;"))
+    throw new ApiError(
+      "invalid_media",
+      "Choose recorded takes to combine.",
+      400,
+    );
+  const response = await rendererFetch(c.env, "/compose", {
+    method: "POST",
+    headers: { "Content-Type": contentType },
+    body: c.req.raw.body,
+  });
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new MediaRouteError(
+      "Your takes could not be prepared. They remain saved on this device; try again.",
+      response.status,
+    );
+  }
+  return new Response(response.body, {
+    headers: {
+      "Content-Type": "video/mp4",
+      "Cache-Control": "private, no-store",
+    },
+  });
 });
 app.get("/api/media/:id/playback", async (c) =>
   downloadAsset(

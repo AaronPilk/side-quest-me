@@ -20,7 +20,7 @@ async function draft(page: Page) {
   return page.evaluate(() => JSON.parse(sessionStorage.getItem("sq-outing")!));
 }
 
-test("Create is first and asks one question at a time, preserving answers through Back, refresh and review edits", async ({
+test("Create is centered and asks one question at a time, preserving answers through Back, refresh and review edits", async ({
   page,
 }, testInfo) => {
   const errors: string[] = [];
@@ -28,7 +28,7 @@ test("Create is first and asks one question at a time, preserving answers throug
   await openCreate(page);
   await expect(
     page.getByRole("navigation", { name: "Primary" }).getByRole("link"),
-  ).toHaveText(["Create", "Discover", "Rewards", "Activity", "Profile"]);
+  ).toHaveText(["Discover", "Activity", "Create", "Rewards", "Profile"]);
   await expect(
     page.getByRole("heading", { name: "What’s the plan?", exact: true }),
   ).toBeVisible();
@@ -65,6 +65,15 @@ test("Create is first and asks one question at a time, preserving answers throug
     page.getByRole("spinbutton", { name: "Group size", exact: true }),
   ).toHaveValue("5");
   await next(page, "What’s your budget?");
+  const slider = page.getByRole("slider", { name: "Budget slider in dollars" });
+  await expect(slider).toHaveValue("0");
+  await slider.press("ArrowRight");
+  await expect(slider).toHaveValue("5");
+  expect((await draft(page)).budgetMinor).toBe(500);
+  await slider.press("Home");
+  await page
+    .getByRole("button", { name: "Enter exact amount", exact: true })
+    .click();
   const budget = page.getByRole("spinbutton", { name: "Budget in dollars" });
   await expect(budget).toHaveValue("0");
   await budget.fill("");
@@ -123,6 +132,9 @@ test("Create is first and asks one question at a time, preserving answers throug
   await groupSize.fill("5");
   await next(page, "Ready to find your quest?");
   await page.getByRole("button", { name: "Edit budget", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Enter exact amount", exact: true })
+    .click();
   await expect(budget).toHaveValue("30");
   await budget.fill("25");
   await next(page, "Ready to find your quest?");
@@ -333,6 +345,9 @@ test("a Full Send outdoor date for two keeps every answer and finds a compatible
   await next(page, "Who’s coming?");
   await page.getByRole("button", { name: "Couple", exact: true }).click();
   await next(page, "What’s your budget?");
+  await page
+    .getByRole("button", { name: "Enter exact amount", exact: true })
+    .click();
   await page.getByRole("spinbutton", { name: "Budget in dollars" }).fill("100");
   await next(page, "How much time do you have?");
   await page.getByRole("button", { name: "3 hours", exact: true }).click();

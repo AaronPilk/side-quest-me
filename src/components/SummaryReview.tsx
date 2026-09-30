@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { copyText } from "../lib/native-share";
 import { ArrowRight, Check, Copy } from "lucide-react";
 import type { PreferenceKey, Profile } from "../../shared/domain";
 import {
@@ -98,7 +99,7 @@ export default function SummaryReview({
             setError("");
             setCopied(false);
             try {
-              await navigator.clipboard.writeText(COPY_PROFILE_PROMPT);
+              await copyText(COPY_PROFILE_PROMPT);
               setCopied(true);
             } catch {
               setError(

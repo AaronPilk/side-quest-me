@@ -137,24 +137,17 @@ test("a real Series attempt completes privately, publishes a frozen episode, and
     .click();
   await acceptTarget(page);
   const runUrl = page.url();
-  for (const file of [
-    "portrait-silent.mp4",
-    "landscape-with-audio.mp4",
-    "square-with-audio.mp4",
-  ]) {
-    await page
-      .getByRole("button", { name: "Record or upload", exact: true })
-      .first()
-      .click();
-    const dialog = page.getByRole("dialog");
-    await dialog
-      .locator('input[type="file"]:not([capture])')
-      .setInputFiles(path.resolve(".local/fixtures", file));
-    await dialog
-      .getByRole("button", { name: "Use clip · Upload & validate" })
-      .click();
-    await expect(dialog).toBeHidden();
-  }
+  await page
+    .getByRole("button", { name: "Record or import video", exact: true })
+    .click();
+  const capture = page.getByRole("dialog", { name: "Record your quest" });
+  await capture
+    .getByLabel("Import video")
+    .setInputFiles(path.resolve(".local/fixtures/landscape-with-audio.mp4"));
+  await capture
+    .getByRole("button", { name: "Save video", exact: true })
+    .click();
+  await expect(capture).toBeHidden();
   await page
     .getByRole("checkbox", { name: "I genuinely attempted", exact: false })
     .check();
@@ -173,7 +166,12 @@ test("a real Series attempt completes privately, publishes a frozen episode, and
     return { run: data.runs[0] as Run, wallet: data.me.wallet };
   });
   expect(completed.run.status).toBe("finalized");
-  expect(completed.run.clips).toHaveLength(3);
+  expect(completed.run.clips).toHaveLength(1);
+  expect(completed.run.clips[0]).toMatchObject({
+    mode: "session",
+    slot: 0,
+    start: 0,
+  });
   expect(completed.run.render?.status).toBe("ready");
   expect(completed.run.series?.partId).toBe(sourcePartIds[1]);
   await page.reload();

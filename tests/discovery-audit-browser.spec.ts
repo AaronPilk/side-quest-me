@@ -73,6 +73,7 @@ test("reel sharing exposes a usable fallback and close returns to the same searc
   ).toHaveValue(/\/posts\/55555555/);
   await page.getByRole("link", { name: "Watch reel", exact: true }).click();
   await expect(page.getByRole("region", { name: "Reel viewer" })).toBeVisible();
+  await page.getByRole("heading", { name: "Your Date Has a Pit Crew" }).click();
   await page.getByRole("link", { name: "Close reel" }).click();
   await expect(page).toHaveURL(/\/discover\?view=brands&q=pit$/);
   await expect(page.getByRole("searchbox")).toHaveValue("pit");

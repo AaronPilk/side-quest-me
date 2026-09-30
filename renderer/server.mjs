@@ -15,7 +15,8 @@ import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { assertId, MEDIA_LIMITS, renderManifestSchema } from "./contracts.mjs";
-import { MediaError, probeMedia, renderReel } from "./core.mjs";
+import { MediaError, probeMedia, renderReel, composeTakes } from "./core.mjs";
+import { MAX_OVERLAY_BYTES, OVERLAY_POSITIONS } from "./overlays.mjs";
 
 const mode = process.env.SIDEQUEST_RENDERER_MODE || "local";
 const root = path.resolve(
@@ -250,6 +251,77 @@ async function upload(
     mutable.delete(key);
   }
 }
+async function compose(req, res) {
+  if (rendering)
+    throw new MediaError(
+      "The video service is busy. Your takes are saved; try again shortly.",
+      503,
+    );
+  rendering = true;
+  const directory = path.join(root, "staging", randomUUID());
+  try {
+    const buffers = [];
+    let bytes = 0;
+    for await (const chunk of req) {
+      bytes += chunk.length;
+      if (bytes > MEDIA_LIMITS.maxUploadBytes + MAX_OVERLAY_BYTES + 1024 * 1024)
+        throw new MediaError("Your recording and image are too large.", 413);
+      buffers.push(chunk);
+    }
+    const form = await new Request("http://renderer/compose", {
+      method: "POST",
+      headers: { "Content-Type": req.headers["content-type"] || "" },
+      body: Buffer.concat(buffers),
+    }).formData();
+    const takes = form.getAll("take");
+    const overlays = form.getAll("overlay");
+    const positions = form.getAll("overlayPosition");
+    const image = overlays[0];
+    const position = positions[0] ?? "center";
+    if (
+      [...form.keys()].some(
+        (key) => !["take", "overlay", "overlayPosition"].includes(key),
+      ) ||
+      !takes.length ||
+      takes.length > 30 ||
+      takes.some((take) => typeof take === "string" || !take.size)
+    )
+      throw new MediaError("Choose playable recorded takes.", 400);
+    if (
+      overlays.length > 1 ||
+      positions.length > 1 ||
+      !OVERLAY_POSITIONS.includes(position) ||
+      (positions.length && !image) ||
+      (image &&
+        (typeof image === "string" ||
+          !image.size ||
+          image.size > MAX_OVERLAY_BYTES ||
+          !["image/png", "image/jpeg", "image/webp"].includes(image.type)))
+    )
+      throw new MediaError(
+        "Choose one PNG, JPEG or WebP image up to 5 MB and a valid position.",
+        400,
+      );
+    await mkdir(directory, { recursive: true });
+    const files = [];
+    for (const [index, take] of takes.entries()) {
+      const file = path.join(directory, `source-${index}`);
+      await writeFile(file, Buffer.from(await take.arrayBuffer()));
+      files.push(file);
+    }
+    let imageOverlay;
+    if (image) {
+      const file = path.join(directory, "overlay-source");
+      await writeFile(file, Buffer.from(await image.arrayBuffer()));
+      imageOverlay = { file, position };
+    }
+    const output = await composeTakes(files, directory, imageOverlay);
+    await serveFile(req, res, output, "video/mp4");
+  } finally {
+    rendering = false;
+    await rm(directory, { recursive: true, force: true });
+  }
+}
 async function render(req, res) {
   const manifest = renderManifestSchema.parse(await bodyJson(req));
   const requestHash = createHash("sha256")
@@ -368,6 +440,8 @@ export async function startServer(port = Number(process.env.PORT || 8789)) {
           runId: url.searchParams.get("runId"),
           slot: Number(url.searchParams.get("slot")),
         });
+      if (route === "/compose" && req.method === "POST")
+        return await compose(req, res);
       const asset = /^\/assets\/([a-f0-9-]+)$/.exec(route);
       if (asset && req.method === "PUT" && internal)
         return await upload(req, res, {

@@ -27,6 +27,11 @@ if (
   origin.hash
 )
   throw new Error("Use an exact HTTPS origin");
+const nativeOrigin = process.env.SIDEQUEST_NATIVE_ORIGIN;
+if (nativeOrigin && nativeOrigin !== "capacitor://localhost")
+  throw new Error(
+    "SIDEQUEST_NATIVE_ORIGIN must be exactly capacitor://localhost or unset",
+  );
 const parsed = ts.parseConfigFileTextToJson(
   "wrangler.jsonc",
   await readFile("wrangler.jsonc", "utf8"),
@@ -46,6 +51,7 @@ config.vars = {
   LAUNCH_CURRENCY: "USD",
   LAUNCH_AREA: process.env.SIDEQUEST_AREA,
   APP_ORIGIN: origin.origin,
+  ...(nativeOrigin ? { NATIVE_APP_ORIGIN: nativeOrigin } : {}),
 };
 config.r2_buckets = [
   { binding: "MEDIA", bucket_name: process.env.SIDEQUEST_BUCKET },

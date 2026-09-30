@@ -18,6 +18,7 @@ export type AppEnv = Env &
     SHARE_SIGNING_KEY: string;
     APPLE_MAPS_TOKEN?: string;
     TICKETMASTER_API_KEY?: string;
+    NATIVE_APP_ORIGIN?: string;
   };
 export type AppBindings = {
   Bindings: AppEnv;
@@ -226,11 +227,19 @@ export function dbError(message: string): never {
       422,
       "The video could not be validated. Replace the clip and try again.",
     ],
-    invalid_selection: [422, "Select 5–15 seconds within each validated clip."],
+    invalid_selection: [
+      422,
+      "The saved video must fit within its validated duration.",
+    ],
+    video_required: [422, "Save your video before completing this quest."],
+    invalid_session: [
+      422,
+      "Save this recording as one video before completing the quest.",
+    ],
     account_unavailable: [401, "This account is no longer active."],
     evidence_required: [
       422,
-      "Three validated clips and the required confirmations are needed.",
+      "A validated video and the required confirmations are needed.",
     ],
     no_data_found: [404, "This item is unavailable."],
     three_clips_required: [
@@ -313,6 +322,7 @@ export interface AssetRow {
   mime: string;
   metadata: {
     selection?: {
+      mode?: "session";
       start_ms: number;
       end_ms: number;
       fit: string;
@@ -326,6 +336,7 @@ export function clipDto(a: AssetRow): Clip {
   const s = a.metadata?.selection;
   return {
     id: a.id,
+    ...(s?.mode === "session" ? { mode: "session" as const } : {}),
     generation: a.generation,
     slot: a.slot - 1,
     duration: a.duration_ms / 1000,
@@ -422,6 +433,7 @@ export async function runDto(
 }
 export function selection(clip: Clip) {
   return {
+    ...(clip.mode ? { mode: clip.mode } : {}),
     asset_id: clip.id,
     start_ms: Math.round(clip.start * 1000),
     end_ms: Math.round(clip.end * 1000),

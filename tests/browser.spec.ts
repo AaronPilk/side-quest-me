@@ -159,7 +159,7 @@ test("responsive screens, keyboard focus and demo offers stay truthful", async (
   });
 });
 
-test("three real uploads complete once, render a portrait MP4, download, and stay in the journal", async ({
+test("one imported video completes once, renders a portrait MP4, downloads, and stays in the journal", async ({
   page,
 }, testInfo) => {
   test.skip(
@@ -184,53 +184,46 @@ test("three real uploads complete once, render a portrait MP4, download, and sta
   await expect(page).toHaveURL(/\/runs\/[a-f0-9-]+$/);
   const acceptedUrl = page.url();
   await page.reload();
-  await expect(page.getByText("Make it happen", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Your video", exact: true }),
+  ).toBeVisible();
   expect(page.url()).toBe(acceptedUrl);
-  for (let slot = 0; slot < 3; slot++) {
-    await page
-      .getByRole("button", { name: "Record or upload", exact: true })
-      .first()
-      .click();
-    const dialog = page.getByRole("dialog");
-    await expect(
-      dialog.getByRole("button", { name: "Exit capture" }),
-    ).toBeFocused();
-    if (slot === 0) {
-      await page.keyboard.press("Shift+Tab");
-      await expect(dialog.locator("input[capture]")).toBeFocused();
-      await page.keyboard.press("Tab");
-      await expect(
-        dialog.getByRole("button", { name: "Exit capture" }),
-      ).toBeFocused();
-      await dialog.getByRole("button", { name: "Record this moment" }).click();
-      await expect(
-        dialog.getByText("Camera access is off or unavailable.", {
-          exact: false,
-        }),
-      ).toBeVisible();
-      await dialog.locator('input[type="file"]:not([capture])').setInputFiles({
-        name: "empty.mp4",
-        mimeType: "video/mp4",
-        buffer: Buffer.alloc(0),
-      });
-      await expect(
-        dialog.getByText("This file is empty.", { exact: false }),
-      ).toBeVisible();
-    }
-    await dialog
-      .locator('input[type="file"]:not([capture])')
-      .setInputFiles(fixtures[slot]);
-    await expect(
-      dialog.getByRole("button", { name: "Use clip · Upload & validate" }),
-    ).toBeEnabled();
-    await dialog
-      .getByRole("button", { name: "Use clip · Upload & validate" })
-      .click();
-    await expect(dialog).toBeHidden();
-    await expect(page.getByText("Uploaded", { exact: true })).toHaveCount(
-      slot + 1,
-    );
-  }
+  await page
+    .getByRole("button", { name: "Record or import video", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Record your quest" });
+  await expect(
+    dialog.getByRole("button", { name: "Exit capture" }),
+  ).toBeFocused();
+  await expect(dialog.getByLabel("Import video")).toBeEnabled();
+  await page.keyboard.press("Shift+Tab");
+  await expect(
+    dialog.getByRole("button", { name: "Quest instructions", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(
+    dialog.getByRole("button", { name: "Exit capture" }),
+  ).toBeFocused();
+
+  await expect(dialog.getByText(/Camera access is unavailable/)).toBeVisible();
+  await dialog.getByLabel("Import video").setInputFiles({
+    name: "empty.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.alloc(0),
+  });
+  await expect(dialog.getByRole("alert")).toContainText("Choose a video");
+  await dialog.getByLabel("Import video").setInputFiles(fixtures[1]);
+  await expect(
+    dialog.getByRole("button", { name: "Save video", exact: true }),
+  ).toBeEnabled();
+  await dialog.getByRole("button", { name: "Save video", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByLabel("Saved quest video")).toBeVisible();
+  const imported = await page.evaluate(
+    () => JSON.parse(localStorage.getItem("sidequest-demo-v1")!).runs[0].clips,
+  );
+  expect(imported).toHaveLength(1);
+  expect(imported[0]).toMatchObject({ mode: "session", slot: 0, start: 0 });
   await page
     .getByRole("checkbox", { name: "I genuinely attempted", exact: false })
     .check();
@@ -314,8 +307,8 @@ test("three real uploads complete once, render a portrait MP4, download, and sta
       (stream: { codec_type: string }) => stream.codec_type === "audio",
     ),
   ).toMatchObject({ codec_name: "aac" });
-  expect(Number(metadata.format.duration)).toBeGreaterThanOrEqual(24);
-  expect(Number(metadata.format.duration)).toBeLessThan(30);
+  expect(Number(metadata.format.duration)).toBeGreaterThanOrEqual(8);
+  expect(Number(metadata.format.duration)).toBeLessThan(10);
   await page.screenshot({
     path: testInfo.outputPath("completed-reel-390.png"),
     fullPage: true,
@@ -352,11 +345,11 @@ test("synthetic recording combines paused takes, restores its draft after refres
   await page.locator(".quest-card").first().click();
   await page.getByRole("button", { name: "Accept quest", exact: true }).click();
   await page
-    .getByRole("button", { name: "Record or upload", exact: true })
+    .getByRole("button", { name: "Record or import video", exact: true })
     .first()
     .click();
   let dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Record this moment" }).click();
+  await expect(dialog.getByLabel("Live camera preview")).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() =>
@@ -376,13 +369,17 @@ test("synthetic recording combines paused takes, restores its draft after refres
     ),
   ).toEqual(["ended", "ended"]);
   await page
-    .getByRole("button", { name: "Record or upload", exact: true })
+    .getByRole("button", { name: "Record or import video", exact: true })
     .first()
     .click();
   dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Record this moment" }).click();
-  await dialog.getByRole("button", { name: "Start recording" }).click();
-  await expect(dialog.getByRole("button", { name: "Stop take" })).toBeVisible();
+  await expect(dialog.getByLabel("Live camera preview")).toBeVisible();
+  await dialog
+    .getByRole("button", { name: "Or tap to start recording" })
+    .click();
+  await expect(
+    dialog.getByRole("button", { name: "Stop recording" }),
+  ).toBeVisible();
   await expect
     .poll(
       async () =>
@@ -390,22 +387,25 @@ test("synthetic recording combines paused takes, restores its draft after refres
       { timeout: 12_000 },
     )
     .toBeGreaterThanOrEqual(3);
-  await dialog.getByRole("button", { name: "Stop take" }).click();
+  await dialog.getByRole("button", { name: "Stop recording" }).click();
+  await expect(dialog.locator(".session-timeline > span")).toHaveCount(1);
   const stoppedAt = await dialog.getByRole("timer").innerText();
   await page.waitForTimeout(1600);
   await expect(dialog.getByRole("timer")).toHaveText(stoppedAt);
-  await dialog.getByRole("button", { name: "Add take" }).click();
+  await dialog
+    .getByRole("button", { name: "Or tap to start recording" })
+    .click();
   await expect
     .poll(async () =>
       Number.parseFloat((await dialog.getByRole("timer").innerText()).trim()),
     )
     .toBeGreaterThanOrEqual(6);
-  await dialog.getByRole("button", { name: "Stop take" }).click();
-  await expect(dialog.locator(".take-progress > span")).toHaveCount(2);
-  await dialog.getByRole("button", { name: "Save draft & leave" }).click();
+  await dialog.getByRole("button", { name: "Stop recording" }).click();
+  await expect(dialog.locator(".session-timeline > span")).toHaveCount(2);
+  await dialog.getByRole("button", { name: "Exit capture" }).click();
   await expect(dialog).toBeHidden();
   await expect(
-    page.getByText("Draft on this device", { exact: true }),
+    page.getByRole("button", { name: "Continue recording", exact: true }),
   ).toBeVisible();
   expect(
     await page.evaluate(() =>
@@ -416,20 +416,19 @@ test("synthetic recording combines paused takes, restores its draft after refres
   ).toEqual(["ended", "ended"]);
   await page.reload();
   await page
-    .getByRole("button", { name: "Continue draft", exact: true })
+    .getByRole("button", { name: "Continue recording", exact: true })
     .click();
   dialog = page.getByRole("dialog");
-  await expect(
-    dialog.getByText(/Draft restored from this device/),
-  ).toBeVisible();
-  await expect(
-    dialog.getByRole("button", { name: "Use clip · Upload & validate" }),
-  ).toBeEnabled();
+  await expect(dialog.getByText(/Your draft is here/)).toBeVisible();
   await dialog
-    .getByRole("button", { name: "Use clip · Upload & validate" })
+    .getByRole("button", { name: "Preview video", exact: true })
     .click();
+  await expect(
+    dialog.getByRole("button", { name: "Save video", exact: true }),
+  ).toBeEnabled();
+  await dialog.getByRole("button", { name: "Save video", exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByText("Uploaded", { exact: true })).toHaveCount(1);
+  await expect(page.getByLabel("Saved quest video")).toBeVisible();
   const clipRange = await page.evaluate(() => {
     const clip = JSON.parse(localStorage.getItem("sidequest-demo-v1")!).runs[0]
       .clips[0];
@@ -439,9 +438,9 @@ test("synthetic recording combines paused takes, restores its draft after refres
   expect(clipRange.end - clipRange.start).toBeGreaterThanOrEqual(5);
   expect(clipRange.duration).toBeLessThan(7.5);
   await page.reload();
-  await expect(page.getByText("Uploaded", { exact: true })).toHaveCount(1);
+  await expect(page.getByLabel("Saved quest video")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Continue draft", exact: true }),
+    page.getByRole("button", { name: "Continue recording", exact: true }),
   ).toHaveCount(0);
 });
 

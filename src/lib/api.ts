@@ -1,3 +1,4 @@
+import type { PlaceContext } from "../../shared/place-matching";
 import {
   DEFAULT_PREFERENCES,
   normalizePreferences,
@@ -8,9 +9,13 @@ import {
   type QuestVariant,
 } from "../../shared/domain";
 import { catalog } from "../../shared/catalog";
+import { historicalActivityCatalog } from "../../shared/activity-recipes";
+import { countsAsCompleted } from "../../shared/progress";
 import { assessViability, type QuestViability } from "../../shared/viability";
 import { recommend } from "../../shared/recommend";
 import { accessToken, DEMO, supabase } from "./auth";
+import { apiUrl } from "./runtime";
+import { hasReadyVideo } from "./recording-session";
 import type { Clip, Me, Offer, Redemption, Run, Reel } from "./types";
 import {
   demoDataKey,
@@ -71,9 +76,12 @@ export async function request<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
+  const url = apiUrl(path);
   const token = await accessToken();
-  const response = await fetch(path, {
+  const response = await fetch(url, {
     ...init,
+    credentials: "omit",
+    redirect: "error",
     headers: {
       ...(init.body && typeof init.body === "string"
         ? { "Content-Type": "application/json" }
@@ -166,6 +174,7 @@ export function eligibility(runs: Run[], familyId: string) {
 export const api = {
   me: async (): Promise<Me> => {
     const me = DEMO ? read().me : await request<Me>("/api/me");
+    if (DEMO) me.completedQuestCount = read().runs.filter(countsAsCompleted).length;
     me.profile.preferences = normalizePreferences(me.profile.preferences);
     return me;
   },
@@ -199,7 +208,7 @@ export const api = {
     api.updateProfile(profile),
   quest: async (templateId: string): Promise<QuestVariant> => {
     if (!DEMO) return request(`/api/quests/${encodeURIComponent(templateId)}`);
-    const quest = [...catalog, ...demoOriginalTemplates()].find(
+    const quest = [...catalog, ...historicalActivityCatalog, ...demoOriginalTemplates()].find(
       (item) => item.id === templateId,
     );
     if (!quest)
@@ -210,6 +219,7 @@ export const api = {
     outing: Outing,
     templateId?: string,
     offset = 0,
+    placeContext?: PlaceContext | null,
   ): Promise<Candidate[]> =>
     DEMO
       ? recommend(
@@ -221,11 +231,13 @@ export const api = {
             (item) => !templateId || item.id === templateId,
           ),
           offset,
+          placeContext,
         )
       : mutation("/api/quests/recommend", {
           outing,
           ...(templateId ? { templateId } : {}),
           ...(offset ? { offset } : {}),
+          ...(placeContext ? { placeContext } : {}),
         }),
   viability: async (
     outing: Outing,
@@ -384,9 +396,12 @@ export const api = {
     DEMO
       ? transaction((d) => {
           const r = d.runs.find((r) => r.id === runId)!;
-          r.clips = [...r.clips.filter((c) => c.slot !== clip.slot), clip].sort(
-            (a, b) => a.slot - b.slot,
-          );
+          r.clips =
+            clip.mode === "session"
+              ? [clip]
+              : [...r.clips.filter((c) => c.slot !== clip.slot), clip].sort(
+                  (a, b) => a.slot - b.slot,
+                );
           if (r.status === "accepted") r.status = "in_progress";
           return r;
         })
@@ -402,12 +417,9 @@ export const api = {
           if (r.status === "finalized") return r;
           if (
             !["accepted", "in_progress"].includes(r.status) ||
-            r.clips.length !== 3 ||
-            r.clips.some((c) => c.end - c.start < 5 || c.end - c.start > 15)
+            !hasReadyVideo(r.clips)
           )
-            throw new Error(
-              "Save three usable clips before completing your quest.",
-            );
+            throw new Error("Save your video before completing your quest.");
           if (!declaration.trim())
             throw new Error("Confirm your honest attempt first.");
           const reason = eligibility(d.runs, r.quest.familyId);
@@ -476,7 +488,7 @@ export const api = {
           ...pending,
           status: "failed",
           error:
-            "The reel could not be built. Your clips are saved. Start the local renderer and retry.",
+            "The video could not be finished. Retry rendering; your recording has not been changed.",
         };
       });
       throw e;

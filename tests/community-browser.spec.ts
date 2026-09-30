@@ -8,11 +8,7 @@ test.use({ actionTimeout: 15_000 });
 
 const fixturePost = "55555555-5555-4555-8555-555555555555";
 const fixtureCreator = "22222222-2222-4222-8222-222222222222";
-const fixtureClips = [
-  "portrait-silent.mp4",
-  "landscape-with-audio.mp4",
-  "square-with-audio.mp4",
-].map((name) => path.resolve(".local/fixtures", name));
+const fixtureVideo = path.resolve(".local/fixtures/landscape-with-audio.mp4");
 async function openDemo(page: Page, route = "/discover") {
   await page.addInitScript(() =>
     sessionStorage.setItem("sq-demo-started", "1"),
@@ -104,6 +100,9 @@ test("mobile discovery creates a separate personal attempt, keeps the reel priva
   await page.getByRole("button", { name: "Couple", exact: true }).click();
   await reviewQuestPlans(page);
   await page.getByRole("button", { name: "Edit budget", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Enter exact amount", exact: true })
+    .click();
   await page.getByRole("spinbutton", { name: "Budget in dollars" }).fill("17");
   await reviewQuestPlans(page);
   await page.getByRole("button", { name: "Check this quest" }).click();
@@ -119,20 +118,16 @@ test("mobile discovery creates a separate personal attempt, keeps the reel priva
   expect(stored.inspiredByPostId).toBe(fixturePost);
   expect(stored.outing.budgetMinor).toBe(1700);
   expect(stored.clips).toHaveLength(0);
-  for (const clip of fixtureClips) {
-    await page
-      .getByRole("button", { name: "Record or upload", exact: true })
-      .first()
-      .click();
-    const dialog = page.getByRole("dialog");
-    await dialog
-      .locator('input[type="file"]:not([capture])')
-      .setInputFiles(clip);
-    await dialog
-      .getByRole("button", { name: "Use clip · Upload & validate" })
-      .click();
-    await expect(dialog).toBeHidden();
-  }
+  await page
+    .getByRole("button", { name: "Record or import video", exact: true })
+    .click();
+  const capture = page.getByRole("dialog", { name: "Record your quest" });
+  await capture.getByLabel("Import video").setInputFiles(fixtureVideo);
+  await capture
+    .getByRole("button", { name: "Save video", exact: true })
+    .click();
+  await expect(capture).toBeHidden();
+  await expect(page.getByLabel("Saved quest video")).toBeVisible();
   await page
     .getByRole("checkbox", { name: "I genuinely attempted", exact: false })
     .check();
@@ -317,25 +312,50 @@ test("an authored quest stays private through submission and becomes available o
     page.getByRole("heading", { name: "The tabletop color hunt", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Record or upload", exact: true }),
-  ).toHaveCount(3);
+    page.getByRole("button", { name: "Record or import video", exact: true }),
+  ).toHaveCount(1);
+  await expect(page.locator(".quest-action-plan")).not.toHaveAttribute(
+    "open",
+    "",
+  );
+  const cameraButton = await page
+    .getByRole("button", { name: "Record or import video", exact: true })
+    .boundingBox();
+  expect(cameraButton!.y + cameraButton!.height).toBeLessThan(
+    page.viewportSize()!.height - 70,
+  );
+  await page.locator(".quest-action-plan > summary").click();
   for (const label of ["Find", "Arrange", "Reveal"])
     await expect(
-      page.getByRole("heading", { name: label, exact: true }),
+      page.locator(".quest-action-plan").getByText(label, { exact: true }),
     ).toBeVisible();
   await page.reload();
   await expect(
     page.getByRole("heading", { name: "The tabletop color hunt", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Record or upload", exact: true }),
-  ).toHaveCount(3);
+    page.getByRole("button", { name: "Record or import video", exact: true }),
+  ).toHaveCount(1);
+  await page.locator(".quest-action-plan > summary").click();
   for (const label of ["Find", "Arrange", "Reveal"])
     await expect(
-      page.getByRole("heading", { name: label, exact: true }),
+      page.locator(".quest-action-plan").getByText(label, { exact: true }),
     ).toBeVisible();
   const accepted = await page.evaluate(
     () => JSON.parse(localStorage.getItem("sidequest-demo-v1")!).runs[0],
+  );
+  await expect(page.locator(".quest-action-plan")).toContainText(
+    "Arrange your objects into a tabletop gallery.",
+  );
+  await page.getByText("What you need & backup plan", { exact: true }).click();
+  await expect(page.locator(".quest-action-plan")).toContainText(
+    "Three objects you already own",
+  );
+  await expect(page.locator(".quest-action-plan")).toContainText(
+    "Ask before using someone else’s belongings.",
+  );
+  await expect(page.locator(".quest-action-plan")).toContainText(
+    "Draw three objects on paper and arrange the drawings.",
   );
   expect(accepted.quest.title).toBe("The tabletop color hunt");
   expect(

@@ -1,3 +1,4 @@
+import { runRecordingSessionTests } from "./recording-session-invariants.mjs";
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -35,7 +36,7 @@ export async function runDatabaseTests(sql) {
   );
   const templates = JSON.parse(
     await sql(
-      "select jsonb_agg(jsonb_build_object('id',id,'family',family_id,'intensity',intensity,'category',category) order by id) from quest_templates;",
+      "select jsonb_agg(jsonb_build_object('id',id,'family',family_id,'intensity',intensity,'category',category) order by id) from quest_templates where published;",
     ),
   );
   assert.equal(templates.length, 1113);
@@ -1084,6 +1085,7 @@ export async function runDatabaseTests(sql) {
   await runCommunityTests(sql);
   await runSocialTests(sql);
   await runSeriesTests(sql);
+  await runRecordingSessionTests(sql);
   console.log(
     "PASS: 1113 seeds, real RLS/privileges, transactions, concurrent acceptance/awards/stock/spending/consumption, idempotency, evidence, fenced render, share revoke, deletion, ledger reconciliation.",
   );

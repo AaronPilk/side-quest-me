@@ -168,17 +168,17 @@ test("five primary destinations work and local identity tools stay in Settings w
     await page.setViewportSize({ width, height: 900 });
     const primary = page.getByRole("navigation", { name: "Primary" });
     await expect(primary.getByRole("link")).toHaveText([
-      "Create",
       "Discover",
-      "Rewards",
       "Activity",
+      "Create",
+      "Rewards",
       "Profile",
     ]);
     for (const label of [
-      "Create",
       "Discover",
-      "Rewards",
       "Activity",
+      "Create",
+      "Rewards",
       "Profile",
     ])
       await expect(

@@ -9,13 +9,17 @@ import {
   Download,
   Share2,
   Play,
-  RotateCcw,
 } from "lucide-react";
 import { api } from "../lib/api";
+import { isNativeApp } from "../lib/runtime";
+import {
+  copyText,
+  exportVideoFile,
+  isShareCancellation,
+} from "../lib/native-share";
 import { DEMO, supabase } from "../lib/auth";
 import { demoActor } from "../lib/demo-identity";
 import { loadCaptureDraft, deleteCaptureDraft } from "../lib/capture-drafts";
-import { filmingGuide } from "../lib/capture-session";
 import {
   Button,
   Notice,
@@ -25,7 +29,8 @@ import {
   useResource,
 } from "../components/ui";
 import Capture from "../components/Capture";
-import StoryReview from "../components/StoryReview";
+import { QuestProgress } from "../components/QuestProgress";
+import { hasReadyVideo, SESSION_DRAFT_SLOT } from "../lib/recording-session";
 import { AuthVideo, fetchMediaBlob } from "../components/PrivateMedia";
 export default function ActiveQuest() {
   const { id } = useParams();
@@ -39,12 +44,16 @@ function ActiveQuestRun({ id }: { id: string }) {
     refresh,
     setData,
   } = useResource(() => api.run(id!), [id]);
+  const progress = useResource(
+    () => (run?.status === "finalized" ? api.me() : Promise.resolve(null)),
+    [run?.status],
+  );
   const {
     data: shareLinks,
     error: shareError,
     refresh: refreshShares,
   } = useResource(() => api.shareLinks(id), [id]);
-  const [slot, setSlot] = useState<number>();
+  const [captureOpen, setCaptureOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -64,13 +73,15 @@ function ActiveQuestRun({ id }: { id: string }) {
         : (await supabase?.auth.getSession())?.data.session?.user.id;
       if (!owner || !run) return;
       const slots = await Promise.all(
-        [0, 1, 2].map(async (part) => {
+        [0, 1, 2, SESSION_DRAFT_SLOT].map(async (part) => {
           const draft = await loadCaptureDraft(owner, run.id, part).catch(
             () => undefined,
           );
           return draft &&
             draft.baseClipId ===
-              (run.clips.find((clip) => clip.slot === part)?.id || null)
+              (part === SESSION_DRAFT_SLOT
+                ? run.clips.find((clip) => clip.mode === "session")?.id || null
+                : run.clips.find((clip) => clip.slot === part)?.id || null)
             ? part
             : -1;
         }),
@@ -80,7 +91,7 @@ function ActiveQuestRun({ id }: { id: string }) {
     return () => {
       canceled = true;
     };
-  }, [run, slot]);
+  }, [run, captureOpen]);
   useEffect(() => {
     if (!run?.render || !["queued", "processing"].includes(run.render.status))
       return;
@@ -130,6 +141,7 @@ function ActiveQuestRun({ id }: { id: string }) {
     setFeedback("");
     try {
       if (
+        !isNativeApp() &&
         shareFile &&
         preparedShare &&
         navigator.canShare?.({ files: [preparedShare] })
@@ -145,18 +157,20 @@ function ActiveQuestRun({ id }: { id: string }) {
       const file = new File([blob], "sidequest-reel.mp4", {
         type: "video/mp4",
       });
-      if (shareFile && navigator.canShare?.({ files: [file] })) {
+      if (
+        !isNativeApp() &&
+        shareFile &&
+        navigator.canShare?.({ files: [file] })
+      ) {
         setPreparedShare(file);
       } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = file.name;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        await exportVideoFile(file, {
+          title: run!.quest.title,
+          text: "You actually did it. #Sidequest",
+        });
       }
     } catch (e) {
-      if ((e as Error).name !== "AbortError") setFailure((e as Error).message);
+      if (!isShareCancellation(e)) setFailure((e as Error).message);
     } finally {
       setMediaBusy(false);
     }
@@ -173,6 +187,57 @@ function ActiveQuestRun({ id }: { id: string }) {
   if (!run) return <Loading />;
   const done = ["finalized", "review_needed"].includes(run.status);
   const abandoned = run.status === "abandoned";
+  const recordingCard = (
+    <section className="session-quest-card">
+      <div className="section-heading">
+        <h2>Your video</h2>
+        {hasReadyVideo(run.clips) && (
+          <span className="pill success">Saved</span>
+        )}
+      </div>
+      {run.clips.length === 1 && run.clips[0].mode === "session" && (
+        <AuthVideo
+          className="session-saved-video"
+          src={run.clips[0].previewUrl}
+          controls
+          playsInline
+          aria-label="Saved quest video"
+        />
+      )}
+      {run.clips.some((clip) => clip.mode !== "session") && (
+        <details className="legacy-saved-moments">
+          <summary>Your previously saved moments</summary>
+          {run.clips.map((clip) => (
+            <div key={clip.id}>
+              <p>{run.quest.beats[clip.slot]?.label || "Saved moment"}</p>
+              <AuthVideo
+                src={clip.previewUrl}
+                controls
+                playsInline
+                aria-label={`Saved moment ${clip.slot + 1}`}
+              />
+            </div>
+          ))}
+        </details>
+      )}
+      {!done && !abandoned && (
+        <>
+          <Button onClick={() => setCaptureOpen(true)}>
+            <Camera size={18} />
+            {draftSlots.includes(SESSION_DRAFT_SLOT)
+              ? "Continue recording"
+              : run.clips.length
+                ? "Record or import a new video"
+                : "Record or import video"}
+          </Button>
+          <p className="fine-print">
+            Hold to film, release to pause. Your takes stay together in one
+            video.
+          </p>
+        </>
+      )}
+    </section>
+  );
   return (
     <>
       <Back to={done || abandoned ? "/journal" : "/"} />
@@ -184,8 +249,9 @@ function ActiveQuestRun({ id }: { id: string }) {
           ? run.status === "review_needed"
             ? "Submitted for review. Your reel stays private while your attempt is reviewed."
             : "The moment is yours. Keep the story."
-          : "Three parts. One story. Stop between takes, save each part, and come back whenever you’re ready."}
+          : run.quest.hook}
       </PageTitle>
+      {!done && !abandoned && recordingCard}
       {run.series && (
         <section
           className="series-attempt-link"
@@ -239,6 +305,13 @@ function ActiveQuestRun({ id }: { id: string }) {
           </div>
         </div>
       )}
+      {done && progress.data?.completedQuestCount !== undefined && (
+        <QuestProgress
+          completedQuestCount={progress.data.completedQuestCount}
+          xp={progress.data.wallet.xp}
+          demo={DEMO}
+        />
+      )}
       {done && (
         <section className="section">
           <h2>Your reel</h2>
@@ -263,12 +336,17 @@ function ActiveQuestRun({ id }: { id: string }) {
                   onClick={() => exportVideo(true)}
                 >
                   <Share2 size={18} />
-                  {preparedShare ? "Share video" : "Prepare share"}
+                  {isNativeApp() || preparedShare
+                    ? "Share video"
+                    : "Prepare share"}
                 </Button>
               </div>
               <p className="fine-print">
                 {preparedShare
                   ? "Video ready. Tap Share video to choose an app. "
+                  : ""}
+                {isNativeApp()
+                  ? "To keep a copy, choose Save Video or Save to Files in the share sheet. "
                   : ""}
                 Private until you choose to share. Opening a share sheet does
                 not post your video.
@@ -316,7 +394,7 @@ function ActiveQuestRun({ id }: { id: string }) {
                           setFailure("");
                           setFeedback("");
                           try {
-                            await navigator.clipboard.writeText(share.url);
+                            await copyText(share.url);
                             setFeedback("Public link copied.");
                           } catch {
                             setFailure(
@@ -363,12 +441,12 @@ function ActiveQuestRun({ id }: { id: string }) {
             <>
               <Notice error={run.render?.status === "failed"}>
                 {run.render?.error ||
-                  "Your three clips are ready to become a real MP4."}
+                  "Your video is saved and ready to become a reel."}
               </Notice>
               <Button
                 onClick={render}
                 busy={busy}
-                disabled={run.clips.length !== 3}
+                disabled={!hasReadyVideo(run.clips)}
               >
                 <Play size={18} />
                 {run.render?.status === "failed"
@@ -443,101 +521,52 @@ function ActiveQuestRun({ id }: { id: string }) {
         />
       )}
       {!done && !abandoned && (
-        <details className="filming-story-plan">
-          <summary>Your filming plan · hook, action, loop</summary>
+        <details className="quest-action-plan">
+          <summary>Make it happen</summary>
           <ol>
-            {run.quest.beats.map((beat, index) => {
-              const guide = filmingGuide(run.quest, index);
-              return (
-                <li key={beat.label}>
-                  <strong>{guide.title}</strong>
-                  <p>{guide.prompt}</p>
-                  <p>{guide.shot}</p>
-                  <p className="support">{guide.tip}</p>
-                </li>
-              );
-            })}
+            {run.quest.beats.map((beat, index) => (
+              <li key={index}>
+                <strong>{beat.label}</strong>
+                <p>{beat.action}</p>
+              </li>
+            ))}
           </ol>
-          <p className="fine-print">
-            Film 5–15 seconds per part, across as many short takes as fit.
-            Finish and save a part before leaving. Uploaded parts stay with your
-            quest; local drafts stay on this device for 7 days.
-          </p>
+          {(run.quest.materials.length > 0 ||
+            run.quest.requirements.length > 0 ||
+            run.quest.fallback) && (
+            <details>
+              <summary>What you need & backup plan</summary>
+              {run.quest.materials.length > 0 && (
+                <>
+                  <h3>Bring along</h3>
+                  <ul>
+                    {run.quest.materials.map((material, index) => (
+                      <li key={index}>{material}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {run.quest.requirements.length > 0 && (
+                <>
+                  <h3>Before you start</h3>
+                  <ul>
+                    {run.quest.requirements.map((requirement, index) => (
+                      <li key={index}>{requirement}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {run.quest.fallback && (
+                <>
+                  <h3>If plans change</h3>
+                  <p>{run.quest.fallback}</p>
+                </>
+              )}
+            </details>
+          )}
         </details>
       )}
-      <div className="section-heading">
-        <h2>{done ? "Your saved moments" : "Make it happen"}</h2>
-        <span className="support">{run.clips.length} / 3 saved</span>
-      </div>
-      <div className="capture-beats">
-        {run.quest.beats.map((beat, i) => {
-          const clip = run.clips.find((c) => c.slot === i);
-          return (
-            <article className={`capture-beat ${clip ? "saved" : ""}`} key={i}>
-              <div className="beat-heading">
-                <span className="step-num">
-                  {clip ? <Check size={18} /> : String(i + 1).padStart(2, "0")}
-                </span>
-                <h2>{beat.label}</h2>
-                {clip && <span className="pill success">Uploaded</span>}
-                {draftSlots.includes(i) && (
-                  <span className="pill local-draft">Draft on this device</span>
-                )}
-              </div>
-              <p>{beat.action}</p>
-              <div className="shot">
-                <Camera size={17} />
-                <span>{beat.filming}</span>
-              </div>
-              {clip && (
-                <div className="saved-preview">
-                  <AuthVideo
-                    eager={false}
-                    src={clip.previewUrl}
-                    controls
-                    playsInline
-                    muted
-                    aria-label={`Saved ${beat.label} clip`}
-                  />
-                  <div>
-                    <strong>
-                      {(clip.end - clip.start).toFixed(1)} seconds selected
-                    </strong>
-                    <p>{clip.caption}</p>
-                    <small>
-                      {clip.fit === "fit" ? "Full image" : "Portrait crop"} ·{" "}
-                      {clip.mute ? "Muted" : "Recorded audio"}
-                    </small>
-                  </div>
-                </div>
-              )}
-              {!abandoned && (
-                <Button secondary onClick={() => setSlot(i)}>
-                  {draftSlots.includes(i) ? (
-                    <>
-                      <Camera size={17} />
-                      Continue draft
-                    </>
-                  ) : clip ? (
-                    <>
-                      <RotateCcw size={16} />
-                      {done ? "Adjust reel clip" : "Review or replace"}
-                    </>
-                  ) : (
-                    <>
-                      <Camera size={17} />
-                      Record or upload
-                    </>
-                  )}
-                </Button>
-              )}
-            </article>
-          );
-        })}
-      </div>
-      {!abandoned && run.clips.length > 0 && (
-        <StoryReview run={run} onEdit={setSlot} />
-      )}
+      {(done || abandoned) && recordingCard}
       {!done && !abandoned && (
         <section className="section">
           <h2>Review and complete</h2>
@@ -586,14 +615,14 @@ function ActiveQuestRun({ id }: { id: string }) {
             />
           </label>
           <Button
-            disabled={run.clips.length !== 3 || !attempted || !consent}
+            disabled={!hasReadyVideo(run.clips) || !attempted || !consent}
             busy={busy}
             onClick={complete}
           >
             Complete quest <ArrowRight size={18} />
           </Button>
           <p className="fine-print">
-            Three validated clips are required. Your footage stays private.
+            One saved video is all you need. Your footage stays private.
             Rendering and public sharing never determine your award.
           </p>
           <button
@@ -651,7 +680,7 @@ function ActiveQuestRun({ id }: { id: string }) {
                 : (await supabase?.auth.getSession())?.data.session?.user.id;
               if (owner)
                 await Promise.all(
-                  [0, 1, 2].map((part) =>
+                  [0, 1, 2, SESSION_DRAFT_SLOT].map((part) =>
                     deleteCaptureDraft(owner, run.id, part),
                   ),
                 ).catch(() => {});
@@ -679,14 +708,11 @@ function ActiveQuestRun({ id }: { id: string }) {
       )}
       {feedback && <Notice>{feedback}</Notice>}
       {failure && <Notice error>{failure}</Notice>}
-      {slot !== undefined && (
+      {captureOpen && (
         <Capture
-          key={slot}
           run={run}
-          slot={slot}
-          existing={run.clips.find((c) => c.slot === slot)}
           onSaved={refresh}
-          onClose={() => setSlot(undefined)}
+          onClose={() => setCaptureOpen(false)}
         />
       )}
       <Link className="text-button" to="/journal">

@@ -1,3 +1,4 @@
+import { placeFitReason, type PlaceContext } from "./place-matching";
 import { catalog } from "./catalog";
 import {
   CATEGORIES,
@@ -107,6 +108,11 @@ export function ineligibilityIssues(
     issue(
       "participants",
       `This quest needs ${quest.minParticipants}–${quest.maxParticipants} participants, including its supporting cast.`,
+    );
+  if (quest.allowedGroups && !quest.allowedGroups.includes(outing.group))
+    issue(
+      "participants",
+      `This quest is written for ${quest.allowedGroups.map((group) => ({ solo: "one person", couple: "a couple", friends: "a group of friends" })[group]).join(" or ")}.`,
     );
   if (!quest.settings.includes(outing.setting))
     issue(
@@ -255,6 +261,7 @@ export function recommend(
   now = new Date(),
   variants: QuestVariant[] = catalog,
   offset = 0,
+  placeContext?: PlaceContext | null,
 ): Candidate[] {
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > 30_000)
     throw new RangeError("Invalid quest page.");
@@ -272,6 +279,8 @@ export function recommend(
     )
     .map((quest) => {
       const factors: { score: number; reason: string }[] = [];
+      const locationFit = placeFitReason(quest, outing, placeContext);
+      if (locationFit) factors.push({ score: 6, reason: locationFit });
       const premises = (preferences.premises ?? []).filter(
         (
           premise,

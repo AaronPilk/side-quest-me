@@ -232,24 +232,29 @@ try {
     path.join(root, "wrangler.jsonc"),
     path.join(directory, "wrangler.jsonc"),
   );
-  const result = spawnSync(
-    process.execPath,
-    [path.join(root, "scripts/configure-environment.mjs")],
-    {
-      cwd: directory,
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        SIDEQUEST_ENV: "staging",
-        CLOUDFLARE_ACCOUNT_ID: "0".repeat(32),
-        SIDEQUEST_WORKER: "sidequest-config-fixture",
-        SIDEQUEST_BUCKET: "sidequest-config-fixture-media",
-        SIDEQUEST_QUEUE: "sidequest-config-fixture-renders",
-        SIDEQUEST_ORIGIN: "https://sidequest-config-fixture.invalid",
-        SIDEQUEST_AREA: "CONFIGURATION TEST ONLY",
+  const configEnv = {
+    ...process.env,
+    SIDEQUEST_ENV: "staging",
+    CLOUDFLARE_ACCOUNT_ID: "0".repeat(32),
+    SIDEQUEST_WORKER: "sidequest-config-fixture",
+    SIDEQUEST_BUCKET: "sidequest-config-fixture-media",
+    SIDEQUEST_QUEUE: "sidequest-config-fixture-renders",
+    SIDEQUEST_ORIGIN: "https://sidequest-config-fixture.invalid",
+    SIDEQUEST_AREA: "CONFIGURATION TEST ONLY",
+  };
+  delete configEnv.SIDEQUEST_NATIVE_ORIGIN;
+  const configure = (overrides = {}) =>
+    spawnSync(
+      process.execPath,
+      [path.join(root, "scripts/configure-environment.mjs")],
+      {
+        cwd: directory,
+        encoding: "utf8",
+        env: { ...configEnv, ...overrides },
       },
-    },
-  );
+    );
+  const configPath = path.join(directory, ".local/wrangler.target.json");
+  const result = configure();
   assert.equal(result.status, 0, result.stderr);
   const config = JSON.parse(
     await readFile(path.join(directory, ".local/wrangler.target.json"), "utf8"),
@@ -269,8 +274,53 @@ try {
     config.r2_buckets[0].bucket_name,
     "sidequest-config-fixture-media",
   );
+  assert.ok(
+    !Object.hasOwn(config.vars, "NATIVE_APP_ORIGIN"),
+    "Native CORS must remain disabled when its deployment input is absent",
+  );
   console.log(
     "PASS: JSONC configuration generates an explicitly isolated target; no remote resources created.",
+  );
+  const nativeResult = configure({
+    SIDEQUEST_NATIVE_ORIGIN: "capacitor://localhost",
+  });
+  assert.equal(nativeResult.status, 0, nativeResult.stderr);
+  const nativeConfig = JSON.parse(await readFile(configPath, "utf8"));
+  assert.equal(nativeConfig.vars.NATIVE_APP_ORIGIN, "capacitor://localhost");
+  assert.equal(nativeConfig.vars.APP_ORIGIN, config.vars.APP_ORIGIN);
+  const emptyResult = configure({ SIDEQUEST_NATIVE_ORIGIN: "" });
+  assert.equal(emptyResult.status, 0, emptyResult.stderr);
+  const withoutNative = await readFile(configPath, "utf8");
+  assert.ok(
+    !Object.hasOwn(JSON.parse(withoutNative).vars, "NATIVE_APP_ORIGIN"),
+  );
+  for (const value of [
+    "*",
+    "null",
+    "capacitor://elsewhere",
+    "capacitor://localhost/",
+    "capacitor://localhost?enabled=true",
+    "capacitor://localhost#fragment",
+    "https://localhost",
+    "http://localhost",
+    " capacitor://localhost",
+    "capacitor://localhost,https://example.com",
+  ]) {
+    const rejected = configure({ SIDEQUEST_NATIVE_ORIGIN: value });
+    assert.notEqual(
+      rejected.status,
+      0,
+      "Unrecognized native origins must fail",
+    );
+    assert.match(rejected.stderr, /SIDEQUEST_NATIVE_ORIGIN must be exactly/);
+    assert.equal(
+      await readFile(configPath, "utf8"),
+      withoutNative,
+      "Rejected input must not modify the generated target",
+    );
+  }
+  console.log(
+    "PASS: native CORS requires an explicit exact Capacitor origin; empty inputs stay disabled and broader origins are rejected.",
   );
 } finally {
   await rm(directory, { recursive: true, force: true });

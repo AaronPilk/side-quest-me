@@ -33,6 +33,9 @@ try {
     writeFileSync(join(temporary, `${name}.cjs`), output);
   }
   const { catalog } = require(join(temporary, "catalog.cjs"));
+  const { historicalActivityCatalog } = require(
+    join(temporary, "activity-recipes.cjs"),
+  );
   const { questVariantSchema } = require(join(temporary, "domain.cjs"));
   const quote = (value) => `'${String(value).replaceAll("'", "''")}'`;
   const rowFor = (raw, keyed = false) => {
@@ -42,31 +45,36 @@ try {
   const sqlFor = (variants, keyed = false) =>
     `-- Generated from shared/catalog.ts by node scripts/seed-catalog.mjs.\n-- Authored activity variations, not live events or sourced venue inventory.\n-- No sponsors, merchant inventory, wallets, or redeemable offers.\n-- Published versions are immutable; new editorial content needs a new version and ID.\ninsert into public.quest_templates (id, family_id, version, category, intensity, title, content, published${keyed ? ", variant_key" : ""}) values\n${variants.map((quest) => rowFor(quest, keyed)).join(",\n")}\non conflict (id) do nothing;\n`;
   const additions = catalog.filter((quest) => quest.variantKey);
+  const retireSuperseded = `-- Publication flags may change; historical content and accepted run snapshots do not.\nupdate public.quest_templates set published=false where id=any(array[${historicalActivityCatalog.map((quest) => quote(quest.id)).join(",")}]);\n`;
   writeFileSync(
     join(root, "supabase", "seed.sql"),
     sqlFor(catalog.filter((quest) => !quest.variantKey)) +
       "\n" +
-      sqlFor(additions, true),
+      sqlFor(historicalActivityCatalog, true) +
+      "\n" +
+      sqlFor(additions, true) +
+      "\n" +
+      retireSuperseded,
   );
   console.log(
-    `Wrote ${catalog.length} authored quest variants to supabase/seed.sql`,
+    `Wrote ${catalog.length} current and ${historicalActivityCatalog.length} historical quest variants to supabase/seed.sql`,
   );
-  const migrationIndex = process.argv.indexOf("--activity-migration");
+  if (process.argv.includes("--activity-migration"))
+    throw new Error(
+      "The v1 activity migration is published and frozen. Use --activity-revision-migration with a new CLI-created activity_instructions_v2 migration.",
+    );
+  const migrationIndex = process.argv.indexOf("--activity-revision-migration");
   if (migrationIndex !== -1) {
     const path = resolve(root, process.argv[migrationIndex + 1] || "");
     if (
       !path.startsWith(join(root, "supabase", "migrations") + "/") ||
-      !path.endsWith("_expanded_activity_catalog.sql")
+      !path.endsWith("_activity_instructions_v2.sql")
     ) {
       throw new Error(
-        "Pass the existing migration created with supabase migration new expanded_activity_catalog.",
+        "Pass the new migration created with supabase migration new activity_instructions_v2.",
       );
     }
-    // Keep the reviewed schema preamble when regenerating only the data rows.
-    const preamble = readFileSync(path, "utf8").split(
-      "-- Generated from shared/catalog.ts",
-    )[0];
-    writeFileSync(path, `${preamble}${sqlFor(additions, true)}`);
+    writeFileSync(path, `${sqlFor(additions, true)}\n${retireSuperseded}`);
     console.log(`Wrote ${additions.length} additive variants to ${path}`);
   }
 } finally {

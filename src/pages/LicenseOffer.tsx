@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { fetchMediaBlob } from "../components/PrivateMedia";
+import { isNativeApp } from "../lib/runtime";
+import { exportVideoFile, isShareCancellation } from "../lib/native-share";
 import { Back, Button, Loading, Notice, PageTitle } from "../components/ui";
 import {
   StateTag,
@@ -203,20 +205,23 @@ export default function LicenseOfferPage() {
             setDownloadError("");
             try {
               const blob = await fetchMediaBlob(data.mediaUrl!);
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = `sidequest-licensed-${data.id}.mp4`;
-              link.click();
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
+              await exportVideoFile(
+                new File([blob], `sidequest-licensed-${data.id}.mp4`, {
+                  type: "video/mp4",
+                }),
+                { title: data.postTitle },
+              );
             } catch (cause) {
-              setDownloadError((cause as Error).message);
+              if (!isShareCancellation(cause))
+                setDownloadError((cause as Error).message);
             } finally {
               setDownloading(false);
             }
           }}
         >
-          Download licensed video
+          {isNativeApp()
+            ? "Save or share licensed video"
+            : "Download licensed video"}
         </Button>
       )}
       {downloadError && <Notice error>{downloadError}</Notice>}

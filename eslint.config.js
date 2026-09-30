@@ -3,6 +3,8 @@ export default tseslint.config(
   {
     ignores: [
       "dist/**",
+      "dist-ios/**",
+      "ios/App/App/public/**",
       "node_modules/**",
       ".local/**",
       ".wrangler/**",

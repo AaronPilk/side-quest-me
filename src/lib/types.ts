@@ -1,6 +1,7 @@
 import type { Outing, Profile, QuestVariant } from "../../shared/domain";
 import type { SeriesContext } from "../../shared/series";
 export type Clip = {
+  mode?: "session";
   id: string;
   generation: number;
   slot: number;
@@ -38,7 +39,7 @@ export type Run = {
   render?: Reel;
 };
 export type Wallet = { xp: number; points: number; version: number };
-export type Me = { profile: Profile; wallet: Wallet; roles: string[] };
+export type Me = { profile: Profile; wallet: Wallet; roles: string[]; completedQuestCount?: number };
 export type Offer = {
   id: string;
   version?: number;

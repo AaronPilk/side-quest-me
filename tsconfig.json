@@ -20,7 +20,9 @@
     "worker-configuration.d.ts",
     "vite.config.ts",
     "tests",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "vite.ios.config.ts",
+    "capacitor.config.ts"
   ],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist", "dist-ios", "ios"]
 }

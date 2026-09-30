@@ -5,7 +5,7 @@ export const MEDIA_LIMITS = Object.freeze({
   maxOutputBytes: 100 * 1024 * 1024,
   maxRawSeconds: 60,
   minSelectedSeconds: 5,
-  maxSelectedSeconds: 15,
+  maxSelectedSeconds: 60,
   width: 1080,
   height: 1920,
   fps: 30,
@@ -35,8 +35,8 @@ export const clipSelectionSchema = z
   })
   .strict()
   .refine(
-    (v) => v.end - v.start >= 5 && v.end - v.start <= 15,
-    "Select 5–15 seconds per clip",
+    (v) => v.end - v.start >= 5 && v.end - v.start <= 60,
+    "Select 5–60 seconds",
   );
 export const renderManifestSchema = z
   .object({
@@ -46,12 +46,16 @@ export const renderManifestSchema = z
     outputId: z.uuid(),
     title: plainText(96),
     sponsorDisclosure: plainText(120).optional(),
-    clips: z.array(clipSelectionSchema).length(3),
+    clips: z.array(clipSelectionSchema).min(1).max(3),
   })
   .strict()
   .refine(
-    (v) => new Set(v.clips.map((c) => c.assetId)).size === 3,
-    "Use three distinct clip slots",
+    (v) =>
+      v.clips.length === 1 ||
+      (v.clips.length === 3 &&
+        new Set(v.clips.map((c) => c.assetId)).size === 3 &&
+        v.clips.every((c) => c.end - c.start <= 15)),
+    "Use one complete video or three distinct legacy clips of 5–15 seconds",
   );
 
 export function assertId(value) {
