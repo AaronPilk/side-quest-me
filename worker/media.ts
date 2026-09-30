@@ -333,6 +333,7 @@ export async function servePrivateObject(
   });
   const range = object.range;
   if (
+    request.headers.has("range") &&
     range &&
     "offset" in range &&
     range.offset !== undefined &&

@@ -8,11 +8,62 @@ vi.mock("@cloudflare/containers", () => ({
 import {
   MediaRouteError,
   rendererJson,
+  servePrivateObject,
   uploadAndSeal,
   type MediaEnv,
 } from "../worker/media";
 
 const NativeRequest = globalThis.Request;
+
+describe("private R2 download ranges", () => {
+  it("returns a complete download as 200 even when R2 supplies full-object range metadata", async () => {
+    const env = {
+      MEDIA: {
+        get: vi.fn(async () => ({
+          size: 4,
+          range: { offset: 0, length: 4 },
+          body: new Response("data").body,
+        })),
+      },
+    } as unknown as MediaEnv;
+    const response = await servePrivateObject(
+      new Request("https://sidequest.test/video?download"),
+      env,
+      "private-key",
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-range")).toBeNull();
+    expect(response.headers.get("content-length")).toBe("4");
+    expect(response.headers.get("content-disposition")).toContain("attachment");
+    expect(response.headers.get("cache-control")).toContain(
+      "private, no-store",
+    );
+    expect(await response.text()).toBe("data");
+  });
+
+  it("preserves partial 206 responses when a playback range was requested", async () => {
+    const env = {
+      MEDIA: {
+        get: vi.fn(async () => ({
+          size: 4,
+          range: { offset: 1, length: 2 },
+          body: new Response("at").body,
+        })),
+      },
+    } as unknown as MediaEnv;
+    const response = await servePrivateObject(
+      new Request("https://sidequest.test/video", {
+        headers: { Range: "bytes=1-2" },
+      }),
+      env,
+      "private-key",
+    );
+    expect(response.status).toBe(206);
+    expect(response.headers.get("content-range")).toBe("bytes 1-2/4");
+    expect(response.headers.get("content-length")).toBe("2");
+    expect(await response.text()).toBe("at");
+  });
+});
 const asset = {
   id: "a012d494-69d6-413c-9e7c-2101a999f454",
   owner_id: "9c931c20-1ac5-4ce0-9ee0-4d21ae2a5080",
