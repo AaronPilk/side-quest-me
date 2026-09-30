@@ -14,8 +14,8 @@
 }
 .reel-viewer {
   min-height: 100dvh;
-  background: #0c0d10;
-  color: #f5f5f7;
+  background: var(--brand-charcoal);
+  color: var(--brand-warm-white);
   padding: 0 0 env(safe-area-inset-bottom);
 }
 .reel-viewer-header {
@@ -65,7 +65,7 @@
 .reel-viewer .public-post-body {
   padding: 24px 20px 40px;
   background: var(--surface, #fff);
-  color: var(--ink, #202124);
+  color: var(--text);
   border-radius: 22px 22px 0 0;
   margin-top: -1px;
 }
@@ -73,7 +73,7 @@
   margin-top: 0;
 }
 .series-post-link {
-  border: 1px solid var(--line, #e3e6ed);
+  border: 1px solid var(--divider);
   border-radius: 18px;
   background: var(--surface, #fff);
   padding: 16px;
@@ -94,7 +94,7 @@
 }
 .series-post-link small {
   margin-top: 4px;
-  color: var(--muted, #667085);
+  color: var(--secondary);
 }
 .series-episode-navigation {
   display: flex;
@@ -108,7 +108,7 @@
   align-items: center;
   gap: 10px;
   padding: 12px;
-  border: 1px solid var(--line, #e3e6ed);
+  border: 1px solid var(--divider);
   border-radius: 14px;
 }
 .series-episode-navigation span {
@@ -116,7 +116,7 @@
 }
 .series-episode-navigation small {
   display: block;
-  color: var(--muted, #667085);
+  color: var(--secondary);
   margin-top: 4px;
 }
 @media (min-width: 850px) {
@@ -128,7 +128,7 @@
   .reel-viewer .public-post-creator {
     grid-column: 2;
     grid-row: 1;
-    color: var(--ink, #202124);
+    color: var(--text);
     background: var(--surface, #fff);
   }
   .reel-viewer .public-post-creator a {

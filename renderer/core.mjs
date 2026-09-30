@@ -259,7 +259,7 @@ async function overlay(file, text, position, eyebrow, sponsorDisclosure) {
   const body = rows
     .map(
       (line, i) =>
-        `<text x="92" y="${y + 86 + i * 62}" fill="#FFFFFF" font-size="51" font-weight="700">${xml(line)}</text>`,
+        `<text x="92" y="${y + 86 + i * 62}" fill="#F7F6F2" font-size="51" font-weight="700">${xml(line)}</text>`,
     )
     .join("");
   const disclosureRows = sponsorDisclosure
@@ -268,14 +268,14 @@ async function overlay(file, text, position, eyebrow, sponsorDisclosure) {
   const disclosure = disclosureRows
     .map(
       (line, i) =>
-        `<text x="92" y="${y + rows.length * 62 + 77 + i * 36}" fill="#BED4C7" font-size="27" font-weight="500">${xml(line)}</text>`,
+        `<text x="92" y="${y + rows.length * 62 + 77 + i * 36}" fill="#CBB6FF" font-size="27" font-weight="500">${xml(line)}</text>`,
     )
     .join("");
   const extraHeight = disclosureRows.length
     ? disclosureRows.length * 36 + 30
     : 0;
   // Only XML-escaped plain text is interpolated. No external image, CSS, or user-controlled attributes.
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920"><g font-family="DejaVu Sans, Arial, sans-serif"><rect x="64" y="${y - 14}" width="952" height="${rows.length * 62 + 105 + extraHeight}" rx="28" fill="#18201D" fill-opacity="0.87"/><text x="92" y="${y + 25}" fill="#B9EDD8" font-size="27" font-weight="600" letter-spacing="3">${xml(eyebrow)}</text>${body}${disclosure}</g></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920"><g font-family="DejaVu Sans, Arial, sans-serif"><rect x="64" y="${y - 14}" width="952" height="${rows.length * 62 + 105 + extraHeight}" rx="28" fill="#171A22" fill-opacity="0.87"/><text x="92" y="${y + 25}" fill="#CBB6FF" font-size="27" font-weight="600" letter-spacing="3">${xml(eyebrow)}</text>${body}${disclosure}</g></svg>`;
   await sharp(Buffer.from(svg)).png().toFile(file);
 }
 
@@ -355,7 +355,7 @@ export async function renderReel(
       const size =
         clip.fit === "fill"
           ? `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:(iw-1080)*${clip.crop}:(ih-1920)/2`
-          : "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x273E34";
+          : "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x171A22";
       const titleSeconds = manifest.sponsorDisclosure
         ? Math.min(duration, 4.5)
         : 2.3;

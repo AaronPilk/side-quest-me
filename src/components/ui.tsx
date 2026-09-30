@@ -3,11 +3,11 @@ import {
   ArrowLeft,
   ArrowRight,
   AlertCircle,
-  Flag,
   Sparkles,
   Check,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { BrandMark } from "./BrandMark";
 export function Button({
   children,
   busy,
@@ -59,7 +59,7 @@ export function Empty({
   return (
     <div className="empty">
       <div className="empty-icon">
-        <Flag size={30} />
+        <BrandMark size={30} />
       </div>
       <h2>{title}</h2>
       <p>{children}</p>
@@ -189,7 +189,7 @@ export function QuestArt({
       <div className="art-orbit orbit-two" />
       <div className="art-card art-card-back">
         <span>THE PLAN</span>
-        <Flag size={small ? 24 : 40} />
+        <BrandMark size={small ? 24 : 40} />
       </div>
       <div className="art-card art-card-front">
         <Sparkles size={small ? 24 : 42} />

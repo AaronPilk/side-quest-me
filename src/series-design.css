@@ -7,7 +7,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--line, #e5e8ef);
+  border: 1px solid var(--divider);
   border-radius: 22px;
   background: #fff;
   color: inherit;
@@ -37,7 +37,7 @@
   line-height: 1.2;
 }
 .series-card-body small {
-  color: var(--muted, #687182);
+  color: var(--secondary);
   line-height: 1.5;
 }
 .series-card-body > span {
@@ -45,7 +45,7 @@
   align-items: center;
   gap: 5px;
   font-size: 12px;
-  color: var(--muted, #687182);
+  color: var(--secondary);
 }
 .series-cover-sunrise {
   --series-cover: linear-gradient(135deg, #ffdbb8, #ffeceb);
@@ -75,7 +75,7 @@
   padding: 4px;
   gap: 4px;
   border-radius: 14px;
-  background: #e9edf3;
+  background: var(--surface-muted);
 }
 .series-tabs button {
   border: 0;
@@ -88,7 +88,7 @@
 }
 .series-tabs button.selected {
   background: #fff;
-  box-shadow: 0 2px 5px #1826410b;
+  box-shadow: 0 2px 5px #171a220b;
 }
 .series-hero {
   padding: 32px;
@@ -121,8 +121,8 @@
 .series-progress {
   display: flex;
   gap: 10px;
-  background: #e8f2ff;
-  color: #174f91;
+  background: var(--action-soft);
+  color: var(--action-ink);
   padding: 16px;
   border-radius: 15px;
   font-size: 14px;
@@ -137,7 +137,7 @@
   display: flex;
   gap: 16px;
   padding: 24px 0;
-  border-bottom: 1px solid #e5e8ef;
+  border-bottom: 1px solid var(--divider);
   scroll-margin-top: 90px;
 }
 .series-part-number {
@@ -147,11 +147,11 @@
   flex: 0 0 38px;
   width: 38px;
   height: 38px;
-  background: #eef2f8;
+  background: var(--surface-muted);
   border-radius: 12px;
   font-weight: 650;
   font-size: 14px;
-  color: #526079;
+  color: var(--secondary);
 }
 .series-part-content {
   min-width: 0;
@@ -174,7 +174,7 @@
   display: flex;
   gap: 7px;
   font-size: 14px;
-  color: #69717e;
+  color: var(--secondary);
   align-items: baseline;
 }
 .series-part-preview {
@@ -186,11 +186,11 @@
   min-height: 44px;
   padding: 12px 0;
   cursor: pointer;
-  color: var(--accent, #0066ee);
+  color: var(--action-ink);
   font-weight: 600;
 }
 .series-part-preview > div {
-  border-left: 2px solid var(--line, #e5e8ef);
+  border-left: 2px solid var(--divider);
   padding-left: 14px;
 }
 .series-part-preview ol,
@@ -213,7 +213,7 @@
   gap: 20px;
 }
 .series-edit-part {
-  border: 1px solid #dde3ed;
+  border: 1px solid var(--input-border);
   background: #fff;
   border-radius: 20px;
   padding: 22px;

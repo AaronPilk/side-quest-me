@@ -2,18 +2,18 @@
   position: sticky;
   top: 0;
   z-index: 3;
-  background: #19191d;
-  box-shadow: 0 -24px 0 #19191d;
+  background: var(--brand-charcoal);
+  box-shadow: 0 -24px 0 var(--brand-charcoal);
   padding: 8px 0;
 }
 .filming-guide {
-  border-left: 2px solid #8bb8ff;
+  border-left: 2px solid var(--action-on-dark);
   padding: 2px 0 2px 14px;
   margin: 18px 0;
   font-size: 0.82rem;
 }
 .filming-guide > strong {
-  color: #a4c5ff;
+  color: var(--action-on-dark);
 }
 .filming-guide p {
   margin: 7px 0;
@@ -25,7 +25,7 @@
 .filming-guide summary {
   min-height: 32px;
   padding-top: 8px;
-  color: #a4c5ff;
+  color: var(--action-on-dark);
   cursor: pointer;
 }
 .filming-guide details p {
@@ -42,7 +42,7 @@
 }
 .take-progress > span {
   display: block;
-  background: #8bb8ff;
+  background: var(--action-on-dark);
   flex-shrink: 1;
 }
 .take-progress > .current-take {
@@ -63,7 +63,7 @@
 }
 .record-control {
   border: 4px solid white;
-  box-shadow: inset 0 0 0 4px #19191d;
+  box-shadow: inset 0 0 0 4px var(--brand-charcoal);
   border-radius: 50%;
   background: #ef4663;
   color: white;
@@ -96,7 +96,7 @@
 }
 .filming-story-plan {
   background: var(--surface, #fff);
-  border: 1px solid var(--divider, #e3e5ec);
+  border: 1px solid var(--divider);
   border-radius: 20px;
   padding: 20px;
   margin: 24px 0;
@@ -114,6 +114,19 @@
   line-height: 1.55;
 }
 .capture-beat .local-draft {
-  color: #9a6600;
+  color: var(--warning);
   background: #fff1cf;
+}
+
+/* Camera controls keep the brand readable against the charcoal recording stage. */
+.capture-overlay :is(button, a, input, select, summary):focus-visible {
+  outline-color: var(--action-on-dark);
+}
+.capture-content .button.secondary:hover:not(:disabled) {
+  color: var(--brand-warm-white);
+  background: #35313f;
+  border-color: #81768f;
+}
+.capture-content input[type="range"] {
+  accent-color: var(--action-on-dark);
 }

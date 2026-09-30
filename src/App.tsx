@@ -8,7 +8,6 @@ import {
   useLocation,
 } from "react-router-dom";
 import {
-  Flag,
   BookOpen,
   Gift,
   UserRound,
@@ -22,6 +21,7 @@ import {
   BriefcaseBusiness,
 } from "lucide-react";
 import { useCommunity } from "./components/Community";
+import { BrandMark } from "./components/BrandMark";
 import "./navigation-design.css";
 import { supabase, DEMO } from "./lib/auth";
 import { clearCaptureDrafts } from "./lib/capture-drafts";
@@ -128,9 +128,9 @@ export default function App() {
       <header className="brandbar">
         <Link to="/discover" className="brand">
           <span className="brand-mark">
-            <Flag size={19} />
+            <BrandMark size={34} />
           </span>
-          {APP_CONFIG.name}
+          <span className="brand-name">{APP_CONFIG.name}</span>
           <span
             className="beta"
             title={DEMO ? "Local demonstration. No real payments." : "Pilot"}

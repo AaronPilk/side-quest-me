@@ -129,8 +129,8 @@
   border-bottom: 2px solid transparent;
 }
 .social-profile-tabs button[aria-current] {
-  color: var(--text);
-  border-bottom-color: var(--text);
+  color: var(--action-ink);
+  border-bottom-color: var(--action);
 }
 .profile-video-grid {
   display: grid;
@@ -141,7 +141,7 @@
   position: relative;
   overflow: hidden;
   aspect-ratio: 3/4;
-  background: #e8ebef;
+  background: var(--surface-muted);
   color: white;
   min-width: 0;
 }
@@ -152,7 +152,7 @@
   display: block;
 }
 .profile-video-tile:focus-visible {
-  outline: 3px solid #0866e9;
+  outline: 3px solid var(--action);
   outline-offset: -3px;
 }
 .profile-video-title {
@@ -174,7 +174,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #636b77;
+  color: var(--secondary);
   font-size: 10px;
 }
 .social-quest-list,
