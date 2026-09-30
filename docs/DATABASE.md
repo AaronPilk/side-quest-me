@@ -1,5 +1,11 @@
 # Sidequest database
 
+**Hosted setup — 2026-09-30:** The user selected `fpwpsxerogbwlnrvuurm` (Side quest
+Me). All eight migrations and the 33-quest seed have been applied and verified.
+Hosted security and performance advisors report no warnings or errors. See
+[the deployment record](DEPLOYMENT.md). The local-development history below is
+retained for reproducibility.
+
 Postgres is the sole relational authority. Apply `supabase/migrations/*` and then `supabase/seed.sql` to a **new, explicitly selected Sidequest project**. The seed contains 33 authored quest variants, no sponsors, funded offers, balances, or operator accounts. A fixture is not funding.
 
 `node scripts/db-test.mjs` creates an isolated, temporary PostgreSQL cluster with a private Unix socket, installs minimal Auth test tables/roles, rebuilds migrations and seed, runs actual transactions/concurrent sessions/RLS checks, and shuts down/removes that cluster. Requires `initdb`, `pg_ctl`, and `psql` (`pg_config --bindir` is supported). It never connects to a live project. `node scripts/db-test.mjs --advisors` also runs the Supabase CLI security advisors using an ephemeral loopback TLS listener/certificate, then removes them. Observed on PostgreSQL 17 / CLI 2.101.0: no security issues at warning/error level. These tests prove database behavior, not live Supabase Auth delivery or hosted Data API configuration. The Auth fixtures model the columns used by the app; they are not deployed migrations. `node scripts/db-test.mjs --generate-types` generates `shared/database.generated.ts` from actual migrated table columns, foreign keys, and RPC signatures; it uses local SQL introspection so Docker and hosted credentials are unnecessary. `shared/database.types.ts` is a separately labeled narrow hand-authored DTO layer.
@@ -8,7 +14,7 @@ Postgres is the sole relational authority. Apply `supabase/migrations/*` and the
 
 `supabase/config.toml` is a reduced CLI-generated local configuration (CLI 2.101.0): project label `sidequest`, Postgres 17, only `public` exposed, migrations enabled, and `./seed.sql` selected. `private` remains unexposed. R2 is the only application media store. The local project label is not a hosted account/project reference. Match `db.major_version` to the chosen project's actual PostgreSQL major version before local/remote schema comparison.
 
-From the repository root, set `SIDEQUEST_PROJECT_REF` yourself to the verified **fresh Sidequest staging** project reference, then run the following commands. They are deployment instructions; no link or push was performed during this build. Authenticate with `supabase login` first if the CLI is not already authenticated. Let the CLI prompt for the database password or use your approved secret mechanism; do not commit it.
+For a separate staging environment, set `SIDEQUEST_PROJECT_REF` to its verified **fresh Sidequest staging** project reference, then run the following commands. The current local CLI link is the selected production project above; do not assume it is staging. Authenticate with `supabase login` first if the CLI is not already authenticated. Let the CLI prompt for the database password or use your approved secret mechanism; do not commit it.
 
 ```sh
 : "${SIDEQUEST_PROJECT_REF:?Set this to your verified Sidequest staging project reference}"

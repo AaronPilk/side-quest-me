@@ -1,5 +1,12 @@
 # Build status — 2026-09-29
 
+**Deployment update — 2026-09-30:** The user selected the existing Side quest Me
+Supabase project. Its eight migrations and 33 quests are live. Cloudflare private
+storage, queue, bootstrap Worker, server secrets, Auth callbacks, and GitHub release
+variables are configured. The application release and cloud rendering verification
+await the Cloudflare deployment token. See [deployment status](DEPLOYMENT.md).
+The verification history below describes the earlier local implementation pass.
+
 ## Creator experience and Quest Series
 
 The product handoff is implemented on top of the existing guided Create, profile,

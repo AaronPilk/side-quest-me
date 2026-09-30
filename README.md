@@ -3,10 +3,12 @@
 A mobile-first React/Vite PWA for discovering real-world quests, making your own
 version, keeping or publishing a reel, and optionally licensing an existing video.
 
-**Current state:** working isolated local demo, actual local FFmpeg rendering,
-and tested PostgreSQL migrations. No Sidequest production account, merchant,
-or cloud deployment has been provisioned. Demo rewards are examples only:
-they cannot spend points, reserve stock, or issue codes.
+**Current state:** working local app with actual FFmpeg rendering and tested
+PostgreSQL migrations. The selected live Supabase database, private Cloudflare
+storage/queue, Worker secrets, and GitHub production configuration are prepared.
+The full application release awaits its Cloudflare deployment token. See
+[deployment status and remaining setup](docs/DEPLOYMENT.md). Demo rewards are
+examples only: they cannot spend points, reserve stock, or issue codes.
 
 ## Run locally
 
@@ -169,9 +171,10 @@ SIDEQUEST_CONFIG=.local/wrangler.target.json npm run build
 npx wrangler deploy --dry-run
 ```
 
-These commands create resources only when deliberately run with a selected target;
-they were **not** run against a remote account during this build. Full dry-run
-validation needs Docker. Let the Actions workflow perform the actual deployment.
+These commands create resources only when deliberately run with a selected target.
+See [the deployment record](docs/DEPLOYMENT.md) for the prepared production resources;
+do not recreate them. Full dry-run validation needs Docker. Let the Actions workflow
+perform the actual deployment.
 Configure the chosen hostname and Supabase callback allowlist to match
 `SIDEQUEST_ORIGIN`, then exercise the staging checklist in [MEDIA.md](docs/MEDIA.md).
 
