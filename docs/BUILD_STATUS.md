@@ -2,8 +2,8 @@
 
 The app is live on [Cloudflare](https://sidequest-me.aaron-9c3.workers.dev).
 The selected Supabase database has nine migrations and 1,113 authored variants
-across 73 families. The current feedback release is undergoing final deployment
-and cloud-render verification; see [the deployment record](DEPLOYMENT.md).
+across 73 families. The feedback release is deployed and undergoing final cloud-render verification;
+see [the deployment record](DEPLOYMENT.md).
 
 ## Current feedback milestone
 
@@ -23,12 +23,14 @@ and cloud-render verification; see [the deployment record](DEPLOYMENT.md).
   finished drafts across refresh, and quest-specific hook/action/payoff/loop prompts.
   A restored finished part can be uploaded or replaced; it cannot append a new take.
 - The production renderer's R2 stream-length failure has a tested bounded streaming
-  fix. Its resource configuration now supports a one-vCPU instance, capped at one.
+  fix. A 45-second live test hit the time limit; the follow-up resource configuration
+  uses two vCPUs, still capped at one instance.
 
-Typecheck, lint, 272 unit tests, deployment configuration checks, isolated PostgreSQL
-regression tests/advisors, and build pass. Final browser and production results are
-pending the release. Vite reports only its advisory large-entry warning (584.5 kB,
-180.8 kB gzip). SMTP, Apple Maps and live events need the provider settings listed
+Typecheck, lint, 276 unit tests, deployment configuration checks, isolated PostgreSQL
+regression tests/advisors, build, and all 55 browser scenarios pass. Production
+render verification is pending the release. Vite reports its advisory large-entry
+warning: 584.5 kB / 180.8 kB gzip for the local build, and 800.7 kB / 236.3 kB gzip
+for the production build with live Auth. SMTP, Apple Maps and live events need the provider settings listed
 in the deployment guide. Imported-profile review stays manual and explicit.
 
 The sections below retain the verification history of earlier local milestones;

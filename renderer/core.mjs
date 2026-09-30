@@ -21,15 +21,18 @@ export function command(bin, args, timeout = 30_000) {
     });
     let stdout = "",
       stderr = "",
-      exceeded = false;
+      limit = null;
     const timer = setTimeout(() => {
-      exceeded = true;
+      if (limit) return;
+      limit = "timeout";
       child.kill("SIGKILL");
     }, timeout);
     child.stdout.on("data", (chunk) => {
+      if (limit) return;
       stdout += chunk;
       if (stdout.length > 1024 * 1024) {
-        exceeded = true;
+        limit = "output";
+        clearTimeout(timer);
         child.kill("SIGKILL");
       }
     });
@@ -47,12 +50,16 @@ export function command(bin, args, timeout = 30_000) {
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (exceeded)
+      if (limit === "timeout")
         reject(
           new MediaError(
-            "Media processing exceeded its time or output limit. Use a shorter clip.",
-            422,
+            "Media processing reached the server time limit. Please try again shortly.",
+            503,
           ),
+        );
+      else if (limit === "output")
+        reject(
+          new MediaError("Media processing exceeded its output limit.", 422),
         );
       else if (code)
         reject(

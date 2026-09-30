@@ -68,8 +68,8 @@
       "image": "./renderer/Dockerfile",
       "max_instances": 1,
       "instance_type": {
-        "vcpu": 1,
-        "memory_mib": 3072,
+        "vcpu": 2,
+        "memory_mib": 6144,
         "disk_mb": 4000,
       },
       "image_build_context": ".",

@@ -18,8 +18,12 @@ Do not create a replacement or reuse another app's resources.
 | Container          | `sidequest-me-sidequestrenderer`   | FFmpeg image deployed; one instance maximum                     |
 
 The first complete release succeeded in [GitHub Actions](https://github.com/AaronPilk/side-quest-me/actions/runs/36740095380).
-The subsequent feedback release and full-length render verification are in progress.
-The renderer configuration now specifies 1 vCPU, 3 GiB memory, and 4 GB disk to
+The feedback release (`5eb1dac`) passed [Checks](https://github.com/AaronPilk/side-quest-me/actions/runs/36744534518)
+and [deployed successfully](https://github.com/AaronPilk/side-quest-me/actions/runs/36745483095).
+The live browser loads its exact production asset with no console errors. Full-length
+render verification found a time-limit failure with the one-vCPU configuration;
+a two-vCPU release and repeat verification are being prepared.
+The renderer configuration now specifies 2 vCPU, 6 GiB memory, and 4 GB disk to
 support the 45-second maximum reel within its four-minute encoding budget. No
 billing plan was changed. See [media verification](MEDIA.md).
 
@@ -81,9 +85,11 @@ Site URL and exact callback, and the Apple token domain allowlist, then rebuild.
 - The initial video test exposed lost stream-length metadata between the Container
   SDK and R2. Fixed-length streaming is covered by eight actual workerd tests,
   including exact bytes, truncation, overflow, source/storage failures and checksum
-  rejection. The production rerun is pending this release.
+  rejection. The fixed transfer is deployed. The first 45-second rerun reached the processing
+  time limit after 250 seconds; a larger renderer and new verification are pending.
 - Temporary verification accounts and media from the first run were deleted;
   retained records were redacted and synthetic footage earned no rewards.
-- Local typecheck, lint, 272 unit tests, deployment configuration checks, isolated
-  PostgreSQL regression/advisor tests, and build pass. Final browser and production
-  verification results will be recorded after the new release.
+- Local typecheck, lint, 276 unit tests, deployment configuration checks, isolated
+  PostgreSQL regression/advisor tests, 55 browser scenarios, and the production
+  build pass. Actual server secret values are absent from the browser artifact.
+  Production render verification will be recorded after the new release.
