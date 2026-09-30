@@ -114,7 +114,18 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
       setBusy(false);
     }
   }
-  if (loadError) return <Notice error>{loadError}</Notice>;
+  if (loadError)
+    return (
+      <Notice error>
+        {loadError}{" "}
+        <button
+          className="text-button"
+          onClick={() => (id ? publicProfile.refresh() : me.refresh())}
+        >
+          Retry profile
+        </button>
+      </Notice>
+    );
   if (loading) return <Loading />;
   return (
     <div className="social-profile-page creator-profile-page">
@@ -547,7 +558,15 @@ function ProfileForm({
 }
 function PrivateEntries() {
   const runs = useResource(api.runs);
-  if (runs.error) return <Notice error>{runs.error}</Notice>;
+  if (runs.error)
+    return (
+      <Notice error>
+        {runs.error}{" "}
+        <button className="text-button" onClick={runs.refresh}>
+          Retry journal
+        </button>
+      </Notice>
+    );
   if (!runs.data) return <Loading />;
   return (
     <>

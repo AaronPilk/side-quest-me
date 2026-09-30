@@ -202,7 +202,14 @@ async function media(
 export function registerCommunityPublic(app: Hono<AppBindings>) {
   app.get("/api/community/feed", async (c) => {
     await publicAccess(c);
-    return read(c, "feed", feedQuerySchema.parse(c.req.query()));
+    const input = feedQuerySchema.parse(c.req.query());
+    if (input.followingOnly && !c.get("actor"))
+      throw new ApiError(
+        "sign_in_required",
+        "Sign in to see creators you follow.",
+        401,
+      );
+    return read(c, "feed", input);
   });
   app.get("/api/community/posts/:id", async (c) => {
     const postId = uuid.parse(c.req.param("id"));
@@ -227,6 +234,10 @@ const feedQuerySchema = communityReadSchema
   .omit({ id: true })
   .extend({
     limit: z.coerce.number().int().min(1).max(50).optional(),
+    followingOnly: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .optional(),
     brandOnly: z
       .enum(["true", "false"])
       .transform((value) => value === "true")

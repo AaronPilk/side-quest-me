@@ -19,6 +19,7 @@ import {
   Notice,
   useResource,
   Loading,
+  Back,
 } from "../components/ui";
 export default function Profile() {
   const { data, error, refresh } = useResource(api.me);
@@ -27,14 +28,27 @@ export default function Profile() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [saveError, setSaveError] = useState(false);
-  if (!data) return error ? <Notice error>{error}</Notice> : <Loading />;
+  const [feedbackFor, setFeedbackFor] = useState<"name" | "account">("name");
+  if (!data)
+    return error ? (
+      <>
+        <Back to="/settings">Settings</Back>
+        <Notice error>{error}</Notice>
+        <Button secondary onClick={refresh}>
+          Retry profile
+        </Button>
+      </>
+    ) : (
+      <Loading />
+    );
   const level = levelFromXp(data.wallet.xp);
   const chips = preferenceChips(data.profile.preferences);
   return (
     <>
+      <Back to="/settings">Settings</Back>
       <PageTitle
-        eyebrow="THIS IS YOUR KIND OF ADVENTURE"
-        title="A little more you."
+        eyebrow="YOUR PRIVATE PREFERENCES"
+        title="Account & preferences"
       />
       <div className="profile-identity">
         <div className="avatar">
@@ -74,6 +88,7 @@ export default function Profile() {
             setBusy(true);
             setMessage("");
             setSaveError(false);
+            setFeedbackFor("name");
             try {
               await api.updateProfile({
                 displayName: name ?? data.profile.displayName,
@@ -97,9 +112,17 @@ export default function Profile() {
               placeholder="First name or nickname"
             />
           </label>
+          <p className="support">
+            This is your private nickname.{" "}
+            <Link to="/profile">Edit your public profile</Link> to change what
+            other people see.
+          </p>
           <Button secondary type="submit" busy={busy}>
             Save name
           </Button>
+          {message && feedbackFor === "name" && (
+            <Notice error={saveError}>{message}</Notice>
+          )}
         </form>
       </section>
       <section className="section confirmed-preferences">
@@ -177,9 +200,26 @@ export default function Profile() {
       {!DEMO && (
         <Button
           secondary
+          busy={busy}
           onClick={async () => {
-            await supabase?.auth.signOut();
-            navigate("/");
+            setBusy(true);
+            setMessage("");
+            setSaveError(false);
+            setFeedbackFor("account");
+            try {
+              if (!supabase)
+                throw new Error(
+                  "Sign out is unavailable. Please reload and try again.",
+                );
+              const result = await supabase.auth.signOut();
+              if (result.error) throw result.error;
+              navigate("/");
+            } catch (cause) {
+              setSaveError(true);
+              setMessage((cause as Error).message);
+            } finally {
+              setBusy(false);
+            }
           }}
         >
           <LogOut size={18} />
@@ -201,6 +241,7 @@ export default function Profile() {
           setBusy(true);
           setMessage("");
           setSaveError(false);
+          setFeedbackFor("account");
           try {
             await api.deleteAccount();
             if (!DEMO) sessionStorage.clear();
@@ -215,7 +256,9 @@ export default function Profile() {
       >
         {DEMO ? "Reset entire local demo" : "Delete my account"}
       </button>
-      {message && <Notice error={saveError}>{message}</Notice>}
+      {message && feedbackFor === "account" && (
+        <Notice error={saveError}>{message}</Notice>
+      )}
     </>
   );
 }

@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, ArrowLeft, Check, Sparkles } from "lucide-react";
-import { normalizePreferences, type Profile } from "../../shared/domain";
+import {
+  DEFAULT_PREFERENCES,
+  normalizePreferences,
+  profileSchema,
+  type Profile,
+} from "../../shared/domain";
 import {
   SURVEY_QUESTIONS,
   preferenceChips,
@@ -13,6 +18,7 @@ import { Button, Notice, PageTitle, Loading } from "../components/ui";
 import SummaryReview from "../components/SummaryReview";
 import { PreferenceControl } from "../components/PreferenceControl";
 import { consumeReturnTo } from "../lib/internal-return";
+import "../consumer-audit.css";
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -22,8 +28,11 @@ export default function Onboarding() {
   const [step, setStep] = useState(-1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+  const [reviewingAnswer, setReviewingAnswer] = useState(false);
   useEffect(() => {
     let active = true;
+    setError("");
     api
       .me()
       .then((data) => {
@@ -32,7 +41,11 @@ export default function Onboarding() {
           navigate("/profile/import", { replace: true });
           return;
         }
-        let draft: { profile?: Profile; step?: number } | null = null;
+        let draft: {
+          profile?: Profile;
+          step?: number;
+          reviewingAnswer?: boolean;
+        } | null = null;
         try {
           draft = JSON.parse(
             sessionStorage.getItem("sq-profile-draft") || "null",
@@ -40,7 +53,15 @@ export default function Onboarding() {
         } catch {
           /* Invalid drafts can be replaced by the saved profile. */
         }
-        const selected = draft?.profile || data.profile;
+        const draftProfile =
+          draft?.profile &&
+          profileSchema.safeParse({
+            ...draft.profile,
+            preferences: normalizePreferences(draft.profile.preferences),
+          });
+        const selected = draftProfile?.success
+          ? draftProfile.data
+          : data.profile;
         setProfile({
           ...selected,
           preferences: normalizePreferences(selected.preferences),
@@ -52,9 +73,18 @@ export default function Onboarding() {
                 -1,
                 Math.min(
                   10,
-                  draft?.step ?? (data.profile.onboardingCompleted ? 0 : -1),
+                  draftProfile?.success && Number.isInteger(draft?.step)
+                    ? draft!.step!
+                    : data.profile.onboardingCompleted
+                      ? 0
+                      : -1,
                 ),
               ),
+        );
+        setReviewingAnswer(
+          Boolean(
+            draftProfile?.success && draft?.reviewingAnswer && !importStep,
+          ),
         );
       })
       .catch((cause) => {
@@ -63,21 +93,37 @@ export default function Onboarding() {
     return () => {
       active = false;
     };
-  }, [importStep, navigate]);
+  }, [importStep, navigate, retry]);
   useEffect(() => {
-    if (profile)
+    if (!profile) return;
+    try {
       sessionStorage.setItem(
         "sq-profile-draft",
-        JSON.stringify({ profile, step }),
+        JSON.stringify({ profile, step, reviewingAnswer }),
       );
-  }, [profile, step]);
+    } catch {
+      setError(
+        "Draft storage is unavailable. Keep this page open until you save your profile.",
+      );
+    }
+  }, [profile, step, reviewingAnswer]);
 
   function nextStep() {
-    setStep((current) => current + 1);
+    setStep((current) => (reviewingAnswer ? 10 : current + 1));
+    setReviewingAnswer(false);
+    window.scrollTo(0, 0);
+  }
+  function editAnswer(index: number) {
+    setReviewingAnswer(true);
+    setStep(index);
     window.scrollTo(0, 0);
   }
   function cancel() {
-    sessionStorage.removeItem("sq-profile-draft");
+    try {
+      sessionStorage.removeItem("sq-profile-draft");
+    } catch {
+      /* The unsaved in-memory draft is discarded on navigation. */
+    }
     navigate(
       consumeReturnTo(profile?.onboardingCompleted ? "/account" : "/create"),
     );
@@ -91,7 +137,11 @@ export default function Onboarding() {
         preferences: profile.preferences,
         onboardingCompleted: true,
       });
-      sessionStorage.removeItem("sq-profile-draft");
+      try {
+        sessionStorage.removeItem("sq-profile-draft");
+      } catch {
+        /* The durable profile was saved successfully. */
+      }
       navigate(consumeReturnTo());
     } catch (cause) {
       setError((cause as Error).message);
@@ -99,15 +149,48 @@ export default function Onboarding() {
       setBusy(false);
     }
   }
-  if (!profile) return error ? <Notice error>{error}</Notice> : <Loading />;
+  if (!profile)
+    return error ? (
+      <>
+        <Notice error>{error}</Notice>
+        <Button secondary onClick={() => setRetry((value) => value + 1)}>
+          Retry profile
+        </Button>
+      </>
+    ) : (
+      <Loading />
+    );
   const q = SURVEY_QUESTIONS[step];
   const chips = preferenceChips(profile.preferences);
+  const answers = SURVEY_QUESTIONS.map((question, index) => {
+    const keys = [
+      question.key,
+      ...(question.otherKey ? [question.otherKey] : []),
+      ...(question.key === "skills" ? ["interests" as const] : []),
+    ];
+    const answerPreferences = {
+      ...DEFAULT_PREFERENCES,
+      ...Object.fromEntries(keys.map((key) => [key, profile.preferences[key]])),
+    };
+    return {
+      index,
+      title: question.title,
+      chips: preferenceChips(answerPreferences),
+    };
+  });
   return (
     <div className={`onboarding ${step === -1 ? "onboarding-import" : ""}`}>
       <div className="onboard-top">
         <button
           className="back"
-          onClick={() => (step <= -1 ? cancel() : setStep(step - 1))}
+          disabled={busy}
+          onClick={() => {
+            if (reviewingAnswer) {
+              setStep(10);
+              setReviewingAnswer(false);
+            } else if (step <= -1) cancel();
+            else setStep(step - 1);
+          }}
         >
           <ArrowLeft size={18} />
           Back
@@ -219,11 +302,14 @@ export default function Onboarding() {
           </button>
           <div className="survey-footer">
             <Button onClick={nextStep}>
-              Continue <ArrowRight size={18} />
+              {reviewingAnswer ? "Return to review" : "Continue"}{" "}
+              <ArrowRight size={18} />
             </Button>
-            <button className="text-button" onClick={nextStep}>
-              Skip this question
-            </button>
+            {!reviewingAnswer && (
+              <button className="text-button" onClick={nextStep}>
+                Skip this question
+              </button>
+            )}
             <p className="support">
               Moving on keeps any answer you chose. Unanswered questions stay
               unknown.
@@ -246,16 +332,40 @@ export default function Onboarding() {
             </Notice>
           )}
           <div className="review-chips">
-            {chips.map((chip) => (
+            {answers.flatMap((answer) =>
+              answer.chips.map((chip) => (
+                <button
+                  className="chip selected"
+                  key={chip}
+                  onClick={() => editAnswer(answer.index)}
+                  disabled={busy}
+                >
+                  {chip}
+                </button>
+              )),
+            )}
+          </div>
+          <details className="profile-answer-review">
+            <summary>Edit any answer</summary>
+            {answers.map((answer) => (
               <button
-                className="chip selected"
-                key={chip}
-                onClick={() => setStep(0)}
+                key={answer.index}
+                type="button"
+                disabled={busy}
+                onClick={() => editAnswer(answer.index)}
               >
-                {chip}
+                <span>
+                  {answer.title}
+                  <small>
+                    {answer.chips.length
+                      ? "Confirmed · tap to edit"
+                      : "Not answered · still unknown"}
+                  </small>
+                </span>
+                <ArrowRight size={18} aria-hidden="true" />
               </button>
             ))}
-          </div>
+          </details>
           {!chips.length && (
             <p>
               We’ll start with your outing. You can add preferences whenever
@@ -269,7 +379,11 @@ export default function Onboarding() {
           <Button onClick={finish} busy={busy}>
             Looks right <ArrowRight size={18} />
           </Button>
-          <button className="text-button" onClick={() => setStep(0)}>
+          <button
+            className="text-button"
+            disabled={busy}
+            onClick={() => setStep(0)}
+          >
             Edit answers
           </button>
         </>

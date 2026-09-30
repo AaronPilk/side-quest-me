@@ -95,7 +95,14 @@ export default function Settings() {
         </details>
       )}
       {action.feedback}
-      {me.error && <Notice error>{me.error}</Notice>}
+      {me.error && (
+        <>
+          <Notice error>{me.error}</Notice>
+          <Button secondary onClick={me.refresh}>
+            Retry account settings
+          </Button>
+        </>
+      )}
     </div>
   );
 }

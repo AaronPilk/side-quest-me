@@ -25,17 +25,29 @@ import {
   useResource,
 } from "../components/ui";
 import Capture from "../components/Capture";
+import StoryReview from "../components/StoryReview";
 import { AuthVideo, fetchMediaBlob } from "../components/PrivateMedia";
 export default function ActiveQuest() {
   const { id } = useParams();
+  return <ActiveQuestRun key={id} id={id!} />;
+}
+
+function ActiveQuestRun({ id }: { id: string }) {
   const {
     data: run,
     error,
     refresh,
     setData,
   } = useResource(() => api.run(id!), [id]);
+  const {
+    data: shareLinks,
+    error: shareError,
+    refresh: refreshShares,
+  } = useResource(() => api.shareLinks(id), [id]);
   const [slot, setSlot] = useState<number>();
   const [busy, setBusy] = useState(false);
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const [feedback, setFeedback] = useState("");
   const [failure, setFailure] = useState("");
   const [attempted, setAttempted] = useState(false);
   const [consent, setConsent] = useState(false);
@@ -112,7 +124,10 @@ export default function ActiveQuest() {
     setPreparedShare(undefined);
   }, [run?.render?.url]);
   async function exportVideo(shareFile = false) {
+    if (mediaBusy) return;
+    setMediaBusy(true);
     setFailure("");
+    setFeedback("");
     try {
       if (
         shareFile &&
@@ -142,9 +157,19 @@ export default function ActiveQuest() {
       }
     } catch (e) {
       if ((e as Error).name !== "AbortError") setFailure((e as Error).message);
+    } finally {
+      setMediaBusy(false);
     }
   }
-  if (error) return <Notice error>{error}</Notice>;
+  if (error)
+    return (
+      <>
+        <Notice error>{error}</Notice>
+        <Button secondary onClick={refresh}>
+          Try again
+        </Button>
+      </>
+    );
   if (!run) return <Loading />;
   const done = ["finalized", "review_needed"].includes(run.status);
   const abandoned = run.status === "abandoned";
@@ -228,11 +253,15 @@ export default function ActiveQuest() {
                 aria-label="Your finished Sidequest reel"
               />
               <div className="button-row">
-                <Button onClick={() => exportVideo()}>
+                <Button busy={mediaBusy} onClick={() => exportVideo()}>
                   <Download size={18} />
                   Save video
                 </Button>
-                <Button secondary onClick={() => exportVideo(true)}>
+                <Button
+                  secondary
+                  disabled={mediaBusy}
+                  onClick={() => exportVideo(true)}
+                >
                   <Share2 size={18} />
                   {preparedShare ? "Share video" : "Prepare share"}
                 </Button>
@@ -248,6 +277,7 @@ export default function ActiveQuest() {
                 <>
                   <Button
                     secondary
+                    busy={mediaBusy}
                     onClick={async () => {
                       if (
                         !confirm(
@@ -255,10 +285,19 @@ export default function ActiveQuest() {
                         )
                       )
                         return;
+                      setMediaBusy(true);
+                      setFailure("");
+                      setFeedback("");
                       try {
                         setShare(await api.share(id!));
+                        refreshShares();
+                        setFeedback(
+                          "Public link created. You can copy or revoke it below.",
+                        );
                       } catch (e) {
                         setFailure((e as Error).message);
+                      } finally {
+                        setMediaBusy(false);
                       }
                     }}
                   >
@@ -272,14 +311,40 @@ export default function ActiveQuest() {
                         value={share.url}
                       />
                       <button
-                        onClick={() => navigator.clipboard.writeText(share.url)}
+                        disabled={mediaBusy}
+                        onClick={async () => {
+                          setFailure("");
+                          setFeedback("");
+                          try {
+                            await navigator.clipboard.writeText(share.url);
+                            setFeedback("Public link copied.");
+                          } catch {
+                            setFailure(
+                              "Copy is unavailable. Select and copy the link above.",
+                            );
+                          }
+                        }}
                       >
                         Copy
                       </button>
                       <button
+                        disabled={mediaBusy}
                         onClick={async () => {
-                          await api.revokeShare(share.id);
-                          setShare(undefined);
+                          setMediaBusy(true);
+                          setFailure("");
+                          setFeedback("");
+                          try {
+                            await api.revokeShare(share.id);
+                            setShare(undefined);
+                            refreshShares();
+                            setFeedback(
+                              "Public link revoked. It can no longer open this reel.",
+                            );
+                          } catch (e) {
+                            setFailure((e as Error).message);
+                          } finally {
+                            setMediaBusy(false);
+                          }
                         }}
                       >
                         Revoke
@@ -314,6 +379,63 @@ export default function ActiveQuest() {
           )}
         </section>
       )}
+      {!DEMO && shareError && (
+        <div>
+          <Notice error>Public links could not be loaded. {shareError}</Notice>
+          <Button secondary onClick={refreshShares}>
+            Retry public links
+          </Button>
+        </div>
+      )}
+      {!DEMO &&
+        !!shareLinks?.filter((link) => link.id !== share?.id).length && (
+          <details className="filming-story-plan">
+            <summary>Manage public links</summary>
+            <p className="support">
+              These links still open the reel version you shared. You can revoke
+              them here, even after returning later. To copy a URL you no longer
+              have, create a new link above.
+            </p>
+            <ul className="saved-share-links">
+              {shareLinks
+                .filter((link) => link.id !== share?.id)
+                .map((link) => (
+                  <li key={link.id}>
+                    <div>
+                      <strong>{link.caption}</strong>
+                      <p className="fine-print">
+                        Created {new Date(link.createdAt).toLocaleDateString()}{" "}
+                        · Expires{" "}
+                        {new Date(link.expiresAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <button
+                      className="text-button danger"
+                      disabled={mediaBusy}
+                      onClick={async () => {
+                        setMediaBusy(true);
+                        setFailure("");
+                        setFeedback("");
+                        try {
+                          await api.revokeShare(link.id);
+                          refreshShares();
+                          setFeedback(
+                            "Public link revoked. It can no longer open this reel.",
+                          );
+                        } catch (e) {
+                          setFailure((e as Error).message);
+                        } finally {
+                          setMediaBusy(false);
+                        }
+                      }}
+                    >
+                      Revoke link
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          </details>
+        )}
       {run.outing.applePlaceId && run.outing.setting !== "home" && (
         <ApplePlaceCard
           placeId={run.outing.applePlaceId}
@@ -413,6 +535,9 @@ export default function ActiveQuest() {
           );
         })}
       </div>
+      {!abandoned && run.clips.length > 0 && (
+        <StoryReview run={run} onEdit={setSlot} />
+      )}
       {!done && !abandoned && (
         <section className="section">
           <h2>Review and complete</h2>
@@ -473,6 +598,7 @@ export default function ActiveQuest() {
           </p>
           <button
             className="text-button danger"
+            disabled={busy}
             onClick={async () => {
               if (
                 !confirm(
@@ -480,8 +606,16 @@ export default function ActiveQuest() {
                 )
               )
                 return;
-              await api.abandon(id!);
-              refresh();
+              setBusy(true);
+              setFailure("");
+              try {
+                await api.abandon(id!);
+                refresh();
+              } catch (e) {
+                setFailure((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
             }}
           >
             Abandon quest
@@ -497,6 +631,7 @@ export default function ActiveQuest() {
       {(run.clips.length > 0 || run.render) && (
         <button
           className="text-button danger"
+          disabled={busy || mediaBusy}
           onClick={async () => {
             if (
               !confirm(
@@ -504,8 +639,13 @@ export default function ActiveQuest() {
               )
             )
               return;
+            setMediaBusy(true);
+            setFailure("");
+            setFeedback("");
             try {
               await api.deleteRunMedia(run.id);
+              setShare(undefined);
+              setPreparedShare(undefined);
               const owner = DEMO
                 ? `demo:${demoActor().id}`
                 : (await supabase?.auth.getSession())?.data.session?.user.id;
@@ -516,9 +656,15 @@ export default function ActiveQuest() {
                   ),
                 ).catch(() => {});
               setDraftSlots([]);
+              refreshShares();
+              setFeedback(
+                "Story media deleted. Your settled progress remains.",
+              );
               refresh();
             } catch (e) {
               setFailure((e as Error).message);
+            } finally {
+              setMediaBusy(false);
             }
           }}
         >
@@ -531,6 +677,7 @@ export default function ActiveQuest() {
           XP or points were awarded.
         </Notice>
       )}
+      {feedback && <Notice>{feedback}</Notice>}
       {failure && <Notice error>{failure}</Notice>}
       {slot !== undefined && (
         <Capture

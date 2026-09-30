@@ -419,7 +419,12 @@ export default function OriginalQuest() {
     return (
       <>
         <Back to="/profile" />
-        <Notice error>{current.error}</Notice>
+        <Notice error>
+          {current.error}{" "}
+          <button className="text-button" onClick={current.refresh}>
+            Retry original quest
+          </button>
+        </Notice>
       </>
     );
   if (id && !draft) return <Loading />;

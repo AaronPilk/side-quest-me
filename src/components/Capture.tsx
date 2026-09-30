@@ -9,6 +9,7 @@ import {
   Check,
   Plus,
   Bookmark,
+  Play,
 } from "lucide-react";
 import { DEMO, supabase } from "../lib/auth";
 import { demoActor } from "../lib/demo-identity";
@@ -64,7 +65,7 @@ export default function Capture({
   const [crop, setCrop] = useState(existing?.crop ?? 0.5);
   const [mute, setMute] = useState(existing?.mute || false);
   const [caption, setCaption] = useState(
-    existing?.caption || run.quest.beats[slot].caption,
+    existing?.caption ?? run.quest.beats[slot].caption,
   );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -82,6 +83,8 @@ export default function Capture({
   const [cameraDevice, setCameraDevice] = useState("");
   const [cameraBusy, setCameraBusy] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
+  const clipPreview = useRef<HTMLVideoElement | null>(null);
+  const previewingSelection = useRef(false);
   const stream = useRef<MediaStream | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
@@ -338,7 +341,6 @@ export default function Capture({
         acquired.getVideoTracks()[0]?.getSettings().deviceId || deviceId || "",
       );
       setCamera(true);
-      setPreview("");
       setSource("camera");
       // Enumerating after the existing permission grant reveals supported devices without a new permission request.
       const available =
@@ -626,7 +628,7 @@ export default function Capture({
         if (e.key === "Tab") {
           const controls = Array.from(
             e.currentTarget.querySelectorAll<HTMLElement>(
-              'button:not(:disabled), input:not(:disabled), select, video[controls], [tabindex="0"]',
+              'button:not(:disabled), input:not(:disabled), select, summary, video[controls], [tabindex="0"]',
             ),
           );
           const first = controls[0],
@@ -703,10 +705,20 @@ export default function Capture({
                 objectPosition: `${crop * 100}% center`,
               }}
               onLoadedMetadata={(e) => {
+                clipPreview.current = e.currentTarget;
                 const d = e.currentTarget.duration;
                 if (Number.isFinite(d)) {
                   setDuration(d);
-                  setEnd((prev) => Math.min(prev, d, 15));
+                  setEnd((prev) => Math.min(prev, d));
+                }
+              }}
+              onTimeUpdate={(event) => {
+                if (
+                  previewingSelection.current &&
+                  event.currentTarget.currentTime >= end
+                ) {
+                  event.currentTarget.pause();
+                  previewingSelection.current = false;
                 }
               }}
               onError={() =>
@@ -823,6 +835,16 @@ export default function Capture({
                   release();
                   setCamera(false);
                   setCountdown(0);
+                  if (existing) {
+                    setPreview(existing.previewUrl);
+                    setDuration(existing.duration);
+                    setStart(existing.start);
+                    setEnd(existing.end);
+                    setFit(existing.fit);
+                    setCrop(existing.crop);
+                    setMute(existing.mute);
+                    setCaption(existing.caption);
+                  }
                 }}
               >
                 Cancel camera
@@ -869,6 +891,28 @@ export default function Capture({
                 ? "Choose 5–15 seconds within your clip."
                 : "The upload will confirm the clip’s duration and trim."}
             </p>
+            <button
+              className="button secondary"
+              disabled={busy || !duration || end <= start || end > duration}
+              onClick={async () => {
+                const player = clipPreview.current;
+                if (!player) return;
+                setError("");
+                player.currentTime = start;
+                previewingSelection.current = true;
+                try {
+                  await player.play();
+                } catch {
+                  previewingSelection.current = false;
+                  setError(
+                    "The preview could not play. Try the video’s play control.",
+                  );
+                }
+              }}
+            >
+              <Play size={17} /> Preview selected{" "}
+              {Math.max(0, end - start).toFixed(1)}s
+            </button>
             <div className="form-grid">
               <label>
                 Framing

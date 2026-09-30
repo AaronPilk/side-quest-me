@@ -1,0 +1,115 @@
+.discovery-search {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+  align-items: center;
+}
+.discovery-search label {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+}
+.discovery-search input {
+  border-radius: 24px;
+  background: var(--surface);
+  padding-inline: 18px;
+}
+.discovery-search .button {
+  min-height: 48px;
+  padding: 10px 16px;
+  width: auto;
+}
+.discovery-search .icon-button {
+  flex: 0 0 44px;
+}
+.discovery-search-status {
+  margin: 8px 0 16px;
+  color: var(--secondary);
+  font-size: 0.875rem;
+}
+.feed-tabs {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.post-social {
+  padding: 8px 18px 0;
+}
+.post-social-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.post-social-actions :is(a, button) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  min-height: 44px;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  border-radius: 12px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.post-social-actions :is(a, button):hover {
+  background: var(--surface-muted);
+}
+.post-social-actions button[aria-pressed="true"] {
+  color: var(--action-ink);
+}
+.post-social-actions button:disabled {
+  opacity: 0.6;
+}
+.post-social .support {
+  margin: 4px 8px;
+}
+.share-fallback {
+  display: block;
+  margin: 12px 8px;
+}
+.reel-viewer .post-social {
+  background: var(--brand-charcoal);
+}
+.reel-viewer .post-social-actions :is(a, button) {
+  color: var(--brand-warm-white);
+}
+.reel-viewer .post-social-actions :is(a, button):hover {
+  background: #35313f;
+}
+.reel-viewer .post-social-actions button[aria-pressed="true"] {
+  color: var(--action-on-dark);
+}
+.reel-viewer .post-social :is(.support, .share-fallback) {
+  color: #d2ceda;
+}
+.discovery-shortcuts {
+  display: flex;
+  gap: 12px;
+  margin: 0 0 20px;
+  flex-wrap: wrap;
+}
+.discovery-shortcuts a {
+  font-size: 0.8125rem;
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  min-height: 44px;
+}
+@media (max-width: 400px) {
+  .post-social {
+    padding-inline: 10px;
+  }
+  .post-social-actions {
+    gap: 0;
+  }
+  .post-social-actions :is(a, button) {
+    font-size: 0.75rem;
+    gap: 5px;
+  }
+  .feed-tabs button {
+    padding-inline: 10px;
+    font-size: 0.75rem;
+  }
+}

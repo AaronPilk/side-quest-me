@@ -1,0 +1,51 @@
+.profile-answer-review,
+.public-quest-preparation {
+  margin: 24px 0;
+  padding: 18px;
+  border: 1px solid var(--divider);
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.profile-answer-review summary,
+.public-quest-preparation summary {
+  font-weight: 650;
+  cursor: pointer;
+  min-height: 28px;
+}
+
+.profile-answer-review > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 16px;
+  padding: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--divider);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+}
+
+.profile-answer-review > button:first-of-type {
+  margin-top: 12px;
+}
+
+.profile-answer-review button small {
+  display: block;
+  margin-top: 5px;
+  color: var(--secondary);
+  font-size: 12px;
+}
+
+.profile-answer-review button svg {
+  flex: 0 0 auto;
+  color: var(--action-ink);
+}
+
+.public-quest-preparation .clean-list {
+  margin-top: 18px;
+}

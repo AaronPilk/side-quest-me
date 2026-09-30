@@ -22,7 +22,10 @@ export function validateReturnTo(value: unknown): string | null {
       parsed.pathname !== originalPath
     )
       return null;
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    // "/" and "/create" both render Create; "/create" is the canonical return
+    // destination so navigation, docs and tests agree on one URL.
+    const pathname = parsed.pathname === "/" ? "/create" : parsed.pathname;
+    return `${pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return null;
   }

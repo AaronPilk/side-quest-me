@@ -95,6 +95,8 @@ export default function SummaryReview({
           secondary
           type="button"
           onClick={async () => {
+            setError("");
+            setCopied(false);
             try {
               await navigator.clipboard.writeText(COPY_PROFILE_PROMPT);
               setCopied(true);

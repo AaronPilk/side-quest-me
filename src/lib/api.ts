@@ -498,6 +498,16 @@ export const api = {
     mutation(`/api/redemptions/${id}/cancel`, {}),
   redemptionToken: async (id: string) =>
     request<{ token: string }>(`/api/redemptions/${id}/token`),
+  shareLinks: async (
+    runId: string,
+  ): Promise<
+    {
+      id: string;
+      caption: string;
+      createdAt: string;
+      expiresAt: string;
+    }[]
+  > => (DEMO ? [] : request(`/api/quest-runs/${runId}/share-links`)),
   share: async (runId: string): Promise<{ id: string; url: string }> => {
     if (DEMO)
       throw new Error(

@@ -26,7 +26,11 @@ import "./navigation-design.css";
 import { supabase, DEMO } from "./lib/auth";
 import { clearCaptureDrafts } from "./lib/capture-drafts";
 import { APP_CONFIG } from "../shared/domain";
-import { consumeReturnTo, rememberReturnTo } from "./lib/internal-return";
+import {
+  consumeReturnTo,
+  rememberReturnTo,
+  validateReturnTo,
+} from "./lib/internal-return";
 import { Button, Loading, Notice, QuestArt } from "./components/ui";
 import Quest from "./pages/Quest";
 import Profile from "./pages/Profile";
@@ -62,6 +66,8 @@ const LicenseOffer = lazy(() => import("./pages/LicenseOffer"));
 export default function App() {
   const [signedIn, setSignedIn] = useState(DEMO);
   const [identity, setIdentity] = useState<string | null>(DEMO ? "demo" : null);
+  const [authError, setAuthError] = useState("");
+  const [authRevision, setAuthRevision] = useState(0);
   const [loading, setLoading] = useState(!DEMO && !!supabase);
   const location = useLocation();
   const navigate = useNavigate();
@@ -71,11 +77,23 @@ export default function App() {
     /^\/series(?:\/[0-9a-f-]{36})?$/i.test(location.pathname);
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => {
-      setSignedIn(!!data.session);
-      setIdentity(data.session?.user.id ?? null);
-      setLoading(false);
-    });
+    let active = true;
+    setLoading(true);
+    setAuthError("");
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (error) throw error;
+        if (!active) return;
+        setSignedIn(!!data.session);
+        setIdentity(data.session?.user.id ?? null);
+      })
+      .catch(() => {
+        if (active) setAuthError("Could not check your sign-in. Try again.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
     const { data } = supabase.auth.onAuthStateChange((_e, session) => {
       if (_e === "SIGNED_OUT") {
         void clearCaptureDrafts().catch(() => {});
@@ -84,12 +102,16 @@ export default function App() {
         sessionStorage.removeItem("sq-return-to");
         sessionStorage.removeItem("sq-profile-draft");
       }
+      setAuthError("");
       setSignedIn(!!session);
       setIdentity(session?.user.id ?? null);
       setLoading(false);
     });
-    return () => data.subscription.unsubscribe();
-  }, []);
+    return () => {
+      active = false;
+      data.subscription.unsubscribe();
+    };
+  }, [authRevision]);
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
@@ -112,12 +134,26 @@ export default function App() {
     !isReel;
   const isDiscover = location.pathname === "/discover";
   useEffect(() => {
-    if ((!signedIn || welcome) && location.pathname === "/create")
-      rememberReturnTo(location.pathname + location.search);
+    if ((!signedIn || welcome) && !publicPage) {
+      const target = validateReturnTo(location.pathname + location.search);
+      if (
+        target &&
+        (location.pathname !== "/account" ||
+          !sessionStorage.getItem("sq-return-to"))
+      )
+        rememberReturnTo(target);
+    }
     if (signedIn && location.pathname === "/auth/callback") {
       navigate(consumeReturnTo(), { replace: true });
     }
-  }, [signedIn, welcome, location.pathname, location.search, navigate]);
+  }, [
+    signedIn,
+    welcome,
+    publicPage,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
   return (
     <div
       className={`app-shell ${navigationVisible ? "has-navigation" : ""} ${isDiscover ? "discover-shell" : ""} ${isReel ? "reel-shell" : ""}`}
@@ -176,6 +212,13 @@ export default function App() {
       <main id="main" tabIndex={-1}>
         {loading && !publicPage ? (
           <Loading />
+        ) : authError && !publicPage ? (
+          <>
+            <Notice error>{authError}</Notice>
+            <Button onClick={() => setAuthRevision((value) => value + 1)}>
+              Retry sign-in check
+            </Button>
+          </>
         ) : (!signedIn || welcome) && !publicPage ? (
           <Welcome
             onStart={() => {
@@ -188,8 +231,14 @@ export default function App() {
             <Routes key={identity ?? "guest"}>
               <Route path="/" element={<Quest />} />
               <Route path="/create" element={<Quest />} />
-              <Route path="/discover" element={<Discover />} />
-              <Route path="/posts/:id" element={<Discover />} />
+              <Route
+                path="/discover"
+                element={<Discover signedIn={signedIn} />}
+              />
+              <Route
+                path="/posts/:id"
+                element={<Discover signedIn={signedIn} />}
+              />
               <Route
                 path="/creators/:id"
                 element={<Creator signedIn={signedIn} />}
@@ -297,17 +346,21 @@ function Welcome({ onStart }: { onStart: () => void }) {
     e.preventDefault();
     setBusy(true);
     setError("");
-    const { error } = await supabase!.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${location.origin}/auth/callback` },
-    });
-    setBusy(false);
-    if (error)
+    setMessage("");
+    try {
+      const { error } = await supabase!.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: `${location.origin}/auth/callback` },
+      });
+      if (error) throw error;
+      setMessage("Check your email. Your private sign-in link is on its way.");
+    } catch {
       setError(
         "Could not send your sign-in link. Check your email and try again.",
       );
-    else
-      setMessage("Check your email. Your private sign-in link is on its way.");
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <section className="welcome">

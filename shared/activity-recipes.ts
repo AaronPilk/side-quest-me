@@ -10,7 +10,7 @@ import {
  * Each prompt changes the task; intensity changes its structure and deliverable.
  * A recipe shares one reward family across all prompts and intensities.
  */
-type ActivityRecipe = {
+export type ActivityRecipe = {
   id: string;
   title: string;
   category: Category;
@@ -1151,92 +1151,97 @@ const levels = {
   },
 } as const;
 
-export const activityCatalog: QuestVariant[] = activityRecipes.flatMap(
-  (recipe) =>
-    recipe.prompts.flatMap((prompt, promptIndex) =>
-      (Object.keys(levels) as (keyof typeof levels)[]).map((intensity) => {
-        const level = levels[intensity];
-        const familyId = `activity_${recipe.id}`;
-        return {
-          id: `${familyId}_${missionIds[promptIndex]}_${intensity}_v1`,
-          familyId,
-          variantKey: missionIds[promptIndex],
-          version: 1,
-          title: `${prompt.charAt(0).toUpperCase()}${prompt.slice(1)}`,
-          category: recipe.category,
-          intensity,
-          hook: `${level.opening}: ${prompt}. Can you make the ordinary worth a second look?`,
-          durationMinutes: level.minutes,
-          minParticipants: recipe.category === "date_night" ? 2 : 1,
-          maxParticipants: 8,
-          cost: {
-            minMinor: 0,
-            maxMinor: 0,
-            currency: "USD" as const,
-            scope: "total" as const,
-            venueCostUnknown: false,
-            note: "No purchase, admission, or booking is required. Use your phone, paper and objects you already own. Choose a free place where this activity is allowed; paid entry is not part of this quest. Any confirmed outing travel or entry costs still count toward your budget.",
+/** Expands one editorial recipe into its six briefs × three intensities.
+ * Pure: the same recipe always yields the same 18 variants. Generated draft
+ * recipes (see quest-ideas.ts) reuse this so drafts are catalog-compatible. */
+export function recipeVariants(recipe: ActivityRecipe): QuestVariant[] {
+  return recipe.prompts.flatMap((prompt, promptIndex) =>
+    (Object.keys(levels) as (keyof typeof levels)[]).map((intensity) => {
+      const level = levels[intensity];
+      const familyId = `activity_${recipe.id}`;
+      return {
+        id: `${familyId}_${missionIds[promptIndex]}_${intensity}_v1`,
+        familyId,
+        variantKey: missionIds[promptIndex],
+        version: 1,
+        title: `${prompt.charAt(0).toUpperCase()}${prompt.slice(1)}`,
+        category: recipe.category,
+        intensity,
+        hook: `${level.opening}: ${prompt}. Can you make the ordinary worth a second look?`,
+        durationMinutes: level.minutes,
+        minParticipants: recipe.category === "date_night" ? 2 : 1,
+        maxParticipants: 8,
+        cost: {
+          minMinor: 0,
+          maxMinor: 0,
+          currency: "USD" as const,
+          scope: "total" as const,
+          venueCostUnknown: false,
+          note: "No purchase, admission, or booking is required. Use your phone, paper and objects you already own. Choose a free place where this activity is allowed; paid entry is not part of this quest. Any confirmed outing travel or entry costs still count toward your budget.",
+        },
+        settings: recipe.settings,
+        interests: recipe.interests,
+        roles: [
+          "main_character",
+          "mastermind",
+          "camera_person",
+          "rotate",
+        ] as QuestVariant["roles"],
+        preparation: level.preparation,
+        conflicts: recipe.conflicts ?? [],
+        venuePermissionRequired: false,
+        arrangementRequired: false,
+        adultOnly: false,
+        supportsAdultContext: false,
+        requiresVolunteer: false,
+        beats: [
+          {
+            label: "The hook",
+            action: `Your brief: ${prompt}. Choose a small permitted space and the supplies you already have. ${level.structure}`,
+            filming: `Open with the unfinished subject or your prediction, before revealing the result. Say or write: “Our mission: ${prompt}.” Hold a recognizable opening frame you can return to at the end.`,
+            caption: level.opening,
           },
-          settings: recipe.settings,
-          interests: recipe.interests,
-          roles: [
-            "main_character",
-            "mastermind",
-            "camera_person",
-            "rotate",
-          ] as QuestVariant["roles"],
-          preparation: level.preparation,
-          conflicts: recipe.conflicts ?? [],
-          venuePermissionRequired: false,
-          arrangementRequired: false,
-          adultOnly: false,
-          supportsAdultContext: false,
-          requiresVolunteer: false,
-          beats: [
-            {
-              label: "The hook",
-              action: `Your brief: ${prompt}. Choose a small permitted space and the supplies you already have. ${level.structure}`,
-              filming: `Open with the unfinished subject or your prediction, before revealing the result. Say or write: “Our mission: ${prompt}.” Hold a recognizable opening frame you can return to at the end.`,
-              caption: level.opening,
-            },
-            {
-              label: "The attempt",
-              action: `${recipe.action} Follow the ${intensity === "full_send" ? "three-round" : intensity === "bold" ? "two-version" : "single-attempt"} plan from your setup. If you are with others, share the decisions and take turns; an imperfect result still counts.`,
-              filming: `Capture the real decision or change while making ${recipe.evidence}. Record short parts as the activity happens; stop between parts. Show one obstacle or surprise honestly instead of staging a false reaction.`,
-              caption: "Did the idea work?",
-            },
-            {
-              label: "The reveal + loop",
-              action: `Show ${recipe.evidence}. Answer the opening question with what actually happened and name one choice you would keep or change. Finish at the opening subject or composition so the result leads naturally back to the question.`,
-              filming: `Show ${recipe.evidence}, then return to the same composition as your first frame. End with “That started with…” or a visual match back to the beginning. Keep the real outcome; a loop does not need a fake surprise.`,
-              caption: "Back to where it began",
-            },
-          ] as QuestVariant["beats"],
-          materials: [
-            "A phone",
-            "Paper and a pen when the brief needs them",
-            "Safe ordinary objects you already own",
-          ],
-          completionQuestions: [
-            `Did you make the ${intensity === "full_send" ? "three-round" : intensity === "bold" ? "two-version" : "single-attempt"} activity for your chosen brief and show the actual result?`,
-            "Did everyone shown agree to being recorded, or did you film only your own work and give an honest recap?",
-            "Did you stay within the chosen free, permitted space and leave it as you found it?",
-          ],
-          fallback: recipe.settings.includes("home")
-            ? "Use a quiet corner at home and supplies you already own. A rough drawing, an ordinary object, or an honest unsuccessful attempt can carry the story. Keep the selected number of rounds."
-            : "Choose a smaller accessible public spot and observe from one stationary position. No long walk, stranger participation, purchase, or special access is required. Return in suitable conditions if the space is unavailable.",
-          requirements: [
-            "Use your own objects or observe public details from a permitted place. No purchase, outside cast, audience, or advance booking is required.",
-            "Keep voices considerate and paths clear. Film your own work or consenting companions; leave identifiable bystanders and private information out of frame.",
-            ...(recipe.settings.includes("venue")
-              ? [
-                  "Choose a free-access venue that allows this quiet activity and personal filming. If entry or permission is unavailable, use a home or outdoor setting instead.",
-                ]
-              : []),
-          ],
-          award: { ...AWARDS[intensity] },
-          cooldownDays: 30,
-        } satisfies QuestVariant;
-      }),
-    ),
-);
+          {
+            label: "The attempt",
+            action: `${recipe.action} Follow the ${intensity === "full_send" ? "three-round" : intensity === "bold" ? "two-version" : "single-attempt"} plan from your setup. If you are with others, share the decisions and take turns; an imperfect result still counts.`,
+            filming: `Capture the real decision or change while making ${recipe.evidence}. Record short parts as the activity happens; stop between parts. Show one obstacle or surprise honestly instead of staging a false reaction.`,
+            caption: "Did the idea work?",
+          },
+          {
+            label: "The reveal + loop",
+            action: `Show ${recipe.evidence}. Answer the opening question with what actually happened and name one choice you would keep or change. Finish at the opening subject or composition so the result leads naturally back to the question.`,
+            filming: `Show ${recipe.evidence}, then return to the same composition as your first frame. End with “That started with…” or a visual match back to the beginning. Keep the real outcome; a loop does not need a fake surprise.`,
+            caption: "Back to where it began",
+          },
+        ] as QuestVariant["beats"],
+        materials: [
+          "A phone",
+          "Paper and a pen when the brief needs them",
+          "Safe ordinary objects you already own",
+        ],
+        completionQuestions: [
+          `Did you make the ${intensity === "full_send" ? "three-round" : intensity === "bold" ? "two-version" : "single-attempt"} activity for your chosen brief and show the actual result?`,
+          "Did everyone shown agree to being recorded, or did you film only your own work and give an honest recap?",
+          "Did you stay within the chosen free, permitted space and leave it as you found it?",
+        ],
+        fallback: recipe.settings.includes("home")
+          ? "Use a quiet corner at home and supplies you already own. A rough drawing, an ordinary object, or an honest unsuccessful attempt can carry the story. Keep the selected number of rounds."
+          : "Choose a smaller accessible public spot and observe from one stationary position. No long walk, stranger participation, purchase, or special access is required. Return in suitable conditions if the space is unavailable.",
+        requirements: [
+          "Use your own objects or observe public details from a permitted place. No purchase, outside cast, audience, or advance booking is required.",
+          "Keep voices considerate and paths clear. Film your own work or consenting companions; leave identifiable bystanders and private information out of frame.",
+          ...(recipe.settings.includes("venue")
+            ? [
+                "Choose a free-access venue that allows this quiet activity and personal filming. If entry or permission is unavailable, use a home or outdoor setting instead.",
+              ]
+            : []),
+        ],
+        award: { ...AWARDS[intensity] },
+        cooldownDays: 30,
+      } satisfies QuestVariant;
+    }),
+  );
+}
+
+export const activityCatalog: QuestVariant[] =
+  activityRecipes.flatMap(recipeVariants);

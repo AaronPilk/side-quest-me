@@ -10,6 +10,8 @@ import {
   Sparkles,
   ShieldCheck,
   X,
+  Users,
+  Search,
 } from "lucide-react";
 import {
   Link,
@@ -34,7 +36,9 @@ import {
   useCommunityAction,
 } from "../components/Community";
 import { LicenseTermsForm } from "../components/LicenseTermsForm";
-import { validateReturnTo } from "../lib/internal-return";
+import { PostSocialActions } from "../components/PostSocialActions";
+import "../discovery-social.css";
+import { rememberReturnTo, validateReturnTo } from "../lib/internal-return";
 import "../reel-design.css";
 import { SeriesEpisodeNav } from "../components/SeriesEpisodeNav";
 
@@ -50,6 +54,8 @@ export function DiscoverPostCard({
   detail?: boolean;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = location.pathname + location.search;
   const action = useCommunityAction(refresh);
   const [caption, setCaption] = useState(post.caption);
   const [brandOptIn, setBrandOptIn] = useState(post.brandOptIn);
@@ -80,6 +86,7 @@ export function DiscoverPostCard({
           <Link
             className="post-more"
             to={`/posts/${post.id}`}
+            state={{ returnTo }}
             aria-label={`View ${post.quest.title} details`}
           >
             <MoreHorizontal size={21} />
@@ -102,6 +109,15 @@ export function DiscoverPostCard({
           )}
         </div>
       )}
+      {post.state === "published" && (
+        <PostSocialActions
+          post={post}
+          viewerId={viewer?.userId}
+          returnTo={returnTo}
+          detail={detail}
+          onFollow={refresh}
+        />
+      )}
       <div className="public-post-body">
         {post.state !== "published" && (
           <Notice>
@@ -115,7 +131,9 @@ export function DiscoverPostCard({
           </p>
         )}
         <h2>
-          <Link to={`/posts/${post.id}`}>{post.quest.title}</Link>
+          <Link to={`/posts/${post.id}`} state={{ returnTo }}>
+            {post.quest.title}
+          </Link>
         </h2>
         <p>{post.quest.hook}</p>
         {post.caption && <p className="post-caption">{post.caption}</p>}
@@ -308,10 +326,14 @@ export function DiscoverPostCard({
 function DiscoverFeed({
   templateId,
   brandOnly,
+  followingOnly,
+  query,
   viewer,
 }: {
   templateId?: string;
   brandOnly: boolean;
+  followingOnly: boolean;
+  query: string;
   viewer?: CommunityMe;
 }) {
   const [posts, setPosts] = useState<CommunityPost[] | null>(null);
@@ -333,6 +355,8 @@ function DiscoverFeed({
           {
             ...(templateId ? { templateId } : {}),
             ...(brandOnly ? { brandOnly: true } : {}),
+            ...(followingOnly ? { followingOnly: true } : {}),
+            ...(query ? { query } : {}),
             ...(before ? { before } : {}),
             limit: 30,
           },
@@ -360,7 +384,7 @@ function DiscoverFeed({
         }
       }
     },
-    [templateId, brandOnly],
+    [templateId, brandOnly, followingOnly, query],
   );
   useEffect(() => {
     void load();
@@ -391,11 +415,15 @@ function DiscoverFeed({
     return (
       <Empty
         title={
-          brandOnly
-            ? "No videos open to brands yet."
-            : templateId
-              ? "No public attempts yet."
-              : "The first story could be yours."
+          query
+            ? "No matching stories yet."
+            : followingOnly
+              ? "Your people, their adventures."
+              : brandOnly
+                ? "No videos open to brands yet."
+                : templateId
+                  ? "No public attempts yet."
+                  : "The first story could be yours."
         }
         to={
           templateId
@@ -404,16 +432,25 @@ function DiscoverFeed({
         }
         action={templateId ? "Try this quest" : "Find a quest"}
       >
-        {brandOnly
-          ? "Creators choose whether each video is open to inquiries. You can still explore all quests."
-          : "Complete a quest and choose whether to publish your reel. Private participation is always welcome."}
+        {query
+          ? "Try a different quest title, creator name, username, or caption. Search checks public stories only."
+          : followingOnly
+            ? "Follow creators from All quests to see their public stories here."
+            : brandOnly
+              ? "Creators choose whether each video is open to inquiries. You can still explore all quests."
+              : "Complete a quest and choose whether to publish your reel. Private participation is always welcome."}
       </Empty>
     );
   return (
     <>
       <div className="discover-feed" aria-busy={busy}>
         {posts.map((item) => (
-          <DiscoverPostCard key={item.id} post={item} viewer={viewer} />
+          <DiscoverPostCard
+            key={item.id}
+            post={item}
+            viewer={viewer}
+            refresh={() => void load()}
+          />
         ))}
       </div>
       <div className="feed-pagination">
@@ -436,15 +473,19 @@ function DiscoverFeed({
   );
 }
 
-export default function Discover() {
+export default function Discover({ signedIn = false }: { signedIn?: boolean }) {
   const { id } = useParams();
   const location = useLocation();
   const closeLink = useRef<HTMLAnchorElement>(null);
   const [params, setParams] = useSearchParams();
   const templateId = params.get("template") || undefined;
   const brandOnly = params.get("view") === "brands";
+  const followingOnly = params.get("view") === "following";
+  const query = (params.get("q") || "").trim().slice(0, 80);
+  const [search, setSearch] = useState(query);
+  useEffect(() => setSearch(query), [query]);
   const post = useCommunity("post", { id }, Boolean(id));
-  const me = useCommunity("me");
+  const me = useCommunity("me", {}, signedIn);
   useEffect(() => {
     if (id && post.data) closeLink.current?.focus({ preventScroll: true });
   }, [id, post.data?.id]);
@@ -507,7 +548,7 @@ export default function Discover() {
         </header>
         <div className="feed-tabs" role="group" aria-label="Discover feed">
           <button
-            aria-pressed={!brandOnly}
+            aria-pressed={!brandOnly && !followingOnly}
             onClick={() => {
               const next = new URLSearchParams(params);
               next.delete("view");
@@ -516,6 +557,16 @@ export default function Discover() {
           >
             <Clapperboard size={17} />
             {templateId ? "All attempts" : "All quests"}
+          </button>
+          <button
+            aria-pressed={followingOnly}
+            onClick={() => {
+              const next = new URLSearchParams(params);
+              next.set("view", "following");
+              setParams(next);
+            }}
+          >
+            <Users size={17} /> Following
           </button>
           <button
             aria-pressed={brandOnly}
@@ -534,12 +585,98 @@ export default function Discover() {
             </Link>
           )}
         </div>
-        <DiscoverFeed
-          key={JSON.stringify([templateId, brandOnly])}
-          templateId={templateId}
-          brandOnly={brandOnly}
-          viewer={me.data}
-        />
+        <form
+          className="discovery-search"
+          role="search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const next = new URLSearchParams(params);
+            if (search.trim()) next.set("q", search.trim());
+            else next.delete("q");
+            setParams(next);
+          }}
+        >
+          <label>
+            <span className="sr-only">Search public stories</span>
+            <input
+              type="search"
+              maxLength={80}
+              placeholder="Quests, creators, moments…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+          <Button type="submit" secondary aria-label="Search stories">
+            <Search size={19} />
+          </Button>
+          {query && (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Clear search"
+              onClick={() => {
+                setSearch("");
+                const next = new URLSearchParams(params);
+                next.delete("q");
+                setParams(next);
+              }}
+            >
+              <X size={19} />
+            </button>
+          )}
+        </form>
+        {query && (
+          <p className="discovery-search-status" role="status">
+            Public stories matching “{query}”
+          </p>
+        )}
+        <nav className="discovery-shortcuts" aria-label="Explore more">
+          <Link to="/series">
+            <Layers2 size={17} /> Explore series
+          </Link>
+          <Link to="/rewards?tab=offers">
+            <Sparkles size={17} /> Creator opportunities
+          </Link>
+        </nav>
+        {followingOnly && !signedIn ? (
+          <div className="empty">
+            <h2>Find your people.</h2>
+            <p>Follow creators to keep up with their public adventures.</p>
+            <Link
+              className="button"
+              to="/account"
+              onClick={() =>
+                rememberReturnTo(location.pathname + location.search)
+              }
+            >
+              Sign in to see Following
+            </Link>
+          </div>
+        ) : followingOnly && me.error ? (
+          <>
+            <Notice error>{me.error}</Notice>
+            <Button secondary onClick={me.refresh}>
+              Retry Following
+            </Button>
+          </>
+        ) : followingOnly && !me.data ? (
+          <Loading />
+        ) : (
+          <DiscoverFeed
+            key={JSON.stringify([
+              templateId,
+              brandOnly,
+              followingOnly,
+              query,
+              me.data?.userId,
+            ])}
+            templateId={templateId}
+            brandOnly={brandOnly}
+            followingOnly={followingOnly}
+            query={query}
+            viewer={me.data}
+          />
+        )}
         <p className="feed-footnote">
           <ShieldCheck size={14} /> Your version can always stay private.
         </p>

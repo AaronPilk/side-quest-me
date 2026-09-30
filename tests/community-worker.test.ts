@@ -96,6 +96,31 @@ beforeEach(() => {
 });
 
 describe("community public read boundary", () => {
+  it("requires identity for Following and bounds literal search", async () => {
+    let response = await app().request(
+      "/api/community/feed?followingOnly=true",
+      {},
+      env,
+    );
+    expect(response.status).toBe(401);
+    expect(state.rpc).not.toHaveBeenCalled();
+    response = await app().request(
+      "/api/community/feed?followingOnly=true&query=coffee",
+      { headers: { Authorization: "Bearer valid-session" } },
+      env,
+    );
+    expect(response.status).toBe(200);
+    expect(state.rpc).toHaveBeenCalledWith("sq_community_read", {
+      p_actor: actor,
+      p_view: "feed",
+      p_input: { followingOnly: true, query: "coffee" },
+    });
+    for (const query of ["followingOnly=maybe", `query=${"x".repeat(81)}`]) {
+      response = await app().request(`/api/community/feed?${query}`, {}, env);
+      expect(response.status).toBe(422);
+    }
+  });
+
   it.each([
     "2026-09-29T12:00:00.123456+00:00",
     "2026-09-29T08:00:00.123456-04:00",

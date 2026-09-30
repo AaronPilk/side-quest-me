@@ -67,6 +67,7 @@ export function useCommunityAction(refresh?: () => void) {
     setMessage("");
     try {
       const result = await communityApi.mutate<T>(action, input, key);
+      keys.current.delete(fingerprint);
       setMessage(success);
       refresh?.();
       return result;

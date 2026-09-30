@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Coffee,
   Utensils,
@@ -26,22 +26,44 @@ export default function Perks() {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [token, setToken] = useState("");
-  const [key] = useState(crypto.randomUUID());
+  const [token, setToken] = useState<{ id: string; value: string }>();
+  const [message, setMessage] = useState("");
+  const running = useRef(false);
+  const pendingReservations = useRef(new Map<string, string>());
   async function redeem() {
+    if (!selected || running.current) return;
+    running.current = true;
     setBusy(true);
     setError("");
+    setMessage("");
+    setToken(undefined);
+    const fingerprint = `${selected.id}:${selected.version}`;
+    const key =
+      pendingReservations.current.get(fingerprint) ?? crypto.randomUUID();
+    pendingReservations.current.set(fingerprint, key);
     try {
-      const result = await api.redeem(selected!.id, selected!.version!, key);
+      const result = await api.redeem(selected.id, selected.version!, key);
+      // Retrying an uncertain request reuses its key. An acknowledged reservation
+      // ends that attempt, so another reward cannot replay the previous one.
+      pendingReservations.current.delete(fingerprint);
       setSelected(undefined);
       setConfirming(false);
       me.refresh();
+      offers.refresh();
       redemptions.refresh();
-      const material = await api.redemptionToken(result.id);
-      setToken(material.token);
+      setMessage("Reward reserved. Your points balance has been updated.");
+      try {
+        const material = await api.redemptionToken(result.id);
+        setToken({ id: result.id, value: material.token });
+      } catch {
+        setError(
+          "Your reward is reserved, but its private code could not load. Use Show private code below to try again.",
+        );
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      running.current = false;
       setBusy(false);
     }
   }
@@ -50,6 +72,7 @@ export default function Perks() {
       <>
         <button
           className="back"
+          disabled={busy}
           onClick={() => {
             setSelected(undefined);
             setConfirming(false);
@@ -91,17 +114,41 @@ export default function Perks() {
             <Button busy={busy} onClick={redeem}>
               Confirm · Redeem {selected.points} points
             </Button>
-            <Button secondary onClick={() => setConfirming(false)}>
+            <Button
+              secondary
+              disabled={busy}
+              onClick={() => setConfirming(false)}
+            >
               Go back
             </Button>
           </>
         ) : (
           <Button
-            disabled={(me.data?.wallet.points || 0) < selected.points}
+            disabled={
+              !me.data ||
+              Boolean(me.error) ||
+              me.data.wallet.points < selected.points
+            }
             onClick={() => setConfirming(true)}
           >
             Redeem {selected.points} points
           </Button>
+        )}
+        {!selected.demo &&
+          me.data &&
+          me.data.wallet.points < selected.points && (
+            <p className="support">
+              You need {selected.points - me.data.wallet.points} more points for
+              this reward.
+            </p>
+          )}
+        {me.error && (
+          <Notice error>
+            {me.error}{" "}
+            <button className="text-button" onClick={me.refresh}>
+              Retry points balance
+            </button>
+          </Notice>
         )}
         {error && <Notice error>{error}</Notice>}
       </>
@@ -113,6 +160,7 @@ export default function Perks() {
         Earn progress for showing up. Spend quest points on participating
         rewards.
       </p>
+      {message && <Notice>{message}</Notice>}
       <div className="wallet-card">
         <div>
           <span>
@@ -159,7 +207,10 @@ export default function Perks() {
                 onClick={() => {
                   setSelected(o);
                   setError("");
+                  setMessage("");
+                  setToken(undefined);
                 }}
+                disabled={busy}
               >
                 <div className={`reward-icon reward-color-${i % 4}`}>
                   <Icon size={28} />
@@ -198,11 +249,23 @@ export default function Perks() {
                 <div className="button-row">
                   <Button
                     secondary
+                    busy={busy}
                     onClick={async () => {
+                      if (running.current) return;
+                      running.current = true;
+                      setBusy(true);
+                      setError("");
+                      setToken(undefined);
                       try {
-                        setToken((await api.redemptionToken(r.id)).token);
+                        setToken({
+                          id: r.id,
+                          value: (await api.redemptionToken(r.id)).token,
+                        });
                       } catch (e) {
                         setError((e as Error).message);
+                      } finally {
+                        running.current = false;
+                        setBusy(false);
                       }
                     }}
                   >
@@ -210,19 +273,32 @@ export default function Perks() {
                   </Button>
                   <button
                     className="text-button"
+                    disabled={busy}
                     onClick={async () => {
+                      if (running.current) return;
                       if (
                         !confirm(
                           "Cancel this reservation and return its points?",
                         )
                       )
                         return;
+                      running.current = true;
+                      setBusy(true);
+                      setError("");
                       try {
                         await api.cancelRedemption(r.id);
+                        if (token?.id === r.id) setToken(undefined);
+                        setMessage(
+                          "Reservation canceled. Its points have been returned.",
+                        );
                         redemptions.refresh();
                         me.refresh();
+                        offers.refresh();
                       } catch (e) {
                         setError((e as Error).message);
+                      } finally {
+                        running.current = false;
+                        setBusy(false);
                       }
                     }}
                   >
@@ -243,10 +319,10 @@ export default function Perks() {
             <p className="support">This token is private and single use.</p>
             <textarea
               readOnly
-              value={token}
+              value={token.value}
               aria-label="Private redemption token"
             />
-            <Button secondary onClick={() => setToken("")}>
+            <Button secondary onClick={() => setToken(undefined)}>
               Hide code
             </Button>
           </div>
@@ -256,6 +332,18 @@ export default function Perks() {
         <Notice error>
           {error || offers.error || redemptions.error || me.error}
         </Notice>
+      )}
+      {(offers.error || redemptions.error || me.error) && (
+        <Button
+          secondary
+          onClick={() => {
+            me.refresh();
+            offers.refresh();
+            redemptions.refresh();
+          }}
+        >
+          Retry perks
+        </Button>
       )}
     </>
   );

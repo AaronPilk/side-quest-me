@@ -2,13 +2,15 @@ import { useEffect, useState } from "react";
 import type { Profile } from "../../shared/domain";
 import { api } from "../lib/api";
 import SummaryReview from "../components/SummaryReview";
-import { Back, Loading, Notice, PageTitle } from "../components/ui";
+import { Back, Button, Loading, Notice, PageTitle } from "../components/ui";
 
 export default function ImportProfile() {
   const [profile, setProfile] = useState<Profile>();
   const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     let active = true;
+    setError("");
     api
       .me()
       .then((data) => {
@@ -20,8 +22,19 @@ export default function ImportProfile() {
     return () => {
       active = false;
     };
-  }, []);
-  if (!profile) return error ? <Notice error>{error}</Notice> : <Loading />;
+  }, [retry]);
+  if (!profile)
+    return error ? (
+      <>
+        <Back to="/account">Account & preferences</Back>
+        <Notice error>{error}</Notice>
+        <Button secondary onClick={() => setRetry((value) => value + 1)}>
+          Retry profile
+        </Button>
+      </>
+    ) : (
+      <Loading />
+    );
   return (
     <div className="import-profile">
       <Back to="/account">Account & preferences</Back>

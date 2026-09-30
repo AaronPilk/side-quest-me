@@ -189,7 +189,7 @@ app.use("/api/*", async (c, next) => {
     SOCIAL_PRIVATE_ROUTE,
     SERIES_PRIVATE_ROUTE,
     /^\/api\/(me|wallet|quests|quests\/recommend|quests\/viability|quest-runs|quest-runs\/active|rewards|redemptions|operator)$/,
-    /^\/api\/quest-runs\/[^/]+(?:\/(abandon|uploads|clips|complete|renders|share|media))?$/,
+    /^\/api\/quest-runs\/[^/]+(?:\/(abandon|uploads|clips|complete|renders|share|share-links|media))?$/,
     /^\/api\/media\/[^/]+(?:\/(upload|finalize|playback))?$/,
     /^\/api\/render-jobs\/[^/]+$/,
     /^\/api\/redemptions\/[^/]+\/(cancel|token)$/,
@@ -830,6 +830,29 @@ app.post("/api/merchant/consume", async (c) => {
       redemption_id: id.parse(payload.redemption),
       token_hash: await hash(token),
     }),
+  );
+});
+app.get("/api/quest-runs/:id/share-links", async (c) => {
+  const run = await owned(c, "quest_runs", c.req.param("id"));
+  const { data, error } = await c
+    .get("userDb")
+    .from("share_links")
+    .select("id,caption,created_at,expires_at")
+    .eq("run_id", run.id)
+    .eq("owner_id", c.get("actor"))
+    .is("revoked_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false });
+  if (error) dbError(error.message);
+  // Only a token hash is stored. Existing links remain revocable after refresh,
+  // but returning a fabricated or reconstructed URL would be incorrect.
+  return c.json(
+    (data || []).map((link) => ({
+      id: link.id,
+      caption: link.caption,
+      createdAt: link.created_at,
+      expiresAt: link.expires_at,
+    })),
   );
 });
 app.post("/api/quest-runs/:id/share", async (c) => {

@@ -37,6 +37,15 @@ function blocked(a: string, b: string) {
       (item.by === b && item.target === a),
   );
 }
+export function demoFollowingIds(): string[] {
+  return read()
+    .follows.filter(
+      (item) =>
+        item.followerId === demoActor().id &&
+        !blocked(item.followerId, item.creatorId),
+    )
+    .map((item) => item.creatorId);
+}
 export function demoSocialIdentity(id: string) {
   return read().profiles[id] || { username: null, photoUrl: null };
 }

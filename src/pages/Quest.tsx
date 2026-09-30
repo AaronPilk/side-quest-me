@@ -46,7 +46,8 @@ export default function Quest() {
   );
   const seriesBlocked = Boolean(
     seriesPartId &&
-    (!seriesPart.data?.canStart ||
+    (seriesPart.data?.part.id !== seriesPartId ||
+      !seriesPart.data?.canStart ||
       seriesPart.data.part.templateId !== requestedTemplate),
   );
   const target = useResource(

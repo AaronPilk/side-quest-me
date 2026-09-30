@@ -203,6 +203,69 @@ export async function runCommunityTests(sql) {
     ).posts,
     [],
   );
+  console.log(
+    "Checking Following/search filters before pagination and block enforcement…",
+  );
+  await assert.rejects(
+    () => read(null, "feed", { followingOnly: true }),
+    /forbidden/,
+  );
+  assert.equal(
+    (await read(viewer, "feed", { followingOnly: true })).posts.length,
+    0,
+  );
+  await sql(`select sq_social_follow(${q(viewer)},${q(creator)},true);`);
+  const followingFirst = await read(viewer, "feed", {
+    followingOnly: true,
+    query: "CREATOR",
+    limit: 33,
+  });
+  const followingLast = await read(viewer, "feed", {
+    followingOnly: true,
+    query: "creator",
+    limit: 33,
+    before: followingFirst.nextCursor,
+  });
+  assert.equal(followingFirst.posts.length + followingLast.posts.length, 66);
+  assert.equal(followingLast.nextCursor, null);
+  assert(followingFirst.posts.every((item) => item.viewerFollowing));
+  assert.equal(
+    (await read(outsider, "feed", { followingOnly: true })).posts.length,
+    0,
+  );
+  assert.equal(
+    (await read(null, "feed", { query: "Make your version" })).posts.length,
+    1,
+  );
+  assert.equal(
+    (await read(null, "feed", { query: "PRIVATE_SUMMARY_NEVER_PUBLIC" })).posts
+      .length,
+    0,
+  );
+  assert.equal(
+    (await read(null, "feed", { query: "%" })).posts.length,
+    0,
+    "Search treats wildcard characters literally",
+  );
+  await assert.rejects(
+    () => read(null, "feed", { query: "x".repeat(81) }),
+    /invalid_input/,
+  );
+  await mutate(viewer, "block", { userId: creator, blocked: true });
+  assert.equal(
+    (await read(viewer, "feed", { query: "Creator" })).posts.length,
+    0,
+  );
+  assert.equal(
+    (await read(viewer, "feed", { followingOnly: true })).posts.length,
+    0,
+  );
+  await mutate(viewer, "block", { userId: creator, blocked: false });
+  assert.equal(
+    (await read(viewer, "feed", { followingOnly: true })).posts.length,
+    0,
+    "Unblocking does not silently re-follow",
+  );
   const legacy = await read(null, "feed", {
     before: "2026-09-29T09:20:30.123456-04:00",
   });

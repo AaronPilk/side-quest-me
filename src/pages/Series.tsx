@@ -463,6 +463,18 @@ function SeriesEditorForm({
   const locked = new Set(
     existing?.parts.filter((p) => p.locked).map((p) => p.id) ?? [],
   );
+  const [questSearch, setQuestSearch] = useState("");
+  const [questIntensity, setQuestIntensity] = useState("");
+  const matchingTemplates = templates.filter(
+    (template) =>
+      (!questIntensity || template.intensity === questIntensity) &&
+      `${template.title} ${words(template.category)} ${words(template.intensity)}`
+        .toLowerCase()
+        .includes(questSearch.trim().toLowerCase()),
+  );
+  const matchingTemplateIds = new Set(
+    matchingTemplates.map((template) => template.id),
+  );
   const finiteLocked = draft.kind === "finite" && locked.size > 0;
   function partChange(
     index: number,
@@ -473,7 +485,24 @@ function SeriesEditorForm({
       parts: d.parts.map((p, i) => (i === index ? { ...p, ...patch } : p)),
     }));
   }
+  function canMove(index: number, direction: number) {
+    if (index + direction < 0 || index + direction >= draft.parts.length)
+      return false;
+    const parts = [...draft.parts];
+    [parts[index], parts[index + direction]] = [
+      parts[index + direction],
+      parts[index],
+    ];
+    const earlier = new Set<string>();
+    return parts.every((part) => {
+      if (part.prerequisitePartId && !earlier.has(part.prerequisitePartId))
+        return false;
+      earlier.add(part.id);
+      return true;
+    });
+  }
   function move(index: number, direction: number) {
+    if (!canMove(index, direction)) return;
     setDraft((d) => {
       const parts = [...d.parts];
       [parts[index], parts[index + direction]] = [
@@ -582,9 +611,40 @@ function SeriesEditorForm({
           <Link to="/originals/new">Write an original quest</Link> first if the
           story needs a new objective; publish it here after review.
         </p>
+        <div className="form-grid">
+          <label>
+            Find a reviewed quest
+            <input
+              type="search"
+              value={questSearch}
+              placeholder="Search titles or categories"
+              onChange={(event) => setQuestSearch(event.target.value)}
+            />
+          </label>
+          <label>
+            Filter quest intensity
+            <select
+              aria-label="Filter quest intensity"
+              value={questIntensity}
+              onChange={(event) => setQuestIntensity(event.target.value)}
+            >
+              <option value="">All intensities</option>
+              <option value="chill">Chill</option>
+              <option value="bold">Bold</option>
+              <option value="full_send">Full Send</option>
+            </select>
+          </label>
+        </div>
+        <p className="support" role="status">
+          {matchingTemplates.length} matching quests. Your selected quests stay
+          available below.
+        </p>
         <div className="series-editor-parts">
           {draft.parts.map((part, index) => {
             const frozen = locked.has(part.id);
+            const hasDependents = draft.parts.some(
+              (other) => other.prerequisitePartId === part.id,
+            );
             const savedPart = frozen
               ? existing?.parts.find((p) => p.id === part.id)
               : undefined;
@@ -626,7 +686,12 @@ function SeriesEditorForm({
                       </option>
                     )}
                     {templates
-                      .filter((t) => t.id !== savedPart?.templateId)
+                      .filter(
+                        (t) =>
+                          t.id !== savedPart?.templateId &&
+                          (matchingTemplateIds.has(t.id) ||
+                            t.id === part.templateId),
+                      )
                       .map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.title} · {words(t.intensity)} · v{t.version}
@@ -689,7 +754,7 @@ function SeriesEditorForm({
                     secondary
                     disabled={
                       frozen ||
-                      index === 0 ||
+                      !canMove(index, -1) ||
                       locked.has(draft.parts[index - 1]?.id)
                     }
                     aria-label={`Move part ${index + 1} up`}
@@ -702,7 +767,7 @@ function SeriesEditorForm({
                     secondary
                     disabled={
                       frozen ||
-                      index === draft.parts.length - 1 ||
+                      !canMove(index, 1) ||
                       locked.has(draft.parts[index + 1]?.id)
                     }
                     aria-label={`Move part ${index + 1} down`}
@@ -714,7 +779,10 @@ function SeriesEditorForm({
                     type="button"
                     secondary
                     disabled={
-                      frozen || draft.parts.length === 1 || finiteLocked
+                      frozen ||
+                      draft.parts.length === 1 ||
+                      finiteLocked ||
+                      hasDependents
                     }
                     aria-label={`Remove part ${index + 1}`}
                     onClick={() =>
@@ -727,6 +795,12 @@ function SeriesEditorForm({
                     <Trash2 size={16} />
                   </Button>
                 </div>
+                {(part.prerequisitePartId || hasDependents) && (
+                  <p className="support">
+                    Required parts stay before the parts that need them. Clear a
+                    part’s prerequisites before removing its required part.
+                  </p>
+                )}
               </fieldset>
             );
           })}
@@ -791,7 +865,21 @@ function SeriesEditor({ id }: { id?: string }) {
   );
   const templates = useResource(seriesApi.templates);
   if (me.error || detail.error || templates.error)
-    return <Notice error>{me.error || detail.error || templates.error}</Notice>;
+    return (
+      <Notice error>
+        {me.error || detail.error || templates.error}{" "}
+        <button
+          className="text-button"
+          onClick={() => {
+            me.refresh();
+            detail.refresh();
+            templates.refresh();
+          }}
+        >
+          Retry series editor
+        </button>
+      </Notice>
+    );
   if (!me.data || !templates.data || (id && !detail.data)) return <Loading />;
   if (!me.data.creator)
     return (

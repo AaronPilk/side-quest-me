@@ -1,3 +1,4 @@
+import { demoFollowingIds, demoSocialIdentity } from "./demo-social";
 import { catalog } from "../../shared/catalog";
 import {
   communityMutationSchema,
@@ -381,11 +382,24 @@ export function demoRead<T>(
   let result: unknown;
   switch (view) {
     case "feed": {
+      const following = new Set(demoFollowingIds());
+      const query = input.query?.toLowerCase() || "";
       const cursor = input.before ? parseFeedCursor(input.before) : null;
       const filtered = visible
         .filter(
           (post) =>
             (!input.templateId || post.quest.id === input.templateId) &&
+            (!input.followingOnly || following.has(post.ownerId)) &&
+            (!query ||
+              [
+                post.caption,
+                post.quest.title,
+                state.creators[post.ownerId]?.displayName,
+                demoSocialIdentity(post.ownerId).username,
+              ]
+                .join(" ")
+                .toLowerCase()
+                .includes(query)) &&
             (!input.brandOnly ||
               (post.brandOptIn &&
                 state.creators[post.ownerId]?.openToBrands)) &&
@@ -403,7 +417,10 @@ export function demoRead<T>(
       const posts = filtered.slice(0, input.limit || 30);
       const last = posts.at(-1);
       result = {
-        posts: posts.map((post) => postDto(state, post)),
+        posts: posts.map((post) => ({
+          ...postDto(state, post),
+          viewerFollowing: following.has(post.ownerId),
+        })),
         nextCursor:
           last && filtered.length > posts.length
             ? `${last.createdAt}|${last.id}`
@@ -420,7 +437,10 @@ export function demoRead<T>(
             !blocked(state, actor, p.ownerId),
         ),
       );
-      result = postDto(state, post);
+      result = {
+        ...postDto(state, post),
+        viewerFollowing: demoFollowingIds().includes(post.ownerId),
+      };
       break;
     }
     case "creator":

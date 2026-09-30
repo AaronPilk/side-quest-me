@@ -150,7 +150,15 @@ type Workspace = "business" | "admin";
 
 export default function CommunityStudio() {
   const me = useCommunity("me");
-  if (me.error) return <Notice error>{me.error}</Notice>;
+  if (me.error)
+    return (
+      <Notice error>
+        {me.error}{" "}
+        <button className="text-button" onClick={me.refresh}>
+          Retry workspace
+        </button>
+      </Notice>
+    );
   if (!me.data) return <Loading />;
   return (
     <Navigate
@@ -187,7 +195,15 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
     me.refresh();
     if (operator.data) operator.refresh();
   });
-  if (me.error) return <Notice error>{me.error}</Notice>;
+  if (me.error)
+    return (
+      <Notice error>
+        {me.error}{" "}
+        <button className="text-button" onClick={me.refresh}>
+          Retry workspace
+        </button>
+      </Notice>
+    );
   if (!me.data) return <Loading />;
   if (workspace === "admin" && !me.data.roles.includes("operator"))
     return (
@@ -222,12 +238,43 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
         )}
       </div>
       {workspace === "business" && (
+        <section
+          className="community-card"
+          aria-labelledby="business-next-step"
+        >
+          <h2 id="business-next-step">
+            {brand?.state === "approved"
+              ? "Find your next story"
+              : brand?.state === "pending"
+                ? "Your business is in review"
+                : "Start with your business profile"}
+          </h2>
+          <p>
+            {brand?.state === "approved"
+              ? "Discover real quest videos from creators open to working with you. Agree a price, channels and usage period for the exact video."
+              : brand?.state === "pending"
+                ? "An operator will review your business before licensing requests become available. Your existing requests remain below."
+                : "Tell us about your business, then submit it for review. Once approved, you can propose terms on videos that creators make available."}
+          </p>
+          {brand?.state === "approved" && (
+            <a className="button" href="#brand-videos">
+              Explore available videos
+            </a>
+          )}
+          <p className="support">
+            Payments and permissions are verified manually before licensed
+            downloads become available. Ad launching and sales tracking are not
+            connected.
+          </p>
+        </section>
+      )}
+      {workspace === "business" && (
         <section className="section">
           <h2>Your business’s licensing requests</h2>
-          {me.data.offers.some((offer) => offer.brandId === me.data!.userId) ? (
+          {me.data.offers.some((offer) => offer.brandId === brand?.id) ? (
             <div className="community-list">
               {me.data.offers
-                .filter((offer) => offer.brandId === me.data!.userId)
+                .filter((offer) => offer.brandId === brand?.id)
                 .map((offer) => (
                   <Link
                     className="community-list-link"
@@ -253,7 +300,10 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
         </section>
       )}
       {workspace === "business" && (
-        <details className="community-panel">
+        <details
+          className="community-panel"
+          open={!brand || brand.state === "rejected"}
+        >
           <summary>
             {brand
               ? `Business profile · ${brand.state}`
@@ -328,10 +378,15 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
       )}
       {action.feedback}
       {workspace === "business" && brand?.state === "approved" && (
-        <section className="section">
+        <section className="section" id="brand-videos">
           <h2>Videos open to brand inquiries</h2>
           {businessFeed.error ? (
-            <Notice error>{businessFeed.error}</Notice>
+            <Notice error>
+              {businessFeed.error}{" "}
+              <button className="text-button" onClick={businessFeed.refresh}>
+                Retry available videos
+              </button>
+            </Notice>
           ) : !businessFeed.data ? (
             <Loading />
           ) : businessFeed.data.posts.length ? (
@@ -360,11 +415,25 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
             These actions require an operator role on the server. Approval and
             manual fulfillment are recorded separately.
           </p>
-          {operator.error && <Notice error>{operator.error}</Notice>}
+          {operator.error && (
+            <Notice error>
+              {operator.error}{" "}
+              <button className="text-button" onClick={operator.refresh}>
+                Retry operator review
+              </button>
+            </Notice>
+          )}
           {!operator.data && !operator.error && <Loading />}
           {operator.data && (
             <>
               <h3>Original quests awaiting review</h3>
+              {!operator.data.drafts.some(
+                (draft) => draft.state === "submitted",
+              ) && (
+                <p className="support">
+                  No original quests are awaiting review.
+                </p>
+              )}
               {operator.data.drafts
                 .filter((draft) => draft.state === "submitted")
                 .map((draft) => (
@@ -470,6 +539,13 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
                   </details>
                 ))}
               <h3>Business approvals</h3>
+              {!operator.data.businesses.some(
+                (business) => business.state === "pending",
+              ) && (
+                <p className="support">
+                  No business profiles are awaiting review.
+                </p>
+              )}
               {operator.data.businesses
                 .filter((business) => business.state === "pending")
                 .map((business) => (

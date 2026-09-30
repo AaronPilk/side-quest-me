@@ -145,13 +145,16 @@ async function expectNoOwnerControls(page: Page) {
   ).toHaveCount(0);
 }
 
-test("public reel sign-out clears owner controls while the anonymous viewer read is still pending", async ({
+test("public reel sign-out clears owner controls immediately and never issues an anonymous account read", async ({
   page,
 }) => {
   const fixture = await reelFixture(page, "published");
   await changeAccount(page, null);
-  await expect.poll(() => fixture.otherMeRequests.includes(null)).toBe(true);
   await expect(page.getByRole("region", { name: "Reel viewer" })).toBeVisible();
+  await expectNoOwnerControls(page);
+  // Anonymous viewers must not call the private account endpoint at all; the
+  // reel's account read is gated on a signed-in session.
+  expect(fixture.otherMeRequests).not.toContain(null);
   await expect(
     page.getByText("Public reel caption", { exact: true }),
   ).toBeVisible();

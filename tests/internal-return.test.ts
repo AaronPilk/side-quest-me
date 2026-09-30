@@ -63,3 +63,14 @@ describe("internal onboarding and sign-in returns", () => {
     expect(readReturnTo()).toBe("/create");
   });
 });
+
+describe("root path canonicalization", () => {
+  it("returns to /create when the remembered route was the root, keeping its query", () => {
+    expect(validateReturnTo("/")).toBe("/create");
+    expect(validateReturnTo("/?template=day_scene_bold_v1")).toBe(
+      "/create?template=day_scene_bold_v1",
+    );
+    rememberReturnTo("/");
+    expect(consumeReturnTo()).toBe("/create");
+  });
+});

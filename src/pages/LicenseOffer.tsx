@@ -17,11 +17,17 @@ export default function LicenseOfferPage() {
   const me = useCommunity("me");
   const action = useCommunityAction(offer.refresh);
   const [downloadError, setDownloadError] = useState("");
+  const [downloading, setDownloading] = useState(false);
   if (offer.error)
     return (
       <>
         <Back to="/activity" />
-        <Notice error>{offer.error}</Notice>
+        <Notice error>
+          {offer.error}{" "}
+          <button className="text-button" onClick={offer.refresh}>
+            Retry offer
+          </button>
+        </Notice>
       </>
     );
   if (!offer.data) return <Loading />;
@@ -45,6 +51,14 @@ export default function LicenseOfferPage() {
         {data.brandName} × {data.creatorName}
       </PageTitle>
       <StateTag state={data.state} />
+      {me.error && (
+        <Notice error>
+          {me.error}{" "}
+          <button className="text-button" onClick={me.refresh}>
+            Retry your offer access
+          </button>
+        </Notice>
+      )}
       {data.suspended && (
         <Notice error>
           This offer is suspended. {data.moderationReason} Negotiation,
@@ -182,7 +196,10 @@ export default function LicenseOfferPage() {
       {data.mediaUrl && !data.suspended && (
         <Button
           secondary
+          busy={downloading}
           onClick={async () => {
+            if (downloading) return;
+            setDownloading(true);
             setDownloadError("");
             try {
               const blob = await fetchMediaBlob(data.mediaUrl!);
@@ -194,6 +211,8 @@ export default function LicenseOfferPage() {
               setTimeout(() => URL.revokeObjectURL(url), 1000);
             } catch (cause) {
               setDownloadError((cause as Error).message);
+            } finally {
+              setDownloading(false);
             }
           }}
         >

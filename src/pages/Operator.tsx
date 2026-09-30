@@ -97,6 +97,7 @@ export default function Operator() {
   async function load() {
     if (!operator) return;
     setLoading(true);
+    setError("");
     try {
       setState(await request<OperatorState>("/api/operator"));
     } catch (e) {

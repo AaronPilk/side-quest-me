@@ -266,6 +266,8 @@ export const communityReadSchema = z
     id: id.optional(),
     templateId: text(120).optional(),
     brandOnly: z.boolean().optional(),
+    followingOnly: z.boolean().optional(),
+    query: z.string().trim().max(80).optional(),
     limit: z.number().int().min(1).max(50).optional(),
     before: feedCursorSchema.optional(),
   })
@@ -296,6 +298,7 @@ export interface CreatorProfile {
   demo?: boolean;
 }
 export interface CommunityPost {
+  viewerFollowing?: boolean;
   id: string;
   series?: SeriesContext | null;
   creator: CreatorProfile;
