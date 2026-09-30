@@ -17,15 +17,20 @@ Do not create a replacement or reuse another app's resources.
 | Queue              | `sidequest-me-renders`             | Producer, consumer, and five-minute recovery schedule installed |
 | Container          | `sidequest-me-sidequestrenderer`   | FFmpeg image deployed; one instance maximum                     |
 
-The first complete release succeeded in [GitHub Actions](https://github.com/AaronPilk/side-quest-me/actions/runs/36740095380).
-The feedback release (`5eb1dac`) passed [Checks](https://github.com/AaronPilk/side-quest-me/actions/runs/36744534518)
-and [deployed successfully](https://github.com/AaronPilk/side-quest-me/actions/runs/36745483095).
-The live browser loads its exact production asset with no console errors. Full-length
-render verification found a time-limit failure with the one-vCPU configuration;
-a two-vCPU release and repeat verification are being prepared.
-The renderer configuration now specifies 2 vCPU, 6 GiB memory, and 4 GB disk to
-support the 45-second maximum reel within its four-minute encoding budget. No
-billing plan was changed. See [media verification](MEDIA.md).
+The current application release is `02a27a8`, deployed by
+[GitHub Actions run 36747886124](https://github.com/AaronPilk/side-quest-me/actions/runs/36747886124).
+The original feedback release passed [the complete Checks workflow](https://github.com/AaronPilk/side-quest-me/actions/runs/36744534518).
+The latest [Checks run](https://github.com/AaronPilk/side-quest-me/actions/runs/36747885316)
+also passed the complete suite after the focused media fixes. The live browser loads
+the expected production asset with no console errors.
+
+The renderer uses **2 vCPU, 6 GiB memory, and 4 GB disk**, capped at one instance.
+No billing plan was changed. The complete 45-second production test passed on its
+first attempt: 90.4 seconds of rendering, HTTP 200 download, matching bytes/SHA-256,
+and independent decoding of the 1080×1920 H.264/AAC file. Cross-account access was
+denied. Cleanup completed at 17:05:34 UTC: both temporary Auth accounts and all
+test R2 media were removed, retained records redacted, and rewards stayed zero.
+See [media verification](MEDIA.md).
 
 Supabase's Site URL and exact `/auth/callback` allowlist match the live origin.
 Email sign-in and email confirmation are enabled. All six server secrets are
@@ -82,14 +87,14 @@ Site URL and exact callback, and the Apple token domain allowlist, then rebuild.
   retain RLS and service-only mutation RPC permissions.
 - Live two-account verification passed Auth, profile save/edit/removal, confirmed
   preference matching, boundaries, private uploads, and cross-account denial.
-- The initial video test exposed lost stream-length metadata between the Container
-  SDK and R2. Fixed-length streaming is covered by eight actual workerd tests,
-  including exact bytes, truncation, overflow, source/storage failures and checksum
-  rejection. The fixed transfer is deployed. The first 45-second rerun reached the processing
-  time limit after 250 seconds; a larger renderer and new verification are pending.
-- Temporary verification accounts and media from the first run were deleted;
-  retained records were redacted and synthetic footage earned no rewards.
-- Local typecheck, lint, 276 unit tests, deployment configuration checks, isolated
+- Production media verification passed three private uploads, first-attempt
+  45-second rendering, a full HTTP 200 download, matching byte count and checksum,
+  independent decoding, and denial of access from a second account. Runtime tests
+  cover fixed-length R2 streams, server timeout classification, and playback ranges.
+- Temporary verification accounts and media were removed through the application
+  deletion flow, with no recovery fallback. Retained records were redacted and
+  synthetic footage earned no rewards.
+- Local typecheck, lint, 278 unit tests, deployment configuration checks, isolated
   PostgreSQL regression/advisor tests, 55 browser scenarios, and the production
   build pass. Actual server secret values are absent from the browser artifact.
-  Production render verification will be recorded after the new release.
+  The full production media verification above also passed.

@@ -53,15 +53,44 @@ The service cleans work directories on success/failure and restart, and the Work
 
 The same cleanup pass sweeps a bounded page from each staging, sealed, and render prefix, with pagination stored in a tiny private R2 operational checkpoint. An orphan must be at least 24 hours old and absent from fresh database checks of source/output/staging/thumbnail references before deletion. A database lookup failure prevents candidate deletion. The grace period exceeds both upload authorizations and fenced job leases, so an abandoned candidate cannot become a valid late commit. Never blindly delete an output after an ambiguous commit.
 
-## Production deployment and remaining verification
+## Verified production deployment
 
-The first full production deployment completed on 2026-09-30 through [GitHub Actions run 36740095380](https://github.com/AaronPilk/side-quest-me/actions/runs/36740095380). It installed the `sidequest-me` Worker, queue consumer and `sidequest-me-sidequestrenderer` Container. The GitHub runner built the pinned official Node 22 Bookworm image with Debian FFmpeg 5.1.9 and DejaVu fonts. The image uses the repository's single lockfile, runs as the unprivileged `node` user and exposes only the internal service. Docker remains unnecessary for local demo development.
+The current application release is `02a27a8`, deployed on 2026-09-30 through
+[GitHub Actions run 36747886124](https://github.com/AaronPilk/side-quest-me/actions/runs/36747886124).
+It runs the `sidequest-me` Worker, private R2, queue consumer and
+`sidequest-me-sidequestrenderer` Container. The image uses pinned Node 22 Bookworm,
+Debian FFmpeg 5.1.9 and DejaVu fonts, the repository lockfile, an unprivileged
+`node` user and the authenticated internal service. Docker is not needed for local
+demo development.
 
-The first production smoke verified three authenticated synthetic uploads and validation. Cloudflare traces showed that the 15-second reel encoded successfully in about 146 seconds, but its subsequent R2 transfer failed immediately because the stream had no runtime-known length. No durable ready reel was claimed. The fixed-length transfer patch passed the local workerd regression above and deployed with commit `5eb1dac` in [GitHub Actions run 36745483095](https://github.com/AaronPilk/side-quest-me/actions/runs/36745483095).
+The live test selected three 15-second segments from synthetic sources with
+landscape, portrait and square orientations, including a silent middle clip.
+It succeeded on **attempt one**: renderer time **90,423 ms**, approximately
+101 seconds from queued job creation to ready. The authenticated full download
+returned **HTTP 200**, no Content-Range, and **11,702,906 bytes**. Its duration was
+**45.021333 seconds**, dimensions **1080×1920**, with **H.264 video and AAC audio**.
+An independent FFmpeg process decoded the complete downloaded file. Its byte count
+and SHA-256 matched both the promoted media row and renderer metadata. The other
+test account received 404 for the actual output URL. No test video was published
+and synthetic footage earned zero points or XP. Application deletion completed
+at 17:05:34 UTC: both temporary Auth accounts and all test R2 objects were removed,
+with retained records redacted and no recovery fallback.
 
-That release configured **1 vCPU, 3 GiB RAM, 4 GB disk**. Its production smoke passed authenticated profile persistence, 1,113-candidate catalog checks, exact-plan pagination, ownership isolation and three validated 16-second synthetic source uploads. However, rendering three 15-second selections failed after about 250 seconds from job claim, with the old `invalid_media` classification and no promoted output. This timing is consistent with the renderer's 240-second encoding budget plus source transfer, but the underlying command exception was not captured by the sampled logs. Both temporary accounts and their media were fully removed by 16:45:26 UTC. This was a failed maximum-duration verification, not a ready reel.
+The renderer configuration is **2 vCPU, 6 GiB RAM, 4 GB disk**, `max_instances: 1`,
+with queue `max_concurrency: 1`. Encoding remains 1080×1920, 30 fps, `veryfast`,
+CRF 23. This is a measured synthetic maximum-duration sample, not a guaranteed
+runtime for every phone clip or a capacity/cost forecast. Test representative
+physical iOS and Android devices before a broad launch.
 
-The repository now selects a custom **2 vCPU, 6 GiB RAM, 4 GB disk** Container, keeping `max_instances: 1` and queue `max_concurrency: 1`. The original `basic` instance supplied only 0.25 vCPU, and the configured 1-vCPU release did not pass the maximum-duration fixture. Cloudflare requires at least 3 GiB per custom vCPU. Encoding remains 1080×1920, 30 fps, `veryfast`, CRF 23. The new resource choice and a fresh image must pass a complete 45-second production render before maximum-duration support is considered verified; that rollout and verification remain pending here.
+Live verification exposed and fixed three issues. The Container SDK's streaming
+response lost R2's required known-length metadata; the bounded FixedLengthStream
+helper fixes output/thumbnail storage. An earlier full-length attempt failed after
+about 250 seconds under the smaller deployment configuration; the fresh larger
+image now meets the processing budget, and timeouts are classified as retryable
+503 server failures instead of invalid clips. Finally, R2 can supply full-object
+range metadata without a Range request. The Worker now returns 206 only for
+requested playback ranges and 200 without Content-Range for complete downloads.
+Regression tests cover timeout/output/decoder errors and both download cases.
 
 For subsequent releases, build using the repository root as Docker context and the selected environment configuration. Confirm the Worker, Container rollout, queue consumer and private R2 transfer together. Production verification must download and probe the finished H.264/AAC reel, check its byte count/hash and all three parts, exercise account isolation, and finish deletion of temporary verification media/accounts. Continue separate tests of stale reservations, queue duplication, crash/retry, output fencing and expired capabilities. Measure realistic phone clips before raising limits or promising runtime/cost.
 
