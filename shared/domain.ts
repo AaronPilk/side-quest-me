@@ -1,3 +1,4 @@
+import { applePlaceIdSchema } from "./places";
 import { z } from "zod";
 
 export const CATEGORIES = [
@@ -286,6 +287,7 @@ export const outingSchema = z
     durationMinutes: z.number().int().min(15).max(720).nullable(),
     setting: settingSchema,
     area: boundedText(100),
+    applePlaceId: applePlaceIdSchema.nullable().optional(),
     transport: z.enum(["none", "walk", "bike", "transit", "car"]),
     travelMinutes: z.number().int().min(0).max(240),
     travelCostMinor: z.number().int().min(0).max(100_000),

@@ -16,6 +16,7 @@ export type AppEnv = Env &
     SUPABASE_SECRET_KEY: string;
     REDEMPTION_SIGNING_KEY: string;
     SHARE_SIGNING_KEY: string;
+    APPLE_MAPS_TOKEN?: string;
   };
 export type AppBindings = {
   Bindings: AppEnv;
@@ -116,9 +117,13 @@ export async function authenticate(c: AppContext) {
   c.set("userDb", userDb);
   c.set("serviceDb", db);
 }
-export async function json<T>(c: AppContext, schema: z.ZodType<T>): Promise<T> {
+export async function json<T>(
+  c: AppContext,
+  schema: z.ZodType<T>,
+  maxBytes = 16000,
+): Promise<T> {
   const length = Number(c.req.header("Content-Length") || 0);
-  if (length > 16000)
+  if (length > maxBytes)
     throw new ApiError("too_large", "This request is too large.", 413);
   const reader = c.req.raw.body?.getReader();
   const chunks: Uint8Array[] = [];
@@ -128,7 +133,7 @@ export async function json<T>(c: AppContext, schema: z.ZodType<T>): Promise<T> {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 16000) {
+      if (size > maxBytes) {
         await reader.cancel();
         throw new ApiError("too_large", "This request is too large.", 413);
       }
@@ -246,7 +251,12 @@ export function dbError(message: string): never {
     409,
   );
 }
-export async function rpc(c: AppContext, name: string, input: unknown) {
+export async function rpc(
+  c: AppContext,
+  name: string,
+  input: unknown,
+  onError: (message: string) => never = dbError,
+) {
   const key = c.req.header("Idempotency-Key") || crypto.randomUUID();
   if (key.length < 8 || key.length > 100)
     throw new ApiError(
@@ -259,7 +269,7 @@ export async function rpc(c: AppContext, name: string, input: unknown) {
     p_key: key,
     p_hash: await hash(input),
   });
-  if (error) dbError(error.message);
+  if (error) onError(error.message);
   return data;
 }
 export async function owned(
@@ -383,6 +393,7 @@ export async function runDto(
     template: QuestVariant;
     role: string;
     sponsorDisclosure?: string;
+    series?: Run["series"];
   };
   const latest = jobs?.[0];
   const previousReady = jobs?.find((j) => j.status === "ready");
@@ -399,6 +410,7 @@ export async function runDto(
     },
     outing: row.outing as Run["outing"],
     role: snapshot.role ?? null,
+    ...(snapshot.series ? { series: snapshot.series } : {}),
     status: row.status as Run["status"],
     clips: (media || []).map(clipDto),
     createdAt: String(row.created_at),

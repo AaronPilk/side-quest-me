@@ -7,6 +7,72 @@ import assert from "node:assert/strict";
 
 // Explicit local-only fixtures. This script does not call a provider or create resources.
 const root = fileURLToPath(new URL("../", import.meta.url));
+const deploymentFixture = {
+  CLOUDFLARE_API_TOKEN: "configuration-test-token-never-printed",
+  VITE_SUPABASE_URL: "https://configuration-fixture.supabase.co",
+  VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_configuration_fixture_only",
+};
+function preflight(overrides = {}) {
+  return spawnSync(
+    process.execPath,
+    [path.join(root, "scripts/deploy-preflight.mjs")],
+    {
+      encoding: "utf8",
+      env: { ...process.env, ...deploymentFixture, ...overrides },
+    },
+  );
+}
+assert.equal(preflight().status, 0, "Public deployment inputs should pass");
+for (const name of Object.keys(deploymentFixture)) {
+  for (const value of ["", "YOUR_CONFIGURATION_PLACEHOLDER"]) {
+    const result = preflight({ [name]: value });
+    assert.notEqual(
+      result.status,
+      0,
+      `${name} must not be empty or a placeholder`,
+    );
+    assert.match(result.stderr, new RegExp(name));
+    assert.ok(!result.stderr.includes(deploymentFixture.CLOUDFLARE_API_TOKEN));
+  }
+}
+for (const value of [
+  "http://configuration-fixture.supabase.co",
+  "https://example.com",
+  "https://configuration-fixture.supabase.co/rest/v1",
+  "not-a-url",
+]) {
+  const result = preflight({ VITE_SUPABASE_URL: value });
+  assert.notEqual(
+    result.status,
+    0,
+    "Deployments require an actual HTTPS project origin",
+  );
+}
+const legacyKey = (role) =>
+  `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify({ role })).toString("base64url")}.fixture`;
+assert.equal(
+  preflight({ VITE_SUPABASE_PUBLISHABLE_KEY: legacyKey("anon") }).status,
+  0,
+  "Legacy public anon keys remain supported",
+);
+for (const value of [
+  "sb_secret_never_print_this_server_key",
+  legacyKey("service_role"),
+]) {
+  const result = preflight({ VITE_SUPABASE_PUBLISHABLE_KEY: value });
+  assert.notEqual(
+    result.status,
+    0,
+    "Server secrets must not enter the browser bundle",
+  );
+  assert.ok(
+    !result.stderr.includes(value),
+    "Validation must not print secret values",
+  );
+}
+console.log(
+  "PASS: deployment preflight rejects missing inputs, placeholders and browser-exposed server keys.",
+);
 const directory = await mkdtemp(path.join(tmpdir(), "sidequest-config-test-"));
 try {
   await copyFile(

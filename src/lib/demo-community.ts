@@ -3,6 +3,7 @@ import {
   communityMutationSchema,
   communityReadSchema,
   originalQuestIdentity,
+  parseFeedCursor,
   type CommunityAction,
   type CommunityView,
   type CreatorProfile,
@@ -24,7 +25,11 @@ type StoredPost = CommunityPost & {
   runId: string;
   assetId: string;
 };
-type Activity = CommunityActivity & { recipientId: string };
+type Activity = CommunityActivity & {
+  recipientId: string;
+  actorId?: string;
+  sourceKey?: string;
+};
 type State = {
   creators: Record<string, CreatorProfile>;
   posts: StoredPost[];
@@ -214,8 +219,10 @@ function isPublished(_state: State, post: StoredPost) {
 }
 function postDto(state: State, item: StoredPost): CommunityPost {
   const { ownerId, runId: _runId, assetId: _assetId, ...publicFields } = item;
+  const series = runsFor(ownerId).find((run) => run.id === item.runId)?.series;
   return {
     ...publicFields,
+    ...(series ? { series } : {}),
     mediaUrl: hasReel(item) ? publicFields.mediaUrl : "",
     thumbnailUrl: hasReel(item) ? publicFields.thumbnailUrl : "",
     creator: creatorDto(state, ownerId),
@@ -262,14 +269,55 @@ function activityFor(state: State, actor: string): CommunityActivity[] {
       : [];
   });
   return [
-    ...state.activity.filter((item) => item.recipientId === actor),
+    ...state.activity.filter(
+      (item) =>
+        item.recipientId === actor &&
+        (!item.actorId || !blocked(state, actor, item.actorId)),
+    ),
     ...derived,
   ]
-    .map(({ recipientId: _recipient, ...item }) => ({
-      ...item,
-      readAt: state.readIds.includes(item.id) ? item.readAt || now() : null,
-    }))
+    .map(
+      ({
+        recipientId: _recipient,
+        actorId: _actor,
+        sourceKey: _source,
+        ...item
+      }) => ({
+        ...item,
+        readAt: state.readIds.includes(item.id) ? item.readAt || now() : null,
+      }),
+    )
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+/** Shared local notifications retain the same explicit demo identities and blocks. */
+export function demoNotify(
+  ownerId: string,
+  actorId: string,
+  kind: string,
+  targetId: string,
+  text: string,
+  href: string,
+): void {
+  const state = read();
+  const sourceKey = JSON.stringify([ownerId, actorId, kind, targetId]);
+  if (
+    ownerId === actorId ||
+    blocked(state, ownerId, actorId) ||
+    state.activity.some((item) => item.sourceKey === sourceKey)
+  )
+    return;
+  state.activity.push({
+    id: crypto.randomUUID(),
+    recipientId: ownerId,
+    actorId,
+    sourceKey,
+    kind,
+    text,
+    href,
+    readAt: null,
+    createdAt: now(),
+  });
+  write(state);
 }
 function notify(
   state: State,
@@ -294,7 +342,11 @@ export function demoOriginalTemplates() {
     .drafts.filter((draft) => draft.state === "approved")
     .map((draft) => draft.quest);
 }
-export function demoInspiration(postId: string, templateId: string) {
+export function demoInspiration(
+  postId: string,
+  templateId: string,
+  seriesPartId?: string,
+) {
   const state = read();
   const post = requireValue(state.posts.find((item) => item.id === postId));
   check(
@@ -303,6 +355,12 @@ export function demoInspiration(postId: string, templateId: string) {
       post.quest.id === templateId,
     "The inspiring post is unavailable or this is a different quest. Find another quest.",
   );
+  if (seriesPartId)
+    check(
+      runsFor(post.ownerId).find((run) => run.id === post.runId)?.series
+        ?.partId === seriesPartId,
+      "The inspiring video belongs to a different Series part. Open the series again.",
+    );
 }
 export function demoRead<T>(
   view: CommunityView,
@@ -323,6 +381,7 @@ export function demoRead<T>(
   let result: unknown;
   switch (view) {
     case "feed": {
+      const cursor = input.before ? parseFeedCursor(input.before) : null;
       const filtered = visible
         .filter(
           (post) =>
@@ -330,14 +389,25 @@ export function demoRead<T>(
             (!input.brandOnly ||
               (post.brandOptIn &&
                 state.creators[post.ownerId]?.openToBrands)) &&
-            (!input.before || post.createdAt < input.before),
+            (!cursor ||
+              Date.parse(post.createdAt) < Date.parse(cursor.timestamp) ||
+              (Boolean(cursor.postId) &&
+                Date.parse(post.createdAt) === Date.parse(cursor.timestamp) &&
+                post.id > cursor.postId!)),
         )
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      const posts = filtered.slice(0, input.limit || 20);
+        .sort(
+          (a, b) =>
+            Date.parse(b.createdAt) - Date.parse(a.createdAt) ||
+            a.id.localeCompare(b.id),
+        );
+      const posts = filtered.slice(0, input.limit || 30);
+      const last = posts.at(-1);
       result = {
         posts: posts.map((post) => postDto(state, post)),
         nextCursor:
-          filtered.length > posts.length ? posts.at(-1)?.createdAt : null,
+          last && filtered.length > posts.length
+            ? `${last.createdAt}|${last.id}`
+            : null,
       };
       break;
     }

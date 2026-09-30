@@ -2,6 +2,12 @@
 
 The additive community migration keeps private journals, uploaded sources, reward ledgers, campaigns, and historical accepted quests separate from publication. Nothing migrates an existing reel or share link into a public post. The existing unknown-role migration remains in place.
 
+The [creator and Series guide](CREATOR_SERIES.md) describes the current five-tab
+navigation, social photos/usernames/follows, Earnings, and authored Series added
+on top of this contract. Creator licensing requests live in Rewards → Brand offers;
+business operations use `/business`, staff review uses `/admin`, and `/studio`
+redirects according to the signed-in account's authorized workspace.
+
 ## Shared API contract
 
 `shared/community.ts` is the canonical TypeScript/Zod contract. All mutation inputs are strict objects, identifiers are UUIDs, mutable records require their `expectedVersion`, and the Worker hashes `{action,input}` with a caller-retained idempotency key. New creator/business/draft records use version zero in the request; stored records begin at one. Business approval is derived from the stored, operator-reviewed business profile. Operators come from the existing private membership table, never user metadata.
@@ -29,7 +35,7 @@ Mutations return direct DTOs: creator actions return `CreatorProfile`, post acti
 
 ## Publication and personal attempts
 
-A post pins one sealed, ready reel asset, its owning finalized run, and the run's accepted template/version. Its public DTO contains only that reel's stream URL, a generated-avatar identity, caption, accepted quest instructions, optional author attribution, public counts, and a frozen sponsorship disclosure. It excludes email, imported summaries, private survey answers, precise outing/location/budget, raw clip metadata, and R2 object keys. Public creator profiles are separate from the private account profile. There is no arbitrary remote avatar fetch.
+A post pins one sealed, ready reel asset, its owning finalized run, and the run's accepted template/version. Its public DTO contains only that reel's stream URL, public creator identity/photo URL, caption, accepted quest instructions, optional author and Series-part attribution, public counts, and a frozen sponsorship disclosure. It excludes email, imported summaries, private survey answers, precise outing/location/budget, participant progress, raw clip metadata, and R2 object keys. Public creator profiles are separate from the private account profile. Profile photos use normalized, app-owned storage; there is no arbitrary remote avatar fetch.
 
 A public post stream requires current publication, an active creator, and a sealed reel. Owners retain their unpublished post metadata and should use the private journal for playback and managing the private original. The backend also permits an authenticated owner to fetch that unpublished reel; unauthenticated public playback is unavailable. Source-clip IDs never authorize a community stream. Unpublishing removes discovery/playback without deleting the private original. An operator-removed post cannot be re-published through an owner update. Existing external copies cannot be withdrawn by an application state change.
 

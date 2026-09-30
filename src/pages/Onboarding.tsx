@@ -12,6 +12,7 @@ import { api } from "../lib/api";
 import { Button, Notice, PageTitle, Loading } from "../components/ui";
 import SummaryReview from "../components/SummaryReview";
 import { PreferenceControl } from "../components/PreferenceControl";
+import { consumeReturnTo } from "../lib/internal-return";
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -75,6 +76,12 @@ export default function Onboarding() {
     setStep((current) => current + 1);
     window.scrollTo(0, 0);
   }
+  function cancel() {
+    sessionStorage.removeItem("sq-profile-draft");
+    navigate(
+      consumeReturnTo(profile?.onboardingCompleted ? "/account" : "/create"),
+    );
+  }
   async function finish() {
     if (!profile) return;
     setBusy(true);
@@ -85,9 +92,7 @@ export default function Onboarding() {
         onboardingCompleted: true,
       });
       sessionStorage.removeItem("sq-profile-draft");
-      const target = sessionStorage.getItem("sq-return-to") || "/create";
-      sessionStorage.removeItem("sq-return-to");
-      navigate(target);
+      navigate(consumeReturnTo());
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -102,11 +107,7 @@ export default function Onboarding() {
       <div className="onboard-top">
         <button
           className="back"
-          onClick={() =>
-            step <= -1
-              ? navigate(profile.onboardingCompleted ? "/profile" : "/")
-              : setStep(step - 1)
-          }
+          onClick={() => (step <= -1 ? cancel() : setStep(step - 1))}
         >
           <ArrowLeft size={18} />
           Back
@@ -118,6 +119,16 @@ export default function Onboarding() {
               ? "Your profile"
               : "Optional context"}
         </span>
+        {step >= 0 && (
+          <button
+            className="text-button"
+            type="button"
+            onClick={cancel}
+            disabled={busy}
+          >
+            Cancel
+          </button>
+        )}
       </div>
       {step === -1 ? (
         <>

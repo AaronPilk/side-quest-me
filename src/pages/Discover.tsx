@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -9,14 +9,21 @@ import {
   Plus,
   Sparkles,
   ShieldCheck,
+  X,
 } from "lucide-react";
 import {
   Link,
   useParams,
   useSearchParams,
   useNavigate,
+  useLocation,
 } from "react-router-dom";
-import type { CommunityPost, CommunityMe } from "../../shared/community";
+import type {
+  CommunityPost,
+  CommunityMe,
+  CommunityReadResults,
+} from "../../shared/community";
+import { communityApi } from "../lib/community-api";
 import { Button, Empty, Loading, Notice, Back } from "../components/ui";
 import {
   CreatorAvatar,
@@ -27,6 +34,9 @@ import {
   useCommunityAction,
 } from "../components/Community";
 import { LicenseTermsForm } from "../components/LicenseTermsForm";
+import { validateReturnTo } from "../lib/internal-return";
+import "../reel-design.css";
+import { SeriesEpisodeNav } from "../components/SeriesEpisodeNav";
 
 export function DiscoverPostCard({
   post,
@@ -53,9 +63,11 @@ export function DiscoverPostCard({
           <CreatorAvatar
             avatar={post.creator.avatarKey}
             name={post.creator.displayName}
+            photoUrl={post.creator.photoUrl}
           />
           <span>
             <strong>{post.creator.displayName}</strong>
+            {post.creator.username && <small>@{post.creator.username}</small>}
             {(post.demo || post.creator.demo) && (
               <small>Isolated demo creator · fixture footage</small>
             )}
@@ -107,6 +119,19 @@ export function DiscoverPostCard({
         </h2>
         <p>{post.quest.hook}</p>
         {post.caption && <p className="post-caption">{post.caption}</p>}
+        {post.series && (
+          <Link className="series-post-link" to={`/series/${post.series.id}`}>
+            <Layers2 size={18} />
+            <span>
+              <strong>{post.series.title}</strong>
+              <small>
+                Part {post.series.position} · {post.series.partTitle}
+              </small>
+            </span>
+            <ArrowRight size={17} />
+          </Link>
+        )}
+        {detail && post.series && <SeriesEpisodeNav source={post.series} />}
         <Planning quest={post.quest} />
         {post.questAuthor && (
           <p className="support">
@@ -125,6 +150,7 @@ export function DiscoverPostCard({
         <TryQuest
           id={post.quest.id}
           postId={post.state === "published" ? post.id : undefined}
+          seriesPartId={post.series?.partId}
         />
         <div className="post-secondary">
           <Link to={`/discover?template=${encodeURIComponent(post.quest.id)}`}>
@@ -226,7 +252,7 @@ export function DiscoverPostCard({
               />
             </details>
           ) : (
-            <Link className="text-button" to="/studio">
+            <Link className="text-button" to="/business">
               Request to use video · set up your business
             </Link>
           ))}
@@ -279,27 +305,154 @@ export function DiscoverPostCard({
     </article>
   );
 }
+function DiscoverFeed({
+  templateId,
+  brandOnly,
+  viewer,
+}: {
+  templateId?: string;
+  brandOnly: boolean;
+  viewer?: CommunityMe;
+}) {
+  const [posts, setPosts] = useState<CommunityPost[] | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const requestId = useRef(0);
+  const pending = useRef(false);
+  const load = useCallback(
+    async (before?: string) => {
+      if (pending.current) return;
+      pending.current = true;
+      const currentRequest = ++requestId.current;
+      setBusy(true);
+      setError("");
+      try {
+        const page = await communityApi.read<CommunityReadResults["feed"]>(
+          "feed",
+          {
+            ...(templateId ? { templateId } : {}),
+            ...(brandOnly ? { brandOnly: true } : {}),
+            ...(before ? { before } : {}),
+            limit: 30,
+          },
+        );
+        if (currentRequest !== requestId.current) return;
+        if (before && page.nextCursor === before)
+          throw new Error(
+            "The next page could not be loaded. Please try again.",
+          );
+        setPosts((previous) => {
+          const unique = new Map(
+            (before ? previous || [] : []).map((post) => [post.id, post]),
+          );
+          for (const post of page.posts) unique.set(post.id, post);
+          return [...unique.values()];
+        });
+        setNextCursor(page.nextCursor);
+      } catch (cause) {
+        if (currentRequest === requestId.current)
+          setError((cause as Error).message);
+      } finally {
+        if (currentRequest === requestId.current) {
+          pending.current = false;
+          setBusy(false);
+        }
+      }
+    },
+    [templateId, brandOnly],
+  );
+  useEffect(() => {
+    void load();
+    return () => {
+      // A filter change unmounts this keyed feed. Neither successful nor failed
+      // responses from its old requests can affect the next feed.
+      requestId.current++;
+      pending.current = false;
+    };
+  }, [load]);
+
+  if (posts === null)
+    return (
+      <div className="feed-loading">
+        {error ? (
+          <>
+            <Notice error>{error}</Notice>
+            <Button secondary busy={busy} onClick={() => void load()}>
+              Try again
+            </Button>
+          </>
+        ) : (
+          <Loading />
+        )}
+      </div>
+    );
+  if (!posts.length)
+    return (
+      <Empty
+        title={
+          brandOnly
+            ? "No videos open to brands yet."
+            : templateId
+              ? "No public attempts yet."
+              : "The first story could be yours."
+        }
+        to={
+          templateId
+            ? `/create?template=${encodeURIComponent(templateId)}`
+            : "/create"
+        }
+        action={templateId ? "Try this quest" : "Find a quest"}
+      >
+        {brandOnly
+          ? "Creators choose whether each video is open to inquiries. You can still explore all quests."
+          : "Complete a quest and choose whether to publish your reel. Private participation is always welcome."}
+      </Empty>
+    );
+  return (
+    <>
+      <div className="discover-feed" aria-busy={busy}>
+        {posts.map((item) => (
+          <DiscoverPostCard key={item.id} post={item} viewer={viewer} />
+        ))}
+      </div>
+      <div className="feed-pagination">
+        {error && <Notice error>{error}</Notice>}
+        {nextCursor ? (
+          <Button secondary busy={busy} onClick={() => void load(nextCursor)}>
+            {busy
+              ? "Loading more…"
+              : error
+                ? "Try loading more again"
+                : "Load more videos"}
+          </Button>
+        ) : (
+          <p className="support" role="status">
+            You’re all caught up.
+          </p>
+        )}
+      </div>
+    </>
+  );
+}
+
 export default function Discover() {
   const { id } = useParams();
+  const location = useLocation();
+  const closeLink = useRef<HTMLAnchorElement>(null);
   const [params, setParams] = useSearchParams();
   const templateId = params.get("template") || undefined;
   const brandOnly = params.get("view") === "brands";
-  const feed = useCommunity(
-    "feed",
-    {
-      ...(templateId ? { templateId } : {}),
-      ...(brandOnly ? { brandOnly: true } : {}),
-    },
-    !id,
-  );
   const post = useCommunity("post", { id }, Boolean(id));
   const me = useCommunity("me");
-  const selected = id ? post : feed;
-  if (id && selected.error)
+  useEffect(() => {
+    if (id && post.data) closeLink.current?.focus({ preventScroll: true });
+  }, [id, post.data?.id]);
+  if (id && post.error)
     return (
       <>
         <Back to="/discover" />
-        <Notice error>{selected.error}</Notice>
+        <Notice error>{post.error}</Notice>
         <Link className="button secondary" to="/create">
           Find an available quest
         </Link>
@@ -308,15 +461,29 @@ export default function Discover() {
   if (id && !post.data) return <Loading />;
   if (id && post.data)
     return (
-      <>
-        <Back to="/discover">Discover</Back>
+      <section className="reel-viewer" aria-label="Reel viewer">
+        <header className="reel-viewer-header">
+          <Link
+            ref={closeLink}
+            className="reel-close"
+            aria-label="Close reel"
+            to={
+              validateReturnTo(
+                (location.state as { returnTo?: string } | null)?.returnTo,
+              ) || "/discover"
+            }
+          >
+            <X size={22} /> <span>Close</span>
+          </Link>
+          <span>Sidequest</span>
+        </header>
         <DiscoverPostCard
           post={post.data}
           viewer={me.data}
           refresh={post.refresh}
           detail
         />
-      </>
+      </section>
     );
   return (
     <div className="discover-layout">
@@ -367,38 +534,12 @@ export default function Discover() {
             </Link>
           )}
         </div>
-        {feed.error ? (
-          <div className="feed-loading">
-            <Notice error>{feed.error}</Notice>
-            <Button secondary onClick={feed.refresh}>
-              Try again
-            </Button>
-          </div>
-        ) : !feed.data ? (
-          <div className="feed-loading">
-            <Loading />
-          </div>
-        ) : feed.data.posts.length ? (
-          <div className="discover-feed">
-            {feed.data.posts.map((item) => (
-              <DiscoverPostCard key={item.id} post={item} viewer={me.data} />
-            ))}
-          </div>
-        ) : (
-          <Empty
-            title={
-              brandOnly
-                ? "No videos open to brands yet."
-                : "The first story could be yours."
-            }
-            to="/create"
-            action="Find a quest"
-          >
-            {brandOnly
-              ? "Creators choose whether each video is open to inquiries. You can still explore all quests."
-              : "Complete a quest and choose whether to publish your reel. Private participation is always welcome."}
-          </Empty>
-        )}
+        <DiscoverFeed
+          key={JSON.stringify([templateId, brandOnly])}
+          templateId={templateId}
+          brandOnly={brandOnly}
+          viewer={me.data}
+        />
         <p className="feed-footnote">
           <ShieldCheck size={14} /> Your version can always stay private.
         </p>

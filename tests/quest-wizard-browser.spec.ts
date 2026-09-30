@@ -27,7 +27,7 @@ test("Create is first and asks one question at a time, preserving answers throug
   await openCreate(page);
   await expect(
     page.getByRole("navigation", { name: "Primary" }).getByRole("link"),
-  ).toHaveText(["Create", "Discover", "Activity", "Profile"]);
+  ).toHaveText(["Create", "Discover", "Rewards", "Activity", "Profile"]);
   await expect(
     page.getByRole("heading", { name: "What’s the plan?", exact: true }),
   ).toBeVisible();
@@ -182,7 +182,7 @@ test("venue questions keep permission explicit and returning home clears travel 
     exact: true,
   });
   const adultEligibility = page.getByRole("checkbox", {
-    name: "All participants meet the venue’s legal age requirement.",
+    name: "All participants are adults and meet the venue’s legal age requirement.",
     exact: true,
   });
   const nightlife = page.getByRole("checkbox", {

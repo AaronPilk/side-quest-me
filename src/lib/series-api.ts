@@ -1,0 +1,70 @@
+import { z } from "zod";
+import {
+  seriesSaveSchema,
+  type SeriesDetail,
+  type SeriesPart,
+  type SeriesSave,
+  type SeriesSummary,
+  type SeriesTemplate,
+} from "../../shared/series";
+import { request } from "./api";
+import { DEMO } from "./auth";
+import {
+  demoSeriesDetail,
+  demoSeriesList,
+  demoSeriesPart,
+  demoSeriesMutate,
+  demoSeriesTemplates,
+} from "./demo-series";
+export const seriesApi = {
+  list: async (creatorId?: string, mine = false): Promise<SeriesSummary[]> =>
+    DEMO
+      ? demoSeriesList(creatorId, mine)
+      : request(
+          `/api/series${mine ? "/mine" : creatorId ? `?creatorId=${encodeURIComponent(z.uuid().parse(creatorId))}` : ""}`,
+        ),
+  detail: async (id: string): Promise<SeriesDetail> =>
+    DEMO
+      ? demoSeriesDetail(z.uuid().parse(id))
+      : request(`/api/series/${z.uuid().parse(id)}`),
+  part: async (
+    id: string,
+  ): Promise<{
+    series: SeriesSummary;
+    part: SeriesPart;
+    canStart: boolean;
+    reason: string | null;
+  }> =>
+    DEMO
+      ? demoSeriesPart(z.uuid().parse(id))
+      : request(`/api/series/parts/${z.uuid().parse(id)}`),
+  templates: async (): Promise<SeriesTemplate[]> =>
+    DEMO ? demoSeriesTemplates() : request("/api/series/templates"),
+  save: async (
+    input: SeriesSave,
+    key = crypto.randomUUID(),
+  ): Promise<SeriesDetail> => {
+    const parsed = seriesSaveSchema.parse(input);
+    return DEMO
+      ? demoSeriesMutate("save", parsed, key)
+      : request("/api/series/mutate", {
+          method: "POST",
+          headers: { "Idempotency-Key": key },
+          body: JSON.stringify({ action: "save", input: parsed }),
+        });
+  },
+  follow: async (
+    id: string,
+    following: boolean,
+    key = crypto.randomUUID(),
+  ): Promise<SeriesDetail> => {
+    const input = { id: z.uuid().parse(id), following };
+    return DEMO
+      ? demoSeriesMutate("follow", input, key)
+      : request("/api/series/mutate", {
+          method: "POST",
+          headers: { "Idempotency-Key": key },
+          body: JSON.stringify({ action: "follow", input }),
+        });
+  },
+};

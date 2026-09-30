@@ -177,3 +177,149 @@ test("manual summary review, immediate removal and error feedback preserve separ
     fullPage: true,
   });
 });
+
+test("profile setup returns to the exact selected quest after Back, Cancel, completion and refresh", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    sessionStorage.setItem("sq-demo-started", "1"),
+  );
+  const target =
+    "/create?template=date_pit_crew_chill_v1&from=55555555-5555-4555-8555-555555555555";
+  await page.goto(target);
+  await page.getByRole("button", { name: "Friends", exact: true }).click();
+  const before = await page.evaluate(() => ({
+    outing: sessionStorage.getItem("sq-outing"),
+    flow: sessionStorage.getItem("sq-quest-flow"),
+  }));
+  const enterProfile = () =>
+    page
+      .getByRole("link", { name: "Make it your kind of quest", exact: false })
+      .click();
+  await enterProfile();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
+  await enterProfile();
+  await page.getByRole("button", { name: "Skip for now", exact: true }).click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
+  await enterProfile();
+  await page.getByRole("button", { name: "Skip for now", exact: true }).click();
+  for (let step = 0; step < 10; step++)
+    await page
+      .getByRole("button", { name: "Skip this question", exact: true })
+      .click();
+  await page.getByRole("button", { name: "Looks right", exact: true }).click();
+  await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Who’s coming?", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Friends", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(
+    await page.evaluate(() => ({
+      outing: sessionStorage.getItem("sq-outing"),
+      flow: sessionStorage.getItem("sq-quest-flow"),
+    })),
+  ).toEqual(before);
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("sq-return-to")),
+  ).toBeNull();
+});
+
+test("sequential typing preserves spaces in boundaries, humor examples and other skills through save and refresh", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    sessionStorage.setItem("sq-demo-started", "1"),
+  );
+  await page.goto("/profile/import");
+  await page
+    .locator("summary")
+    .filter({ hasText: "Interests & useful skills" })
+    .click();
+  await page.locator("summary").filter({ hasText: "Firm boundaries" }).click();
+  const phrases = [
+    ["Another skill (optional)", "  live sound mixing  ", "live sound mixing"],
+    [
+      "Creators or examples (optional)",
+      "  dry comedy sketches  ",
+      "dry comedy sketches",
+    ],
+    [
+      "Another boundary (optional; needs review before recommendations)",
+      "  no loud music  ",
+      "no loud music",
+    ],
+  ];
+  for (const [label, raw, saved] of phrases) {
+    const input = page.getByRole("textbox", { name: label, exact: true });
+    await input.pressSequentially(raw, { delay: 5 });
+    await expect(input).toHaveValue(raw);
+    await input.press("Tab");
+    await expect(input).toHaveValue(saved);
+  }
+  await page
+    .getByRole("button", { name: "Save confirmed preferences", exact: true })
+    .click();
+  await expect(
+    page.getByText("Confirmed preferences saved.", { exact: false }),
+  ).toBeVisible();
+  await page.reload();
+  await page
+    .locator("summary")
+    .filter({ hasText: "Interests & useful skills" })
+    .click();
+  await page.locator("summary").filter({ hasText: "Firm boundaries" }).click();
+  for (const [label, , saved] of phrases)
+    await expect(
+      page.getByRole("textbox", { name: label, exact: true }),
+    ).toHaveValue(saved);
+  expect((await storedProfile(page)).preferences).toMatchObject({
+    otherSkill: "live sound mixing",
+    humorExamples: "dry comedy sketches",
+    otherExclusion: "no loud music",
+  });
+});
+
+test("account describes confirmed participation and preparation while an unanswered profile stays unknown", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    sessionStorage.setItem("sq-demo-started", "1"),
+  );
+  await page.goto("/account");
+  await expect(
+    page.getByText("No preferences confirmed yet.", { exact: false }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Save name", exact: true }).click();
+  await expect(page.getByText("Profile saved.", { exact: true })).toBeVisible();
+  await page.evaluate(
+    (preferences) => {
+      const saved = JSON.parse(localStorage.getItem("sidequest-demo-v1")!);
+      saved.me.profile.preferences = preferences;
+      localStorage.setItem("sidequest-demo-v1", JSON.stringify(saved));
+    },
+    {
+      ...DEFAULT_PREFERENCES,
+      premises: ["open_mic"],
+      preparation: "a_few_things",
+      sources: { premises: "survey", preparation: "survey" },
+    },
+  );
+  await page.reload();
+  await expect(
+    page.getByText("Would perform at an open mic", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Happy to collect a few things", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("No preferences confirmed yet.", { exact: false }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Happy to rotate roles", { exact: true }),
+  ).toHaveCount(0);
+});

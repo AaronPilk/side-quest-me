@@ -1,0 +1,239 @@
+.rewards-page {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.rewards-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 15px;
+  background: #e9edf2;
+  margin: 22px 0 28px;
+}
+.rewards-tabs button {
+  flex: 1 1 5rem;
+  min-width: 0;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  min-height: 44px;
+  padding: 10px 7px;
+  font-size: 0.875rem;
+  font-weight: 550;
+  overflow-wrap: normal;
+}
+.rewards-tabs button[aria-selected="true"] {
+  background: white;
+  box-shadow: 0 2px 8px #1836500b;
+  color: var(--action);
+}
+.rewards-demo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--secondary);
+  margin: 0 0 16px;
+}
+.earnings-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 14px;
+}
+.earnings-summary > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 26px;
+  border-radius: 23px;
+  border: 1px solid var(--divider);
+  background: white;
+}
+.earnings-summary .earnings-paid {
+  background: #f0f7f4;
+  border-color: #dcece2;
+}
+.earnings-summary > div > span:not(.earnings-symbol) {
+  font-weight: 550;
+  font-size: 0.875rem;
+}
+.earnings-summary strong {
+  font-size: clamp(2rem, 6vw, 2.75rem);
+  letter-spacing: -0.05em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+.earnings-summary small {
+  font-size: 0.75rem;
+  color: var(--secondary);
+}
+.earnings-symbol {
+  display: grid;
+  place-items: center;
+  color: #327452;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: #ffffffbd;
+}
+.earnings-pending > svg {
+  color: #94713c;
+  margin: 10px 0 4px;
+}
+.earnings-explainer {
+  font-size: 0.8125rem;
+  margin: 18px 2px 30px;
+}
+.earnings-history-heading {
+  margin: 25px 0 15px;
+}
+.earnings-history-heading > svg {
+  color: var(--secondary);
+}
+.earnings-history {
+  display: grid;
+  gap: 12px;
+}
+.payment-row {
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid var(--divider);
+  background: white;
+}
+.payment-row-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.payment-row-heading > div {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.payment-row-heading p {
+  margin: 5px 0 0;
+  font-size: 0.8125rem;
+  color: var(--secondary);
+  overflow-wrap: anywhere;
+}
+.payment-state {
+  border-radius: 20px;
+  padding: 5px 9px;
+  font-size: 0.6875rem;
+  background: #fff3da;
+  color: #805b17;
+}
+.payment-state.paid {
+  background: #e8f5ec;
+  color: #2c7043;
+}
+.payment-row-amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 17px 0 12px;
+}
+.payment-row-amount strong {
+  font-size: 1.5rem;
+}
+.payment-row-amount time,
+.payment-reference {
+  font-size: 0.75rem;
+  color: var(--secondary);
+  overflow-wrap: anywhere;
+}
+.payment-row > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  font-size: 0.8125rem;
+}
+.rewards-next {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 2px;
+  border-top: 1px solid var(--divider);
+  margin-top: 28px;
+}
+.rewards-next strong,
+.rewards-next small {
+  display: block;
+}
+.rewards-next strong {
+  font-size: 0.875rem;
+}
+.rewards-next small {
+  color: var(--secondary);
+  font-size: 0.75rem;
+  margin-top: 6px;
+}
+.rewards-offer-intro {
+  margin-bottom: 24px;
+}
+.offer-group {
+  margin: 26px 0;
+}
+.offer-group h3 {
+  margin-bottom: 12px;
+}
+.rewards-offer-link {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.rewards-offer-link > span:first-child {
+  flex: 1 1 170px;
+  min-width: 0;
+}
+.rewards-offer-link strong,
+.rewards-offer-link small {
+  overflow-wrap: anywhere;
+}
+.offer-link-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--secondary);
+}
+.rewards-separation {
+  color: var(--secondary);
+  margin-top: 28px;
+}
+.rewards-separation > svg {
+  margin-right: 4px;
+}
+@media (max-width: 560px) {
+  .earnings-summary {
+    grid-template-columns: 1fr;
+  }
+  .earnings-summary > div {
+    padding: 23px;
+  }
+  .earnings-summary .earnings-pending {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px 12px;
+  }
+  .earnings-pending > svg {
+    margin: 0;
+  }
+  .earnings-pending strong,
+  .earnings-pending small {
+    grid-column: 2;
+  }
+  .earnings-pending strong {
+    font-size: 1.625rem;
+  }
+  .payment-row {
+    padding: 18px;
+  }
+}

@@ -22,24 +22,31 @@ npm run dev:demo
 ```
 
 Open **http://127.0.0.1:5173**. The banner always identifies the local demo.
-The four primary destinations are **Create**, **Discover**, **Activity**, and
-**Profile**. Private journal, rewards, account settings, and onboarding remain in
-secondary navigation. The ten-question onboarding is editable; import is optional
+The five primary destinations are **Create**, **Discover**, **Rewards**, **Activity**,
+and **Profile**. Settings, the private journal, and business workspace live in the
+account menu; Admin appears only for authorized staff. The ten-question onboarding is editable; import is optional
 and uses an explicit manual review. Unanswered questions remain unknown. Select an
 at-home, Chill, zero-budget outing for the quickest path. Create asks one outing
 question at a time, saves progress in the current browser tab, and lets you edit
 a final review before finding matching quests. Travel and venue questions follow
 your setting; trying a discovered quest keeps its scene and energy while asking
-for your own plans. Accept a quest,
+for your own plans. Viability checks explain actual constraints and offer explicit
+adjustments when a combination has no match. Optional [Apple Maps place selection](docs/MAPS.md)
+connects an outing to a real place and directions once a MapKit JS token is configured.
+Accept a quest,
 record/upload three 5–15-second selections, and complete it. The local renderer
 saves actual files under `.local/media`; demo profile/progress stays in browser
 storage. Local progress is a simulation, not proof of the production economy.
 
-Use the **Demo view** selector to exercise separate local personas. On Discover,
+Open **Settings → Demo tools → Demo view** to exercise separate local personas. It
+is a local testing tool, not an account role selector. On Discover,
 try the labeled fixture video as Creator, confirm your own outing, capture three
 clips, and finish. **Keep private** leaves the reel in your journal; **Publish to
-Sidequest** explicitly creates a post. Profile has a separate public name, avatar,
-bio, and brand-availability setting. Account settings → imported summary lets you
+Sidequest** explicitly creates a post. Profile has a public photo, unique
+@username, display name, bio, brand-availability setting, and persisted follows.
+Its Videos, Quests, and Series tabs show public content; Private is owner-only.
+Opening a video launches a focused reel view with attribution and Try this quest.
+Account settings → imported summary lets you
 edit/remove text and confirm matching preferences without repeating onboarding.
 
 For licensing, switch to **Brand**, open an opted-in video, and select **Request
@@ -47,15 +54,29 @@ to use video**. Enter payment, channels, dates, edits, and an explicit agreed fe
 (zero is permitted; no fee rate is assumed). Switch to **Second creator** to review
 the fixture video's offer in Activity, then counter, decline, or accept. The other
 party must accept a counter. Accepted terms remain **pending fulfillment** until
-**Operator** records manual payment and permission references in `/studio`.
+**Operator** records manual payment and permission references in **Admin** (`/admin`).
 Only a completed deal within its usage period unlocks the brand's commercial
 download. These personas, businesses, money, and references are demo fixtures.
 
+Rewards separates **Earnings**, **Perks**, and **Brand offers**. Only verified
+fulfillment counts as paid; accepted terms awaiting fulfillment remain pending,
+and unaccepted proposals count as neither. Quest points remain separate from money.
+Business setup and licensed-video management live in `/business`. Legacy `/studio`
+links redirect to the appropriate workspace for the signed-in account.
+
 To author a quest, choose Create → **Draft an original quest**, save and submit
-the structured plan, then switch to Operator → `/studio` to review it. Approval
+the structured plan, then switch to Operator → `/admin` to review it. Approval
 makes the exact version publicly available to try through ordinary eligibility
 checks. A new business profile also needs an operator decision before requesting
 videos; the labeled demo brand starts preapproved solely for local exploration.
+
+To author a Series, choose Create → **Start a series**. Add ordered parts from
+reviewed quests, choose a finite story or an ongoing series, and save a draft or
+publish. Prerequisites require an earlier part and a reason. Participants use their
+own outing constraints and completion records; watching or following never
+completes a quest. Following a series adds new published parts to Activity.
+See [the creator and Series guide](docs/CREATOR_SERIES.md) for versioning, privacy,
+and exact-video licensing behavior.
 
 The first renderer run needs `sharp` from `npm ci`. Camera access needs localhost
 or HTTPS. Permission denial has an equal file-upload/capture alternative. Generated
@@ -77,7 +98,7 @@ node scripts/config-smoke.mjs
 ```
 
 Database tests start a fresh temporary PostgreSQL cluster, apply every migration
-and the thirty-variant seed, run real concurrent transactions and RLS checks,
+and the 33-variant seed, run real concurrent transactions and RLS checks,
 then stop/remove the cluster. They do not contact an existing database. The
 advisor mode briefly enables loopback TLS for the CLI. It is also local.
 
@@ -94,9 +115,11 @@ use the real local render adapter above or enable it deliberately with Docker.
 ## Connect staging
 
 1. Choose the intended GitHub repository, Supabase project and Cloudflare account.
-   No existing unrelated project should be repurposed. This repository has no remote.
+   No existing unrelated project should be repurposed. The source repository is
+   [AaronPilk/side-quest-me](https://github.com/AaronPilk/side-quest-me).
 2. Copy `.env.example` to `.env.local` and `.dev.vars.example` to `.dev.vars`.
-   Only `VITE_SUPABASE_URL` and the public publishable key go in the browser.
+   `VITE_SUPABASE_URL`, the public publishable key, and the optional domain-restricted
+   MapKit JS token are browser-public configuration.
    Keep secret keys and renderer/redemption/share signing keys server-only.
 3. Apply [the migration and seed](supabase/) to the selected fresh **staging**
    database after inspecting its target. See [database operations](docs/DATABASE.md).
@@ -154,11 +177,11 @@ Configure the chosen hostname and Supabase callback allowlist to match
 
 ## What is here
 
-- `src/`: four consumer tabs, public creator posts, original quest review, structured
+- `src/`: five consumer tabs, social profiles, authored Series, public creator posts, original quest review, structured
   licensing, email sign-in, confirmed preferences, capture/review, private journal,
   export, rewards, and restricted operator tools.
-- `shared/`: canonical types, hard filters, deterministic ranking and thirty
-  complete authored variants across ten families. Branding lives in `APP_CONFIG`.
+- `shared/`: canonical types, hard filters, deterministic ranking and 33
+  complete authored variants across 13 families. Branding lives in `APP_CONFIG`.
 - `worker/`: JWT/session checks, RLS reads, narrow transaction endpoints,
   private media, explicit sharing, Queue dispatch and scheduled recovery/cleanup.
 - `supabase/`: schema, immutable ledger/evidence/snapshots, fenced jobs,

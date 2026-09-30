@@ -191,6 +191,19 @@ label {
   margin-bottom: 26px;
   font-size: 0.8125rem;
 }
+.series-attempt-link {
+  border: 1px solid var(--divider);
+  border-radius: 18px;
+  background: var(--surface);
+  padding: 16px;
+  margin: 24px 0;
+}
+.series-attempt-link h2 {
+  margin: 8px 0;
+}
+.series-attempt-link .fine-print {
+  margin-bottom: 0;
+}
 .quest-card {
   border-radius: 21px;
   box-shadow: var(--shadow-card);
@@ -722,6 +735,12 @@ main {
   font-size: 2rem;
   border-width: 5px;
   box-shadow: 0 0 0 1px var(--divider);
+}
+.creator-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
 .creator-bio {
   min-width: 0;
@@ -1520,8 +1539,11 @@ main {
 }
 .quest-results .section-heading {
   align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px 20px;
 }
 .quest-results .section-heading h1 {
+  flex: 1 1 12rem;
   max-width: 16ch;
 }
 .quest-results .section-heading > .support {
@@ -1549,4 +1571,176 @@ main {
   .quest-answer {
     animation: none;
   }
+}
+
+/* Short, truthful matching feedback stays beside the current question. */
+.quest-fit-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 20px 0 0;
+  color: #42664d;
+  font-size: 0.8125rem;
+}
+.quest-fit-status span {
+  color: var(--secondary);
+}
+.quest-recovery {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid #e6dfcd;
+  border-radius: 18px;
+  background: #fffcf5;
+}
+.quest-recovery h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.quest-recovery ul {
+  padding-left: 19px;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.quest-recovery li + li {
+  margin-top: 8px;
+}
+.quest-recovery-option {
+  margin-top: 18px;
+}
+.quest-recovery-option p {
+  font-size: 0.8125rem;
+  color: var(--secondary);
+}
+.quest-recovery .button {
+  white-space: normal;
+}
+.quest-recovery .fine-print {
+  margin-bottom: 0;
+}
+.feed-pagination {
+  display: grid;
+  gap: 14px;
+  margin: 24px 0;
+  text-align: center;
+}
+
+.apple-place-picker {
+  border-top: 1px solid var(--divider);
+  padding-top: 20px;
+  margin-top: 8px;
+}
+.apple-place-picker > .support {
+  font-size: 0.8125rem;
+}
+.place-search-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.place-search-actions .button {
+  width: auto;
+  flex: 1 1 150px;
+}
+.place-search-actions .text-button {
+  flex: 1 1 150px;
+  justify-content: center;
+}
+.apple-place-results {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0;
+}
+.apple-place-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 12px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--divider);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.apple-place-result.selected {
+  border-color: #7aaefa;
+  background: var(--action-soft);
+}
+.apple-place-result > svg {
+  flex-shrink: 0;
+  color: var(--action);
+}
+.apple-place-result > span:first-of-type {
+  min-width: 0;
+  flex: 1;
+}
+.apple-place-result strong,
+.apple-place-result small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.apple-place-result strong {
+  font-size: 0.875rem;
+}
+.apple-place-result small {
+  font-size: 0.75rem;
+  color: var(--secondary);
+  margin-top: 4px;
+}
+.apple-place-result > span:last-of-type {
+  color: var(--action);
+  font-size: 0.75rem;
+}
+.apple-place-card {
+  border: 1px solid var(--divider);
+  border-radius: 18px;
+  padding: 18px;
+  margin: 24px 0;
+  background: var(--surface);
+}
+.apple-place-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.apple-place-card h3 > svg {
+  flex-shrink: 0;
+}
+.apple-place-card .section-heading {
+  margin-bottom: 8px;
+}
+.apple-place-card .support {
+  font-size: 0.8125rem;
+}
+.apple-place-map {
+  height: 260px;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-muted);
+  margin: 12px 0;
+}
+.place-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 14px;
+}
+.place-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  font-size: 0.8125rem;
+}
+.place-links a > svg {
+  flex-shrink: 0;
+}
+.apple-place-card .fine-print {
+  margin-bottom: 0;
 }

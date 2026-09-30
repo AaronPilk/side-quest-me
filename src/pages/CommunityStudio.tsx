@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import type { CommunityReport, LicenseOffer } from "../../shared/community";
 import { Button, Empty, Loading, Notice, PageTitle } from "../components/ui";
 import { LicenseTermsView } from "../components/LicenseTermsForm";
@@ -146,17 +146,42 @@ function ReportReview({
     </article>
   );
 }
+type Workspace = "business" | "admin";
+
 export default function CommunityStudio() {
+  const me = useCommunity("me");
+  if (me.error) return <Notice error>{me.error}</Notice>;
+  if (!me.data) return <Loading />;
+  return (
+    <Navigate
+      replace
+      to={
+        me.data.roles.includes("operator")
+          ? "/admin"
+          : me.data.brand
+            ? "/business"
+            : "/rewards?tab=offers"
+      }
+    />
+  );
+}
+export function BusinessWorkspace() {
+  return <WorkspacePage workspace="business" />;
+}
+export function CommunityAdmin() {
+  return <WorkspacePage workspace="admin" />;
+}
+function WorkspacePage({ workspace }: { workspace: Workspace }) {
   const me = useCommunity("me");
   const operator = useCommunity(
     "operator",
     {},
-    Boolean(me.data?.roles.includes("operator")),
+    workspace === "admin" && Boolean(me.data?.roles.includes("operator")),
   );
   const businessFeed = useCommunity(
     "brand",
     {},
-    me.data?.brand?.state === "approved",
+    workspace === "business" && me.data?.brand?.state === "approved",
   );
   const action = useCommunityAction(() => {
     me.refresh();
@@ -164,124 +189,145 @@ export default function CommunityStudio() {
   });
   if (me.error) return <Notice error>{me.error}</Notice>;
   if (!me.data) return <Loading />;
+  if (workspace === "admin" && !me.data.roles.includes("operator"))
+    return (
+      <>
+        <PageTitle title="Admin" />
+        <Notice>
+          Staff access is required. Your account does not have this role.
+        </Notice>
+        <Link className="button secondary" to="/settings">
+          Back to settings
+        </Link>
+      </>
+    );
   const brand = me.data.brand;
   return (
     <>
       <PageTitle
         eyebrow="CLEAR TERMS. GOOD STORIES."
-        title="Brand & creator studio"
+        title={workspace === "admin" ? "Admin" : "Business workspace"}
       >
-        License an existing video through a structured offer. Funded quests
-        remain a separate opportunity before a video is created.
+        {workspace === "admin"
+          ? "Review approvals, reports, and recorded payment evidence."
+          : "Find videos, agree usage terms, and manage your business’s licenses."}
       </PageTitle>
       <div className="community-links">
+        <Link to="/settings">Settings</Link>
+        <Link to="/rewards?tab=offers">Your creator offers</Link>
         <Link to="/profile">Your public profile</Link>
         <Link to="/originals/new">Draft an original quest</Link>
-        {me.data.roles.includes("operator") && (
+        {workspace === "admin" && me.data.roles.includes("operator") && (
           <Link to="/operator">Funded quests & rewards tools</Link>
         )}
       </div>
-      <section className="section">
-        <h2>Your licensing offers</h2>
-        {me.data.offers.length ? (
-          <div className="community-list">
-            {me.data.offers.map((offer) => (
-              <Link
-                className="community-list-link"
-                to={`/offers/${offer.id}`}
-                key={offer.id}
-              >
-                <span>
-                  <strong>{offer.postTitle}</strong>
-                  <small>
-                    {offer.brandName} · {money(offer.terms.paymentMinor)}
-                  </small>
-                </span>
-                <StateTag state={offer.state} />
-              </Link>
-            ))}
-          </div>
-        ) : (
+      {workspace === "business" && (
+        <section className="section">
+          <h2>Your business’s licensing requests</h2>
+          {me.data.offers.some((offer) => offer.brandId === me.data!.userId) ? (
+            <div className="community-list">
+              {me.data.offers
+                .filter((offer) => offer.brandId === me.data!.userId)
+                .map((offer) => (
+                  <Link
+                    className="community-list-link"
+                    to={`/offers/${offer.id}`}
+                    key={offer.id}
+                  >
+                    <span>
+                      <strong>{offer.postTitle}</strong>
+                      <small>
+                        {offer.brandName} · {money(offer.terms.paymentMinor)}
+                      </small>
+                    </span>
+                    <StateTag state={offer.state} />
+                  </Link>
+                ))}
+            </div>
+          ) : (
+            <p className="support">
+              Your business’s licensing requests will appear here after you
+              propose terms for a creator’s opted-in video.
+            </p>
+          )}
+        </section>
+      )}
+      {workspace === "business" && (
+        <details className="community-panel">
+          <summary>
+            {brand
+              ? `Business profile · ${brand.state}`
+              : "Set up a business profile"}
+          </summary>
+          {brand && (
+            <>
+              <StateTag state={brand.state} />
+              {brand.reviewNotes && <Notice>{brand.reviewNotes}</Notice>}
+            </>
+          )}
           <p className="support">
-            No offers yet. Publishing a video and opting into inquiries never
-            grants advertising permission.
+            An operator must approve your business before you can send licensing
+            proposals. Contact details are kept out of public creator and post
+            responses.
           </p>
-        )}
-      </section>
-      <details className="community-panel">
-        <summary>
-          {brand
-            ? `Business profile · ${brand.state}`
-            : "Set up a business profile"}
-        </summary>
-        {brand && (
-          <>
-            <StateTag state={brand.state} />
-            {brand.reviewNotes && <Notice>{brand.reviewNotes}</Notice>}
-          </>
-        )}
-        <p className="support">
-          An operator must approve your business before you can send licensing
-          proposals. Contact details are kept out of public creator and post
-          responses.
-        </p>
-        <form
-          className="community-form"
-          key={brand?.version ?? "new"}
-          onSubmit={(event) => {
-            event.preventDefault();
-            const form = new FormData(event.currentTarget);
-            void action.run(
-              "brand_save",
-              {
-                name: String(form.get("name")),
-                website: String(form.get("website")),
-                contactEmail: String(form.get("contactEmail")),
-                expectedVersion: brand?.version ?? 0,
-              },
-              "Business profile saved for operator review.",
-            );
-          }}
-        >
-          <label>
-            Business name
-            <input
-              name="name"
-              minLength={2}
-              maxLength={100}
-              required
-              defaultValue={brand?.name}
-            />
-          </label>
-          <label>
-            Business website
-            <input
-              name="website"
-              type="url"
-              pattern="https://.*"
-              required
-              maxLength={400}
-              placeholder="https://"
-              defaultValue={brand?.website}
-            />
-          </label>
-          <label>
-            Business contact email
-            <input
-              name="contactEmail"
-              type="email"
-              maxLength={254}
-              required
-              defaultValue={brand?.contactEmail}
-            />
-          </label>
-          <Button type="submit" busy={action.busy}>
-            Submit business for review
-          </Button>
-        </form>
-      </details>
+          <form
+            className="community-form"
+            key={brand?.version ?? "new"}
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              void action.run(
+                "brand_save",
+                {
+                  name: String(form.get("name")),
+                  website: String(form.get("website")),
+                  contactEmail: String(form.get("contactEmail")),
+                  expectedVersion: brand?.version ?? 0,
+                },
+                "Business profile saved for operator review.",
+              );
+            }}
+          >
+            <label>
+              Business name
+              <input
+                name="name"
+                minLength={2}
+                maxLength={100}
+                required
+                defaultValue={brand?.name}
+              />
+            </label>
+            <label>
+              Business website
+              <input
+                name="website"
+                type="url"
+                pattern="https://.*"
+                required
+                maxLength={400}
+                placeholder="https://"
+                defaultValue={brand?.website}
+              />
+            </label>
+            <label>
+              Business contact email
+              <input
+                name="contactEmail"
+                type="email"
+                maxLength={254}
+                required
+                defaultValue={brand?.contactEmail}
+              />
+            </label>
+            <Button type="submit" busy={action.busy}>
+              Submit business for review
+            </Button>
+          </form>
+        </details>
+      )}
       {action.feedback}
-      {brand?.state === "approved" && (
+      {workspace === "business" && brand?.state === "approved" && (
         <section className="section">
           <h2>Videos open to brand inquiries</h2>
           {businessFeed.error ? (
@@ -307,7 +353,7 @@ export default function CommunityStudio() {
           )}
         </section>
       )}
-      {me.data.roles.includes("operator") && (
+      {workspace === "admin" && me.data.roles.includes("operator") && (
         <section className="operator-community section">
           <h2>Operator review</h2>
           <p className="support">
@@ -513,29 +559,6 @@ export default function CommunityStudio() {
             </>
           )}
         </section>
-      )}
-      {me.data.blocks.length > 0 && (
-        <details className="community-panel">
-          <summary>Blocked accounts · {me.data.blocks.length}</summary>
-          {me.data.blocks.map((userId) => (
-            <div className="post-secondary" key={userId}>
-              <span>Account {userId.slice(0, 8)}</span>
-              <Button
-                secondary
-                busy={action.busy}
-                onClick={() =>
-                  action.run(
-                    "block",
-                    { userId, blocked: false },
-                    "Account unblocked.",
-                  )
-                }
-              >
-                Unblock
-              </Button>
-            </div>
-          ))}
-        </details>
       )}
     </>
   );

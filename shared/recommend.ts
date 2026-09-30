@@ -1,5 +1,7 @@
 import { catalog } from "./catalog";
 import {
+  CATEGORIES,
+  INTENSITIES,
   effectiveBudget,
   outingSchema,
   normalizePreferences,
@@ -51,68 +53,108 @@ export function estimateCost(
   };
 }
 
-/** Hard filters run before scoring. Returned explanations are safe to display. */
-export function ineligibilityReasons(
+export type EligibilityIssueCode =
+  | "category"
+  | "intensity"
+  | "participants"
+  | "setting"
+  | "duration"
+  | "venue_cost"
+  | "budget"
+  | "currency"
+  | "venue_permission"
+  | "arrangements"
+  | "adults"
+  | "adult_context"
+  | "boundary"
+  | "custom_boundary";
+export type EligibilityIssue = { code: EligibilityIssueCode; reason: string };
+
+/** The single source of truth for previews, recovery explanations, and acceptance. */
+export function ineligibilityIssues(
   quest: QuestVariant,
   outing: Outing,
   preferencesInput: Preferences,
-): string[] {
+): EligibilityIssue[] {
   const preferences = normalizePreferences(preferencesInput);
   const exclusions = preferences.exclusions ?? [];
-  const reasons: string[] = [];
+  const reasons: EligibilityIssue[] = [];
+  const issue = (code: EligibilityIssueCode, reason: string) =>
+    reasons.push({ code, reason });
   if (quest.category !== outing.category)
-    reasons.push("Choose this category to see this quest.");
+    issue(
+      "category",
+      `This quest is in ${CATEGORIES.find(({ id }) => id === quest.category)!.label}.`,
+    );
   if (quest.intensity !== outing.intensity)
-    reasons.push("Choose this intensity to see this quest.");
+    issue(
+      "intensity",
+      `This quest uses ${INTENSITIES.find(({ id }) => id === quest.intensity)!.label} intensity.`,
+    );
   if (
     outing.participants < quest.minParticipants ||
     outing.participants > quest.maxParticipants
   )
-    reasons.push(
+    issue(
+      "participants",
       `This quest needs ${quest.minParticipants}–${quest.maxParticipants} participants, including its supporting cast.`,
     );
   if (!quest.settings.includes(outing.setting))
-    reasons.push("This quest needs a different setting.");
+    issue(
+      "setting",
+      `This quest needs ${quest.settings.map((setting) => ({ home: "a home setting", outside: "an outdoor setting", venue: "a venue" })[setting]).join(" or ")}.`,
+    );
   if (
     outing.durationMinutes !== null &&
     quest.durationMinutes + outing.travelMinutes > outing.durationMinutes
   )
-    reasons.push(
-      "Allow more time for preparation, the quest, and round-trip travel.",
+    issue(
+      "duration",
+      `Allow ${quest.durationMinutes + outing.travelMinutes} minutes for preparation, the quest, and round-trip travel.`,
     );
   const costs = estimateCost(quest, outing);
   if (!costs.known)
-    reasons.push(
+    issue(
+      "venue_cost",
       "Confirm the complete required venue charge before this quest can fit your budget.",
     );
   if (costs.maxMinor > effectiveBudget(outing))
-    reasons.push("The full estimated group cost is above your budget.");
+    issue(
+      "budget",
+      `The full estimated group cost of ${formatMoney(costs.maxMinor)} is above your ${formatMoney(effectiveBudget(outing))} budget.`,
+    );
   if (quest.cost.currency !== outing.currency)
-    reasons.push("This quest is unavailable in the selected currency.");
+    issue("currency", "This quest is unavailable in the selected currency.");
   if (
     outing.setting === "venue" &&
     quest.venuePermissionRequired &&
     !outing.venuePermission
   )
-    reasons.push(
-      "Confirm venue and filming permission, or choose a private-space version.",
+    issue(
+      "venue_permission",
+      "Venue and filming permission has not been confirmed.",
     );
   if (quest.arrangementRequired && !outing.arrangementConfirmed)
-    reasons.push(
+    issue(
+      "arrangements",
       "Arrange the required friends, space, or performance slot before accepting.",
     );
   if (
     (quest.adultOnly || quest.requiresVolunteer || outing.adultContext) &&
     !outing.adultEligible
   )
-    reasons.push("Explicit adult eligibility is required for this activity.");
+    issue(
+      "adults",
+      "Explicit adult eligibility is required for this activity.",
+    );
   if (
     outing.adultContext &&
     (!quest.supportsAdultContext ||
       outing.setting !== "venue" ||
       !outing.venuePermission)
   )
-    reasons.push(
+    issue(
+      "adult_context",
       "This quest does not support the selected adult-venue context.",
     );
   const conflicts = quest.conflicts.filter((conflict) => {
@@ -152,12 +194,24 @@ export function ineligibilityReasons(
   if (exclusions.includes("travel_outside_area") && outing.travelMinutes > 0)
     conflicts.push("travel_outside_area");
   if (conflicts.length)
-    reasons.push("This quest conflicts with a boundary in your profile.");
+    issue("boundary", "This quest conflicts with a boundary in your profile.");
   if (preferences.otherExclusion.trim())
-    reasons.push(
+    issue(
+      "custom_boundary",
       "Your custom boundary needs review. Select matching listed boundaries or edit it before choosing a quest.",
     );
   return reasons;
+}
+
+/** Hard filters run before scoring. Returned explanations are safe to display. */
+export function ineligibilityReasons(
+  quest: QuestVariant,
+  outing: Outing,
+  preferences: Preferences,
+): string[] {
+  return ineligibilityIssues(quest, outing, preferences).map(
+    ({ reason }) => reason,
+  );
 }
 
 export function familyEligibility(

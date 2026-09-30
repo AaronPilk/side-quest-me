@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PREFERENCES, normalizePreferences } from "../shared/domain";
+import {
+  DEFAULT_PREFERENCES,
+  normalizePreferences,
+  type Preferences,
+} from "../shared/domain";
 import {
   preferenceChips,
   resetPreferenceAnswer,
@@ -89,5 +93,49 @@ describe("confirmed profile answers", () => {
     expect(
       resetPreferenceAnswer(confirmed, "exclusions").exclusions,
     ).toBeNull();
+  });
+
+  it.each<Partial<Preferences>>([
+    { categories: ["daytime"] },
+    { premises: ["open_mic"] },
+    { premises: ["not_sure"] },
+    { humor: ["friendly_awkward"] },
+    { humor: ["competitive"] },
+    { humor: ["surprises"] },
+    { humorExamples: "A favorite sketch" },
+    { usualIntensity: "depends" },
+    { role: "camera_person" },
+    { approach: "invitation" },
+    { approach: "depends" },
+    { preparation: "a_few_things" },
+    { preparation: "varies" },
+    { interests: ["games"] },
+    { skills: ["none"] },
+    { otherSkill: "Stage lighting" },
+    { sharing: "decide_later" },
+    { exclusions: [] },
+    { otherExclusion: "No loud music" },
+  ])(
+    "represents a confirmed answer without claiming the profile is empty: %j",
+    (answer) => {
+      expect(
+        preferenceChips({ ...DEFAULT_PREFERENCES, ...answer }).length,
+      ).toBeGreaterThan(0);
+    },
+  );
+
+  it("does not turn undecided participation or custom text into an invented positive preference", () => {
+    expect(
+      preferenceChips({
+        ...DEFAULT_PREFERENCES,
+        premises: ["not_sure"],
+        humorExamples: "I watch pranks but would not perform one",
+        otherExclusion: "No loud music",
+      }),
+    ).toEqual([
+      "Custom boundary saved — needs review",
+      "Participation still undecided",
+      "Humor examples saved",
+    ]);
   });
 });

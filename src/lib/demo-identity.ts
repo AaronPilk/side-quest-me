@@ -43,6 +43,8 @@ export function resetDemoState() {
   for (const persona of Object.keys(DEMO_PEOPLE) as DemoPersona[])
     localStorage.removeItem(demoDataKey(persona));
   localStorage.removeItem("sidequest-community-demo-v1");
+  localStorage.removeItem("sidequest-series-demo-v1");
+  localStorage.removeItem("sidequest-social-demo-v1");
   localStorage.removeItem("sidequest-demo-persona");
   for (const key of [
     "sq-profile-draft",
@@ -59,6 +61,7 @@ export function switchDemoPersona(value: DemoPersona) {
   sessionStorage.removeItem("sq-profile-draft");
   sessionStorage.removeItem("sq-outing");
   sessionStorage.removeItem("sq-quest-flow");
+  sessionStorage.removeItem("sq-return-to");
   sessionStorage.setItem("sq-demo-started", "1");
   location.assign("/discover");
 }

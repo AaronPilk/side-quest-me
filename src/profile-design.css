@@ -1,0 +1,228 @@
+.social-profile-page {
+  max-width: 690px;
+  margin: auto;
+}
+.social-profile-identity {
+  padding: 6px 0 22px;
+}
+.social-profile-top {
+  display: flex;
+  gap: 17px;
+  align-items: center;
+}
+.social-profile-top > .creator-avatar {
+  width: 88px;
+  height: 88px;
+  flex: 0 0 88px;
+  font-size: 32px;
+  overflow: hidden;
+}
+.social-profile-top > .creator-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+.social-profile-name {
+  flex: 1;
+  min-width: 0;
+}
+.social-profile-name h1 {
+  font-size: 26px;
+  line-height: 1.12;
+  letter-spacing: -0.8px;
+  margin: 0 0 7px;
+  overflow-wrap: anywhere;
+}
+.social-handle {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.social-profile-bio {
+  margin: 18px 0 12px;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.social-counts.creator-counts {
+  border: 0;
+  margin: 20px 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  text-align: center;
+}
+.social-counts > div {
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.social-counts strong {
+  font-size: 21px;
+  color: var(--text);
+}
+.social-counts span {
+  font-size: 12px;
+  color: var(--secondary);
+}
+.social-profile-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.social-profile-actions .button {
+  margin: 0;
+  width: 100%;
+  min-height: 43px;
+  padding: 10px 8px;
+  font-size: 14px;
+  border-radius: 12px;
+}
+.social-edit-panel {
+  margin-bottom: 20px;
+}
+.social-edit-panel:not([open]) {
+  display: none;
+}
+.profile-photo-actions {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--divider);
+}
+.photo-upload-control {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.photo-upload-control input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.social-profile-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--divider);
+  margin: 0 0 3px;
+  gap: 4px;
+}
+.social-profile-tabs button {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
+  padding: 15px 3px;
+  border-radius: 0;
+  background: none;
+  color: var(--secondary);
+  font-size: 12px;
+  min-height: 49px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+}
+.social-profile-tabs button[aria-current] {
+  color: var(--text);
+  border-bottom-color: var(--text);
+}
+.profile-video-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+}
+.profile-video-tile {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 3/4;
+  background: #e8ebef;
+  color: white;
+  min-width: 0;
+}
+.profile-video-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.profile-video-tile:focus-visible {
+  outline: 3px solid #0866e9;
+  outline-offset: -3px;
+}
+.profile-video-title {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+  padding: 24px 8px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.profile-cover-fallback {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #636b77;
+  font-size: 10px;
+}
+.social-quest-list,
+.social-private-space {
+  padding-top: 20px;
+}
+.social-private-space > .support {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.social-private-space h2 {
+  font-size: 20px;
+  margin-top: 26px;
+}
+@media (min-width: 768px) {
+  .social-profile-top > .creator-avatar {
+    width: 106px;
+    height: 106px;
+    flex-basis: 106px;
+  }
+  .social-profile-name h1 {
+    font-size: 32px;
+  }
+  .social-profile-actions {
+    max-width: 400px;
+  }
+  .profile-video-title {
+    font-size: 13px;
+    padding: 32px 12px 13px;
+  }
+  .social-profile-tabs button {
+    font-size: 14px;
+  }
+}
+@media (max-width: 350px) {
+  .social-profile-top {
+    gap: 10px;
+  }
+  .social-profile-top > .creator-avatar {
+    width: 70px;
+    height: 70px;
+    flex-basis: 70px;
+  }
+  .social-profile-name h1 {
+    font-size: 23px;
+  }
+  .social-profile-tabs button {
+    flex-direction: column;
+  }
+}

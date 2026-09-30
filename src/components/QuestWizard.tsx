@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,7 +13,12 @@ import {
   effectiveBudget,
   outingSchema,
   type Outing,
+  type QuestVariant,
 } from "../../shared/domain";
+import { rememberReturnTo } from "../lib/internal-return";
+import { ApplePlacePicker, ApplePlaceCard } from "./ApplePlaces";
+import { QuestFit, useQuestFit } from "./QuestFit";
+import type { QuestRecovery } from "../../shared/viability";
 import { Button, Chips, Notice, money } from "./ui";
 
 type Step =
@@ -94,30 +99,68 @@ function stepsFor(outing: Outing, targetId?: string): Step[] {
     "review",
   ];
 }
-function restoreProgress(
-  outing: Outing,
-  targetId?: string,
-): { step: Step; editing: boolean } {
+type Progress = {
+  step: Step;
+  editing: boolean;
+  confirmed: (keyof Outing)[];
+  requiredFields: (keyof Outing)[];
+};
+function restoreProgress(outing: Outing, targetId?: string): Progress {
   const steps = stepsFor(outing, targetId);
   try {
     const draft = JSON.parse(sessionStorage.getItem("sq-quest-flow") || "null");
     if (
-      draft?.version === 1 &&
+      [1, 2].includes(draft?.version) &&
       draft.targetId === (targetId || null) &&
       steps.includes(draft.step)
     )
-      return { step: draft.step, editing: draft.editing === true };
+      return {
+        step: draft.step,
+        editing: draft.editing === true,
+        confirmed: Array.isArray(draft.confirmed)
+          ? draft.confirmed.filter((key: string) => key in outingSchema.shape)
+          : [],
+        requiredFields: Array.isArray(draft.requiredFields)
+          ? draft.requiredFields.filter(
+              (key: string) => key in outingSchema.shape,
+            )
+          : [],
+      };
   } catch {
     /* A missing or outdated draft starts at the first question. */
   }
-  return { step: steps[0], editing: false };
+  return { step: steps[0], editing: false, confirmed: [], requiredFields: [] };
+}
+
+export function editQuestPlans(
+  outing: Outing,
+  fields: (keyof Outing)[],
+  targetId?: string,
+) {
+  const current = restoreProgress(outing, targetId);
+  const step =
+    stepsFor(outing, targetId).find((id) =>
+      questions[id].fields.some((field) => fields.includes(field)),
+    ) || "review";
+  sessionStorage.setItem(
+    "sq-quest-flow",
+    JSON.stringify({
+      ...current,
+      version: 2,
+      targetId: targetId || null,
+      step,
+      editing: step !== "review",
+      requiredFields: fields,
+    }),
+  );
 }
 
 export function QuestWizard({
   outing,
-  update,
+  update: updateOuting,
   onFind,
   targetId,
+  target,
   busy,
   error,
   needsProfile,
@@ -126,6 +169,7 @@ export function QuestWizard({
   update: (patch: Partial<Outing>) => void;
   onFind: () => Promise<void>;
   targetId?: string;
+  target?: QuestVariant | null;
   busy: boolean;
   error: string;
   needsProfile: boolean;
@@ -133,6 +177,8 @@ export function QuestWizard({
   const [progress, setProgress] = useState(() =>
     restoreProgress(outing, targetId),
   );
+  const location = useLocation();
+  const [mapsOpen, setMapsOpen] = useState(Boolean(outing.applePlaceId));
   const [validation, setValidation] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
   const steps = stepsFor(outing, targetId);
@@ -140,17 +186,77 @@ export function QuestWizard({
   const index = steps.indexOf(step);
   const question = questions[step];
   const review = step === "review";
+  const knownFields = review
+    ? (Object.keys(outingSchema.shape) as (keyof Outing)[])
+    : [
+        ...new Set([
+          ...progress.confirmed,
+          ...(targetId ? (["category", "intensity"] as (keyof Outing)[]) : []),
+        ]),
+      ];
+  const matching = useQuestFit(outing, knownFields, targetId);
+  const adultConfirmationNeeded = Boolean(
+    target?.adultOnly ||
+    target?.requiresVolunteer ||
+    outing.category === "street_challenges" ||
+    progress.requiredFields.includes("adultEligible"),
+  );
+  function update(patch: Partial<Outing>) {
+    updateOuting(patch);
+    setProgress((current) => ({
+      ...current,
+      confirmed: [
+        ...new Set([
+          ...current.confirmed,
+          ...question.fields.filter((field) => field in patch),
+        ]),
+      ],
+    }));
+    setValidation("");
+  }
+  function chooseRecovery(recovery: QuestRecovery) {
+    if (recovery.requiresConfirmation) {
+      const destination =
+        steps.find((id) =>
+          questions[id].fields.some((field) => recovery.fields.includes(field)),
+        ) || "arrangements";
+      setProgress((current) => ({
+        ...current,
+        step: destination,
+        editing: review || current.editing,
+        requiredFields: recovery.fields,
+      }));
+    } else {
+      updateOuting(recovery.patch);
+      setProgress((current) => ({
+        ...current,
+        step: stepsFor({ ...outing, ...recovery.patch }, targetId).includes(
+          current.step,
+        )
+          ? current.step
+          : "arrangements",
+        confirmed: [
+          ...new Set([
+            ...current.confirmed,
+            ...(Object.keys(recovery.patch) as (keyof Outing)[]),
+          ]),
+        ],
+      }));
+    }
+  }
   useEffect(() => {
     sessionStorage.setItem(
       "sq-quest-flow",
-      JSON.stringify({ version: 1, targetId: targetId || null, ...progress }),
+      JSON.stringify({ version: 2, targetId: targetId || null, ...progress }),
     );
+  }, [progress, targetId]);
+  useEffect(() => {
     heading.current?.focus({ preventScroll: true });
     window.scrollTo(0, 0);
-  }, [progress, targetId]);
+  }, [step]);
   function go(next: Step, editing = progress.editing) {
     setValidation("");
-    setProgress({ step: next, editing });
+    setProgress((current) => ({ ...current, step: next, editing }));
   }
   async function advance(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -166,6 +272,10 @@ export function QuestWizard({
       }
     }
     setValidation("");
+    setProgress((current) => ({
+      ...current,
+      confirmed: [...new Set([...current.confirmed, ...question.fields])],
+    }));
     if (review) await onFind();
     else if (progress.editing && !["setting", "travel"].includes(step))
       go("review", false);
@@ -205,7 +315,7 @@ export function QuestWizard({
             ? "Adult nightlife included"
             : "Adult nightlife excluded",
         ]
-      : outing.category === "street_challenges"
+      : adultConfirmationNeeded
         ? [
             outing.adultEligible
               ? "Adult volunteers confirmed"
@@ -480,6 +590,7 @@ export function QuestWizard({
                   ...(v === outing.setting
                     ? {}
                     : {
+                        applePlaceId: null,
                         venuePermission: false,
                         confirmedVenueCostMinor: null,
                         adultEligible: false,
@@ -552,9 +663,13 @@ export function QuestWizard({
                   />
                 </label>
               </div>
-              <details className="quest-location">
+              <details
+                className="quest-location"
+                open={mapsOpen}
+                onToggle={(e) => setMapsOpen(e.currentTarget.open)}
+              >
                 <summary>
-                  Add an area <span>Optional</span>
+                  Choose an area or place <span>Optional</span>
                 </summary>
                 <label>
                   Area
@@ -565,37 +680,23 @@ export function QuestWizard({
                     onChange={(e) => update({ area: e.target.value })}
                   />
                 </label>
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => {
-                    if (!navigator.geolocation) {
-                      setValidation(
-                        "Location isn’t available. Enter your area manually.",
-                      );
-                      return;
+                {mapsOpen && outing.setting !== "home" && (
+                  <ApplePlacePicker
+                    area={outing.area}
+                    setting={outing.setting}
+                    placeId={outing.applePlaceId}
+                    onChange={(id) =>
+                      update({
+                        applePlaceId: id,
+                        venuePermission: false,
+                        confirmedVenueCostMinor: null,
+                        arrangementConfirmed: false,
+                        adultEligible: false,
+                        adultContext: false,
+                      })
                     }
-                    navigator.geolocation.getCurrentPosition(
-                      (position) => {
-                        update({
-                          area: `${position.coords.latitude.toFixed(1)}, ${position.coords.longitude.toFixed(1)} (approximate)`,
-                        });
-                        setValidation("");
-                      },
-                      () =>
-                        setValidation(
-                          "Location access is off. Enter your area manually; your quest does not need GPS.",
-                        ),
-                      {
-                        enableHighAccuracy: false,
-                        timeout: 8000,
-                        maximumAge: 0,
-                      },
-                    );
-                  }}
-                >
-                  Use approximate device location
-                </button>
+                  />
+                )}
               </details>
             </>
           )}
@@ -614,22 +715,21 @@ export function QuestWizard({
                   slot.
                 </span>
               </label>
-              {outing.setting !== "venue" &&
-                outing.category === "street_challenges" && (
-                  <label className="check-row">
-                    <input
-                      type="checkbox"
-                      checked={outing.adultEligible}
-                      onChange={(e) =>
-                        update({ adultEligible: e.target.checked })
-                      }
-                    />
-                    <span>
-                      The volunteers and organizers are adults who can freely
-                      choose to participate.
-                    </span>
-                  </label>
-                )}
+              {outing.setting !== "venue" && adultConfirmationNeeded && (
+                <label className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={outing.adultEligible}
+                    onChange={(e) =>
+                      update({ adultEligible: e.target.checked })
+                    }
+                  />
+                  <span>
+                    All participants and volunteers are adults who can freely
+                    choose to participate.
+                  </span>
+                </label>
+              )}
               {outing.setting === "venue" && (
                 <>
                   <label className="check-row">
@@ -679,7 +779,8 @@ export function QuestWizard({
                       }
                     />
                     <span>
-                      All participants meet the venue’s legal age requirement.
+                      All participants are adults and meet the venue’s legal age
+                      requirement.
                     </span>
                   </label>
                   <label className="check-row">
@@ -724,6 +825,33 @@ export function QuestWizard({
             </div>
           )}
         </div>
+        {review && outing.applePlaceId && outing.setting !== "home" && (
+          <ApplePlaceCard
+            placeId={outing.applePlaceId}
+            transport={outing.transport}
+          />
+        )}
+        {matching.fit && (
+          <QuestFit
+            fit={matching.fit}
+            final={review}
+            busy={busy}
+            onChoose={chooseRecovery}
+            onEdit={() => go(steps[0], false)}
+          />
+        )}
+        {matching.error && (
+          <p className="support" role="status">
+            {matching.error}{" "}
+            <button
+              type="button"
+              className="text-button"
+              onClick={matching.retry}
+            >
+              Retry match check
+            </button>
+          </p>
+        )}
         {(validation || error) && <Notice error>{validation || error}</Notice>}
         <div className="quest-flow-actions">
           {(index > 0 || progress.editing) && (
@@ -757,7 +885,13 @@ export function QuestWizard({
       {index === 0 && !progress.editing && (
         <div className="quest-flow-extras">
           {needsProfile && (
-            <Link className="profile-nudge" to="/onboarding">
+            <Link
+              className="profile-nudge"
+              to="/onboarding"
+              onClick={() =>
+                rememberReturnTo(location.pathname + location.search)
+              }
+            >
               <Sparkles size={18} />
               <span>
                 Make it your kind of quest{" "}
@@ -768,6 +902,7 @@ export function QuestWizard({
           )}
           <div className="create-links">
             <Link to="/originals/new">Draft an original quest</Link>
+            <Link to="/series/new">Start a series</Link>
             <Link to="/discover">Find inspiration</Link>
           </div>
         </div>

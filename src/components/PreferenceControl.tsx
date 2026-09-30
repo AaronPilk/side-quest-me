@@ -126,7 +126,25 @@ export function PreferenceControl({
           <input
             maxLength={otherKey === "otherSkill" ? 120 : 240}
             value={String(preferences[otherKey] ?? "")}
-            onChange={(event) => change(otherKey, event.target.value)}
+            onChange={(event) => {
+              // Schema parsing trims strings. Keep each keystroke intact until
+              // blur/save so typing the next word does not remove its space.
+              const text = event.target.value;
+              const sources = { ...preferences.sources };
+              if (text.trim()) sources[otherKey] = source;
+              else delete sources[otherKey];
+              onChange({
+                ...preferences,
+                [otherKey]: text,
+                sources,
+                legacyUnconfirmed: preferences.legacyUnconfirmed.filter(
+                  (key) => key !== otherKey,
+                ),
+              });
+            }}
+            onBlur={(event) =>
+              change(otherKey, event.currentTarget.value.trim())
+            }
           />
         </label>
       )}

@@ -1,255 +1,350 @@
-import { useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
-  Coffee,
-  Utensils,
-  Ticket,
   ArrowUpRight,
+  BadgeCheck,
+  Clock3,
   Gift,
-  ArrowLeft,
+  ReceiptText,
 } from "lucide-react";
-import { api } from "../lib/api";
+import type { LicenseOffer } from "../../shared/community";
+import { useCommunity, money, words } from "../components/Community";
+import { Button, Empty, Loading, Notice, PageTitle } from "../components/ui";
+import { creatorEarnings } from "../lib/creator-earnings";
 import { DEMO } from "../lib/auth";
-import type { Offer } from "../lib/types";
-import {
-  Button,
-  PageTitle,
-  Notice,
-  Empty,
-  useResource,
-} from "../components/ui";
+import Perks from "./Perks";
+import "../rewards-design.css";
+
+const tabs = [
+  { id: "earnings", label: "Earnings" },
+  { id: "perks", label: "Perks" },
+  { id: "offers", label: "Brand offers" },
+] as const;
+
 export default function Rewards() {
-  const me = useResource(api.me);
-  const offers = useResource(api.offers);
-  const redemptions = useResource(api.redemptions);
-  const [selected, setSelected] = useState<Offer>();
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [token, setToken] = useState("");
-  const [key] = useState(crypto.randomUUID());
-  async function redeem() {
-    setBusy(true);
-    setError("");
-    try {
-      const result = await api.redeem(selected!.id, selected!.version!, key);
-      setSelected(undefined);
-      setConfirming(false);
-      me.refresh();
-      redemptions.refresh();
-      const material = await api.redemptionToken(result.id);
-      setToken(material.token);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
+  const [params, setParams] = useSearchParams();
+  const tab =
+    tabs.find((item) => item.id === params.get("tab"))?.id || "earnings";
+  const me = useCommunity("me", {}, tab !== "perks");
+  const ledger = me.data
+    ? creatorEarnings(me.data.offers, me.data.userId!, DEMO)
+    : null;
+  function selectTab(value: string) {
+    const next = new URLSearchParams(params);
+    next.set("tab", value);
+    setParams(next);
   }
-  if (selected)
-    return (
-      <>
-        <button
-          className="back"
-          onClick={() => {
-            setSelected(undefined);
-            setConfirming(false);
-          }}
-        >
-          <ArrowLeft size={18} />
-          Rewards
-        </button>
-        <div className="reward-detail-art">
-          <Gift size={64} />
-        </div>
-        <PageTitle
-          eyebrow={selected.demo ? "SIMULATED EXAMPLE" : selected.merchant}
-          title={selected.title}
-        />
-        <h2>{selected.points} reward points</h2>
-        <p className="lead">{selected.merchant}</p>
-        <section className="section">
-          <h2>Know before you redeem</h2>
-          <p>{selected.terms}</p>
-          {selected.location && <p>{selected.location}</p>}
-          {selected.expiresAt && (
-            <p>Expires {new Date(selected.expiresAt).toLocaleString()}</p>
-          )}
-        </section>
-        {selected.demo ? (
-          <Notice>
-            This is an example only. No points are spent, no inventory is
-            reserved, and no code is issued.
-          </Notice>
-        ) : confirming ? (
+  return (
+    <div className="rewards-page">
+      <PageTitle title="Rewards">
+        Your stories. Your progress. Your opportunities.
+      </PageTitle>
+      <div
+        className="rewards-tabs"
+        role="tablist"
+        aria-label="Rewards"
+        onKeyDown={(event) => {
+          const current = tabs.findIndex((item) => item.id === tab);
+          const next =
+            event.key === "ArrowRight"
+              ? (current + 1) % tabs.length
+              : event.key === "ArrowLeft"
+                ? (current + tabs.length - 1) % tabs.length
+                : event.key === "Home"
+                  ? 0
+                  : event.key === "End"
+                    ? tabs.length - 1
+                    : -1;
+          if (next >= 0) {
+            event.preventDefault();
+            selectTab(tabs[next].id);
+            event.currentTarget
+              .querySelectorAll<HTMLButtonElement>('[role="tab"]')
+              [next]?.focus();
+          }
+        }}
+      >
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            id={`rewards-tab-${item.id}`}
+            aria-selected={tab === item.id}
+            aria-controls="rewards-content"
+            tabIndex={tab === item.id ? 0 : -1}
+            onClick={() => selectTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <section
+        id="rewards-content"
+        role="tabpanel"
+        aria-labelledby={`rewards-tab-${tab}`}
+      >
+        {tab === "perks" ? (
+          <Perks />
+        ) : me.error ? (
           <>
-            <Notice>
-              Your points: {me.data?.wallet.points || 0} →{" "}
-              {(me.data?.wallet.points || 0) - selected.points}. XP stays
-              unchanged. This reserves the offer; the merchant confirms
-              fulfillment.
-            </Notice>
-            <Button busy={busy} onClick={redeem}>
-              Confirm · Redeem {selected.points} points
-            </Button>
-            <Button secondary onClick={() => setConfirming(false)}>
-              Go back
+            <Notice error>{me.error}</Notice>
+            <Button secondary onClick={me.refresh}>
+              Retry rewards
             </Button>
           </>
+        ) : !ledger ? (
+          <Loading />
         ) : (
-          <Button
-            disabled={(me.data?.wallet.points || 0) < selected.points}
-            onClick={() => setConfirming(true)}
-          >
-            Redeem {selected.points} points
-          </Button>
+          <>
+            {DEMO && (
+              <p className="rewards-demo">
+                <span className="demo-dot" /> Local demo · All payment records
+                below are simulated.
+              </p>
+            )}
+            {tab === "earnings" ? (
+              <>
+                <div className="earnings-summary">
+                  <div
+                    className="earnings-paid"
+                    role="region"
+                    aria-label="Verified payments"
+                  >
+                    <span className="earnings-symbol">
+                      <BadgeCheck size={23} />
+                    </span>
+                    <span>{DEMO ? "Demo paid earnings" : "Paid earnings"}</span>
+                    <strong>{money(ledger.paidMinor)}</strong>
+                    <small>
+                      {ledger.paid.length}{" "}
+                      {ledger.paid.length === 1 ? "payment" : "payments"}{" "}
+                      verified manually
+                    </small>
+                  </div>
+                  <div
+                    className="earnings-pending"
+                    role="region"
+                    aria-label="Accepted awaiting payment"
+                  >
+                    <Clock3 size={20} />
+                    <span>Accepted · awaiting payment</span>
+                    <strong>{money(ledger.pendingMinor)}</strong>
+                    <small>
+                      {ledger.pending.length} accepted{" "}
+                      {ledger.pending.length === 1 ? "deal" : "deals"}. This is
+                      not paid income.
+                    </small>
+                  </div>
+                </div>
+                <p className="support earnings-explainer">
+                  Payments appear after an independent admin verifies the agreed
+                  payment and permissions. Accepting an offer does not transfer
+                  money.
+                </p>
+                <div className="section-heading earnings-history-heading">
+                  <h2>Payment history</h2>
+                  <ReceiptText size={20} />
+                </div>
+                {ledger.paid.length ||
+                ledger.pending.length ||
+                ledger.incomplete.length ? (
+                  <div className="earnings-history">
+                    {ledger.records
+                      .filter(
+                        (offer) =>
+                          ledger.paid.includes(offer) ||
+                          ledger.pending.includes(offer) ||
+                          ledger.incomplete.includes(offer),
+                      )
+                      .map((offer) => (
+                        <PaymentRow
+                          key={offer.id}
+                          offer={offer}
+                          paid={ledger.paid.includes(offer)}
+                          pending={ledger.pending.includes(offer)}
+                        />
+                      ))}
+                  </div>
+                ) : (
+                  <Empty
+                    title="Your first paid story starts here."
+                    to="/rewards?tab=offers"
+                    action="Explore brand offers"
+                  >
+                    Verified payments and accepted deals will appear here.
+                    Publishing a video is always your choice.
+                  </Empty>
+                )}
+                <Link className="rewards-next" to="/rewards?tab=offers">
+                  <span>
+                    <strong>
+                      {ledger.proposals.length
+                        ? `${ledger.proposals.length} ${ledger.proposals.length === 1 ? "offer" : "offers"} to review`
+                        : "Brand offers"}
+                    </strong>
+                    <small>
+                      Proposals are separate from earned and pending income.
+                    </small>
+                  </span>
+                  <ArrowUpRight size={20} />
+                </Link>
+              </>
+            ) : (
+              <>
+                <div className="rewards-offer-intro">
+                  <h2>Your brand offers</h2>
+                  <p className="support">
+                    Review exact video usage and payment terms. Counter, accept,
+                    or decline from each offer.
+                  </p>
+                </div>
+                <OfferGroup
+                  title="Active offers"
+                  offers={ledger.records.filter(
+                    (offer) =>
+                      !["completed", "declined", "canceled"].includes(
+                        offer.state,
+                      ),
+                  )}
+                />
+                <OfferGroup
+                  title="Past deals"
+                  offers={ledger.records.filter((offer) =>
+                    ["completed", "declined", "canceled"].includes(offer.state),
+                  )}
+                />
+                {!ledger.records.length && (
+                  <Empty
+                    title="Good stories can open doors."
+                    to="/profile"
+                    action="View your profile"
+                  >
+                    Publish a video and choose whether it’s open to brand
+                    inquiries. You approve the exact terms before any
+                    advertising permission is granted.
+                  </Empty>
+                )}
+                <Link className="rewards-next" to="/business">
+                  <span>
+                    <strong>Here on behalf of a business?</strong>
+                    <small>
+                      Manage your licensing requests in Business workspace.
+                    </small>
+                  </span>
+                  <ArrowUpRight size={20} />
+                </Link>
+              </>
+            )}
+            <p className="fine-print rewards-separation">
+              <Gift size={15} /> Quest points and Perks stay separate from
+              money. Sidequest does not offer automatic withdrawals.
+            </p>
+          </>
         )}
-        {error && <Notice error>{error}</Notice>}
-      </>
-    );
-  const Icons = [Ticket, Coffee, Utensils, Gift];
+      </section>
+    </div>
+  );
+}
+
+function PaymentRow({
+  offer,
+  paid,
+  pending,
+}: {
+  offer: LicenseOffer;
+  paid: boolean;
+  pending: boolean;
+}) {
+  const terms = offer.acceptedTerms;
+  const date =
+    offer.fulfillment?.completedAt || offer.acceptedAt || offer.createdAt;
   return (
-    <>
-      <PageTitle eyebrow="GOOD STORIES. LITTLE PERKS." title="Make it count.">
-        Earn progress for showing up. Spend points on something good.
-      </PageTitle>
-      <div className="wallet-card">
+    <article className="payment-row">
+      <div className="payment-row-heading">
         <div>
-          <span>
-            {DEMO ? "SIMULATED AVAILABLE POINTS" : "AVAILABLE REWARD POINTS"}
-          </span>
-          <strong>
-            {me.data?.wallet.points ?? "—"}
-            <small>points</small>
-          </strong>
+          <strong>{offer.brandName}</strong>
+          <p>{offer.postTitle}</p>
         </div>
-        <Gift size={38} />
-        <p>XP is your progress. Points are yours to spend.</p>
+        <span className={`payment-state ${paid ? "paid" : "pending"}`}>
+          {paid
+            ? "Payment verified"
+            : pending
+              ? "Awaiting payment"
+              : "Needs verification"}
+        </span>
       </div>
-      {DEMO ? (
-        <Notice>
-          Demo catalog · These fictional examples cannot be redeemed. Live
-          offers only appear after a real partner funds them.
-        </Notice>
-      ) : (
-        <p className="support">
-          Real offers from participating businesses in the configured launch
-          area.
+      <div className="payment-row-amount">
+        <strong>
+          {terms ? money(terms.paymentMinor) : "Amount unverified"}
+        </strong>
+        <time dateTime={date}>
+          {new Date(date).toLocaleDateString(undefined, {
+            dateStyle: "medium",
+          })}
+        </time>
+      </div>
+      {paid && offer.fulfillment && (
+        <p className="payment-reference">
+          Payment reference: {offer.fulfillment.paymentReference}
         </p>
       )}
-      <section className="section">
-        <div className="section-heading">
-          <h2>{DEMO ? "A taste of what’s possible" : "Available rewards"}</h2>
-          {DEMO && <span className="pill">Examples</span>}
-        </div>
-        {offers.data?.length === 0 && (
-          <Empty title="Rewards are coming to this area">
-            Your earned points stay in your wallet. There are no funded offers
-            here yet.
-          </Empty>
-        )}
-        <div className="reward-list">
-          {offers.data?.map((o, i) => {
-            const Icon = Icons[i % Icons.length];
-            return (
-              <button
-                className="reward-card"
-                key={o.id}
-                onClick={() => {
-                  setSelected(o);
-                  setError("");
-                }}
-              >
-                <div className={`reward-icon reward-color-${i % 4}`}>
-                  <Icon size={28} />
-                </div>
-                <div>
-                  <small>
-                    {o.demo ? "DEMO · " : ""}
-                    {o.merchant}
-                  </small>
-                  <h3>{o.title}</h3>
-                  <span>{o.points} points</span>
-                </div>
-                <div className="reward-card-action">
-                  <ArrowUpRight size={20} />
-                  <small>{o.demo ? "View demo" : "View terms"}</small>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-      <section className="section">
-        <h2>My rewards</h2>
-        {redemptions.data?.length ? (
-          redemptions.data.map((r) => (
-            <div className="redemption" key={r.id}>
-              <h3>{r.title}</h3>
-              <span className="pill">{r.state}</span>
-              <p>
-                {r.points} points · Expires{" "}
-                {new Date(r.expiresAt).toLocaleString()}
-              </p>
-              {r.state === "reserved" && (
-                <div className="button-row">
-                  <Button
-                    secondary
-                    onClick={async () => {
-                      try {
-                        setToken((await api.redemptionToken(r.id)).token);
-                      } catch (e) {
-                        setError((e as Error).message);
-                      }
-                    }}
-                  >
-                    Show private code
-                  </Button>
-                  <button
-                    className="text-button"
-                    onClick={async () => {
-                      if (
-                        !confirm(
-                          "Cancel this reservation and return its points?",
-                        )
-                      )
-                        return;
-                      try {
-                        await api.cancelRedemption(r.id);
-                        redemptions.refresh();
-                        me.refresh();
-                      } catch (e) {
-                        setError((e as Error).message);
-                      }
-                    }}
-                  >
-                    Cancel & refund
-                  </button>
-                </div>
-              )}
-            </div>
-          ))
-        ) : (
-          <p className="support">
-            Your reserved and used rewards will appear here.
-          </p>
-        )}
-        {token && (
-          <div className="private-token">
-            <h3>Show only to the merchant</h3>
-            <p className="support">This token is private and single use.</p>
-            <textarea
-              readOnly
-              value={token}
-              aria-label="Private redemption token"
-            />
-            <Button secondary onClick={() => setToken("")}>
-              Hide code
-            </Button>
-          </div>
-        )}
-      </section>
-      {(error || offers.error || me.error) && (
-        <Notice error>{error || offers.error || me.error}</Notice>
+      {terms && (
+        <p className="fine-print">
+          Agreed platform fee: {money(terms.platformFeeMinor)}. See the accepted
+          agreement for its terms.
+        </p>
       )}
-    </>
+      {offer.suspended && (
+        <p className="support">
+          Usage suspended. Recorded payment history is preserved.
+        </p>
+      )}
+      <Link to={`/offers/${offer.id}`}>
+        View {paid || pending ? "agreement" : "record"}{" "}
+        <ArrowUpRight size={15} />
+      </Link>
+    </article>
+  );
+}
+
+function OfferGroup({
+  title,
+  offers,
+}: {
+  title: string;
+  offers: LicenseOffer[];
+}) {
+  if (!offers.length) return null;
+  return (
+    <section className="offer-group">
+      <h3>{title}</h3>
+      <div className="community-list">
+        {offers.map((offer) => (
+          <Link
+            className="community-list-link rewards-offer-link"
+            key={offer.id}
+            to={`/offers/${offer.id}`}
+          >
+            <span>
+              <strong>{offer.postTitle}</strong>
+              <small>
+                {offer.brandName} ·{" "}
+                {money((offer.acceptedTerms ?? offer.terms).paymentMinor)}
+              </small>
+            </span>
+            <span className="offer-link-state">
+              {offer.suspended
+                ? "Usage suspended"
+                : offer.state === "pending_fulfillment"
+                  ? "Accepted · pending"
+                  : offer.state === "completed"
+                    ? "Verified"
+                    : words(offer.state)}
+              <ArrowUpRight size={17} />
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }

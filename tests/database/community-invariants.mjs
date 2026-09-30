@@ -127,6 +127,89 @@ export async function runCommunityTests(sql) {
   assert.equal(post.id, duplicatePost.id);
   await assert.rejects(() => read(null, "me"), /forbidden/);
   const publicPost = await read(null, "post", { id: post.id });
+  console.log(
+    "Checking real feed cursor round trips, timestamp ties, filters, and exact final pages…",
+  );
+  const fixtureIds = Array.from(
+    { length: 65 },
+    (_, index) =>
+      `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+  );
+  // Reuse this isolated finalized run with separate sealed reel assets. These
+  // fixtures never enter the seed or production data and are removed below.
+  await sql(`
+    with assets as (
+      insert into public.media_assets(id,owner_id,run_id,kind,state,object_key,bytes,mime,duration_ms,sha256,sealed_at)
+      select x::uuid,${q(creator)},${q(run.id)},'reel','sealed','pagination/'||x,4000,'video/mp4',24000,${q(hash("page"))},now()
+      from jsonb_array_elements_text(${j(fixtureIds)}) x returning id
+    )
+    insert into public.community_posts(id,owner_id,run_id,asset_id,template_id,template_version,brand_opt_in,state,created_at)
+    select id,${q(creator)},${q(run.id)},id,${q(template.id)},1,
+      (right(id::text,1)::int % 2)=1,'published','2026-09-29T09:20:30.123456-04:00'::timestamptz from assets;
+  `);
+  const expected = JSON.parse(
+    await sql(
+      `select jsonb_agg(id order by created_at desc,id) from community_posts;`,
+    ),
+  );
+  const seen = [];
+  let before;
+  for (let pageNumber = 0; pageNumber < 5; pageNumber++) {
+    // PostgreSQL emits offset-bearing JSON timestamps in the session timezone.
+    const page = JSON.parse(
+      await sql(
+        `set timezone='America/New_York'; select sq_community_read(null,'feed',${j({ limit: 30, ...(before ? { before } : {}) })});`,
+      ),
+    );
+    seen.push(...page.posts.map((item) => item.id));
+    if (!page.nextCursor) break;
+    assert.match(page.nextCursor, /[+-]\d{2}:\d{2}\|[a-f0-9-]{36}$/);
+    assert.notEqual(page.nextCursor, before);
+    // Simulate the browser's query-string encoding and Worker decode unchanged.
+    before = new URLSearchParams(
+      new URLSearchParams({ before: page.nextCursor }).toString(),
+    ).get("before");
+  }
+  assert.deepEqual(seen, expected);
+  assert.equal(new Set(seen).size, 66);
+  const exactFirst = await read(null, "feed", { limit: 33 });
+  const exactFinal = await read(null, "feed", {
+    limit: 33,
+    before: exactFirst.nextCursor,
+  });
+  assert.equal(exactFinal.posts.length, 33);
+  assert.equal(
+    exactFinal.nextCursor,
+    null,
+    "An exact final page does not promise another page",
+  );
+  const filters = { templateId: template.id, brandOnly: true, limit: 20 };
+  const brandFirst = await read(null, "feed", filters);
+  const brandLast = await read(null, "feed", {
+    ...filters,
+    before: brandFirst.nextCursor,
+  });
+  assert.equal([...brandFirst.posts, ...brandLast.posts].length, 34);
+  assert(
+    [...brandFirst.posts, ...brandLast.posts].every((item) => item.brandOptIn),
+  );
+  assert.equal(brandLast.nextCursor, null);
+  assert.deepEqual(
+    (
+      await read(null, "feed", {
+        templateId: "another-quest",
+        before: exactFirst.nextCursor,
+      })
+    ).posts,
+    [],
+  );
+  const legacy = await read(null, "feed", {
+    before: "2026-09-29T09:20:30.123456-04:00",
+  });
+  assert(legacy.posts.every((item) => !fixtureIds.includes(item.id)));
+  await sql(
+    `delete from community_posts where id in (select value::uuid from jsonb_array_elements_text(${j(fixtureIds)})); delete from media_assets where id in (select value::uuid from jsonb_array_elements_text(${j(fixtureIds)}));`,
+  );
   const serialized = JSON.stringify(publicPost);
   for (const secret of [
     "PRIVATE_SUMMARY",

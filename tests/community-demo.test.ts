@@ -17,6 +17,7 @@ import {
   demoMutate,
   demoOriginalTemplates,
   demoRead,
+  demoNotify,
 } from "../src/lib/demo-community";
 import { DEMO_PEOPLE, type DemoPersona } from "../src/lib/demo-identity";
 import type { Run } from "../src/lib/types";
@@ -152,6 +153,120 @@ afterEach(() => {
 });
 
 describe("isolated demo publication", () => {
+  it("publishes frozen source series attribution without exposing personal progress", async () => {
+    const series = {
+      id: crypto.randomUUID(),
+      title: "A three-part adventure",
+      partId: crypto.randomUUID(),
+      partTitle: "Find the clue",
+      position: 1,
+    };
+    seedRuns("creator", [readyRun({ series })]);
+    expect(demoRead<CommunityReadResults["feed"]>("feed").posts).toHaveLength(
+      1,
+    );
+    const post = await publish("publish-series-part");
+    expect(post.series).toEqual(series);
+    persona("viewer");
+    const visible = demoRead<CommunityPost>("post", { id: post.id });
+    expect(visible.series).toEqual(series);
+    expect(() =>
+      demoInspiration(post.id, post.quest.id, series.partId),
+    ).not.toThrow();
+    expect(() =>
+      demoInspiration(post.id, post.quest.id, crypto.randomUUID()),
+    ).toThrow("different Series part");
+    expect(JSON.stringify(visible)).not.toContain(privateProfileText);
+    expect(visible).not.toHaveProperty("progress");
+    expect(visible).not.toHaveProperty("outing");
+  });
+
+  it("deduplicates follow/series notifications and suppresses blocked senders", async () => {
+    const owner = DEMO_PEOPLE.viewer.id,
+      actor = DEMO_PEOPLE.creator.id;
+    const notify = () =>
+      demoNotify(
+        owner,
+        actor,
+        "series_part_published",
+        "part-1",
+        "A new part is available.",
+        "/series/test-series",
+      );
+    notify();
+    notify();
+    persona("viewer");
+    let activity = demoRead<CommunityReadResults["activity"]>("activity");
+    expect(activity.items).toHaveLength(1);
+    expect(activity.items[0]).not.toHaveProperty("sourceKey");
+    expect(activity.items[0]).not.toHaveProperty("actorId");
+    await demoMutate(
+      "block",
+      { userId: actor, blocked: true },
+      "block-series-sender",
+    );
+    notify();
+    activity = demoRead<CommunityReadResults["activity"]>("activity");
+    expect(activity.items).toHaveLength(0);
+  });
+
+  it("pages equal-timestamp posts without gaps, accepts offset cursors, and applies filters to every page", async () => {
+    seedRuns("creator", [readyRun()]);
+    const own = await publish("pagination-seed");
+    const stored = JSON.parse(
+      localStorage.getItem("sidequest-community-demo-v1")!,
+    );
+    const original = stored.posts.find(
+      (item: CommunityPost) => item.id === own.id,
+    );
+    const ids = Array.from(
+      { length: 65 },
+      (_, index) =>
+        `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    );
+    stored.posts = ids.map((id, index) => ({
+      ...original,
+      id,
+      createdAt: "2026-09-29T12:00:00.000Z",
+      brandOptIn: index % 2 === 0,
+    }));
+    stored.creators[DEMO_PEOPLE.creator.id].openToBrands = true;
+    localStorage.setItem("sidequest-community-demo-v1", JSON.stringify(stored));
+    const first = feed();
+    expect(first.posts).toHaveLength(30);
+    expect(first.nextCursor).toBe(`2026-09-29T12:00:00.000Z|${ids[29]}`);
+    const second = demoRead<CommunityReadResults["feed"]>("feed", {
+      before: first.nextCursor!.replace("12:00:00.000Z", "08:00:00.000-04:00"),
+    });
+    const last = demoRead<CommunityReadResults["feed"]>("feed", {
+      before: second.nextCursor,
+    });
+    expect(
+      [...first.posts, ...second.posts, ...last.posts].map((item) => item.id),
+    ).toEqual(ids);
+    expect(last.nextCursor).toBeNull();
+    const filters = { templateId: own.quest.id, brandOnly: true, limit: 30 };
+    const branded = demoRead<CommunityReadResults["feed"]>("feed", filters);
+    const brandedLast = demoRead<CommunityReadResults["feed"]>("feed", {
+      ...filters,
+      before: branded.nextCursor,
+    });
+    expect(
+      [...branded.posts, ...brandedLast.posts].map((item) => item.id),
+    ).toEqual(ids.filter((_, index) => index % 2 === 0));
+    expect(brandedLast.nextCursor).toBeNull();
+    expect(
+      demoRead<CommunityReadResults["feed"]>("feed", {
+        templateId: "different-quest",
+      }).posts,
+    ).toEqual([]);
+    expect(
+      demoRead<CommunityReadResults["feed"]>("feed", {
+        before: "2026-09-29T12:00:00.000+00:00",
+      }).posts,
+    ).toEqual([]);
+  });
+
   it("keeps the published exact reel through rerenders and hides copied playback URLs after private media deletion", async () => {
     seedRuns("creator", [readyRun()]);
     const profile = me().creator!;
@@ -479,6 +594,9 @@ describe("reviewed original quests and inspiration", () => {
     const source = feed().posts[0];
     const before = feed().posts[0].attemptCount;
     demoInspiration(source.id, source.quest.id);
+    expect(() =>
+      demoInspiration(source.id, source.quest.id, crypto.randomUUID()),
+    ).toThrow("different Series part");
     expect(() => demoInspiration(source.id, catalog[3].id)).toThrow(
       "different quest",
     );

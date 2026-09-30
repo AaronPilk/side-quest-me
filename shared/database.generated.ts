@@ -214,6 +214,24 @@ export interface Database {
         }
         Relationships: [{"columns":["offer_id"],"isOneToOne":false,"foreignKeyName":"community_reports_offer_id_fkey","referencedColumns":["id"],"referencedRelation":"licensing_offers"},{"columns":["post_id"],"isOneToOne":false,"foreignKeyName":"community_reports_post_id_fkey","referencedColumns":["id"],"referencedRelation":"community_posts"},{"columns":["reporter_id"],"isOneToOne":false,"foreignKeyName":"community_reports_reporter_id_fkey","referencedColumns":["id"],"referencedRelation":"profiles"}]
       }
+      creator_follows: {
+        Row: {
+          follower_id: string
+          creator_id: string
+          created_at: string
+        }
+        Insert: {
+          follower_id: string
+          creator_id: string
+          created_at?: string
+        }
+        Update: {
+          follower_id?: string
+          creator_id?: string
+          created_at?: string
+        }
+        Relationships: [{"columns":["creator_id"],"isOneToOne":false,"foreignKeyName":"creator_follows_creator_id_fkey","referencedColumns":["id"],"referencedRelation":"profiles"},{"columns":["follower_id"],"isOneToOne":false,"foreignKeyName":"creator_follows_follower_id_fkey","referencedColumns":["id"],"referencedRelation":"profiles"}]
+      }
       creator_profiles: {
         Row: {
           user_id: string
@@ -601,6 +619,114 @@ export interface Database {
         }
         Relationships: [{"columns":["owner_id"],"isOneToOne":false,"foreignKeyName":"quest_runs_owner_id_fkey","referencedColumns":["id"],"referencedRelation":"profiles"},{"columns":["template_id"],"isOneToOne":false,"foreignKeyName":"quest_runs_template_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_templates"}]
       }
+      quest_series: {
+        Row: {
+          id: string
+          author_id: string
+          title: string
+          premise: string
+          cover: string
+          kind: string
+          state: string
+          version: number
+          first_published_at: string | null
+          privacy_redacted_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          author_id: string
+          title: string
+          premise: string
+          cover: string
+          kind: string
+          state?: string
+          version?: number
+          first_published_at?: string | null
+          privacy_redacted_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          author_id?: string
+          title?: string
+          premise?: string
+          cover?: string
+          kind?: string
+          state?: string
+          version?: number
+          first_published_at?: string | null
+          privacy_redacted_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [{"columns":["author_id"],"isOneToOne":false,"foreignKeyName":"quest_series_author_id_fkey","referencedColumns":["id"],"referencedRelation":"profiles"}]
+      }
+      quest_series_follows: {
+        Row: {
+          series_id: string
+          follower_id: string
+          created_at: string
+        }
+        Insert: {
+          series_id: string
+          follower_id: string
+          created_at?: string
+        }
+        Update: {
+          series_id?: string
+          follower_id?: string
+          created_at?: string
+        }
+        Relationships: [{"columns":["follower_id"],"isOneToOne":false,"foreignKeyName":"quest_series_follows_follower_id_fkey","referencedColumns":["id"],"referencedRelation":"profiles"},{"columns":["series_id"],"isOneToOne":false,"foreignKeyName":"quest_series_follows_series_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_series"}]
+      }
+      quest_series_parts: {
+        Row: {
+          id: string
+          series_id: string
+          position: number
+          title: string
+          template_id: string
+          template_version: number
+          quest_snapshot: Json
+          prerequisite_part_id: string | null
+          prerequisite_reason: string
+          published: boolean
+          first_published_at: string | null
+          privacy_redacted_at: string | null
+        }
+        Insert: {
+          id: string
+          series_id: string
+          position: number
+          title: string
+          template_id: string
+          template_version: number
+          quest_snapshot: Json
+          prerequisite_part_id?: string | null
+          prerequisite_reason?: string
+          published?: boolean
+          first_published_at?: string | null
+          privacy_redacted_at?: string | null
+        }
+        Update: {
+          id?: string
+          series_id?: string
+          position?: number
+          title?: string
+          template_id?: string
+          template_version?: number
+          quest_snapshot?: Json
+          prerequisite_part_id?: string | null
+          prerequisite_reason?: string
+          published?: boolean
+          first_published_at?: string | null
+          privacy_redacted_at?: string | null
+        }
+        Relationships: [{"columns":["prerequisite_part_id"],"isOneToOne":false,"foreignKeyName":"quest_series_parts_prerequisite_part_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_series_parts"},{"columns":["series_id"],"isOneToOne":false,"foreignKeyName":"quest_series_parts_series_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_series"},{"columns":["template_id"],"isOneToOne":false,"foreignKeyName":"quest_series_parts_template_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_templates"}]
+      }
       quest_templates: {
         Row: {
           id: string
@@ -904,6 +1030,48 @@ export interface Database {
         }
         Relationships: [{"columns":["asset_id"],"isOneToOne":false,"foreignKeyName":"share_links_asset_id_fkey","referencedColumns":["id"],"referencedRelation":"media_assets"},{"columns":["owner_id"],"isOneToOne":false,"foreignKeyName":"share_links_owner_id_fkey","referencedColumns":["id"],"referencedRelation":"profiles"},{"columns":["run_id","owner_id"],"isOneToOne":false,"foreignKeyName":"share_links_run_id_owner_id_fkey","referencedColumns":["id","owner_id"],"referencedRelation":"quest_runs"}]
       }
+      social_photo_cleanup: {
+        Row: {
+          object_key: string
+          owner_id: string
+          created_at: string
+          completed_at: string | null
+        }
+        Insert: {
+          object_key: string
+          owner_id: string
+          created_at?: string
+          completed_at?: string | null
+        }
+        Update: {
+          object_key?: string
+          owner_id?: string
+          created_at?: string
+          completed_at?: string | null
+        }
+        Relationships: [{"columns":["owner_id"],"isOneToOne":false,"foreignKeyName":"social_photo_cleanup_owner_id_fkey","referencedColumns":["id"],"referencedRelation":"profiles"}]
+      }
+      social_profiles: {
+        Row: {
+          user_id: string
+          username: string | null
+          photo_key: string | null
+          version: number
+        }
+        Insert: {
+          user_id: string
+          username?: string | null
+          photo_key?: string | null
+          version?: number
+        }
+        Update: {
+          user_id?: string
+          username?: string | null
+          photo_key?: string | null
+          version?: number
+        }
+        Relationships: [{"columns":["user_id"],"isOneToOne":true,"foreignKeyName":"social_profiles_user_id_fkey","referencedColumns":["id"],"referencedRelation":"profiles"}]
+      }
       sponsors: {
         Row: {
           id: string
@@ -957,6 +1125,7 @@ export interface Database {
     Functions: {
       sq_abandon_run: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_accept_run: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
+      sq_accept_series_run: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_cancel_redemption: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_check_session: { Args: { p_actor: string; p_session: string }; Returns: boolean }
       sq_claim_render: { Args: { p_job: string }; Returns: Json }
@@ -988,7 +1157,14 @@ export interface Database {
       sq_revoke_share: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_schedule_retention: { Args: { p_limit?: number }; Returns: number }
       sq_seal_media: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
+      sq_series_mutate: { Args: { p_actor: string; p_action: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
+      sq_series_read: { Args: { p_actor: string; p_view: string; p_input: Json }; Returns: Json }
       sq_set_template_publication: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
+      sq_social_follow: { Args: { p_actor: string; p_target: string; p_following: boolean }; Returns: Json }
+      sq_social_photo: { Args: { p_actor: string; p_key: string }; Returns: Json }
+      sq_social_photo_key: { Args: { p_actor: string; p_target: string }; Returns: string }
+      sq_social_read: { Args: { p_actor: string; p_target: string }; Returns: Json }
+      sq_social_save: { Args: { p_actor: string; p_input: Json }; Returns: Json }
       sq_submit_run: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_update_clip: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_upsert_campaign: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }

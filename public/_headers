@@ -3,7 +3,7 @@
   X-Frame-Options: DENY
   Referrer-Policy: no-referrer
   Permissions-Policy: camera=(self), microphone=(self), geolocation=(self)
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.apple-mapkit.com 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https://*.apple-mapkit.com; media-src 'self' blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.apple-mapkit.com blob:; worker-src 'self' https://*.apple-mapkit.com blob:; frame-src https://*.apple-mapkit.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
 
 /sw.js
   Cache-Control: no-cache

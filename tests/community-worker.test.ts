@@ -96,6 +96,28 @@ beforeEach(() => {
 });
 
 describe("community public read boundary", () => {
+  it.each([
+    "2026-09-29T12:00:00.123456+00:00",
+    "2026-09-29T08:00:00.123456-04:00",
+    `2026-09-29T08:00:00.123456-04:00|${postId}`,
+  ])(
+    "accepts database cursor offsets without losing precision: %s",
+    async (before) => {
+      const query = new URLSearchParams({ before, limit: "30" });
+      const response = await app().request(
+        `/api/community/feed?${query}`,
+        {},
+        env,
+      );
+      expect(response.status).toBe(200);
+      expect(state.rpc).toHaveBeenCalledWith("sq_community_read", {
+        p_actor: null,
+        p_view: "feed",
+        p_input: { before, limit: 30 },
+      });
+    },
+  );
+
   it("provides bounded public feed reads without manufacturing an authenticated actor", async () => {
     const response = await app().request(
       "/api/community/feed?templateId=date_menu_draft_chill_v1&brandOnly=true&limit=12&before=2026-09-29T12%3A00%3A00.000Z",
@@ -151,6 +173,9 @@ describe("community public read boundary", () => {
     "brandOnly=perhaps",
     "actor=forged",
     "templateId=x&sourceKeys=true",
+    "before=2026-09-29T12:00:00",
+    "before=2026-09-29T12:00:00Z%7Cnot-a-post-id",
+    `before=2026-09-29T12:00:00Z%7C${postId}%7Cextra`,
   ])("rejects unsupported or unbounded public input %s", async (query) => {
     const response = await app().request(
       `/api/community/feed?${query}`,

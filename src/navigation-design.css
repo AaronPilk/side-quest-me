@@ -1,0 +1,126 @@
+/* Five equal primary destinations; account tools stay in their own workspace. */
+.app-shell .bottom-nav {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.app-shell .bottom-nav a {
+  min-width: 0;
+}
+.app-shell .bottom-nav a span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.app-shell .brandbar .beta {
+  flex-shrink: 0;
+}
+.settings-page {
+  max-width: 680px;
+  margin: 0 auto;
+}
+.settings-list {
+  border: 1px solid var(--divider);
+  border-radius: 21px;
+  background: white;
+  overflow: hidden;
+}
+.settings-list > a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+  min-height: 78px;
+  color: var(--text);
+  border-bottom: 1px solid var(--divider);
+}
+.settings-list > a:last-child {
+  border-bottom: 0;
+}
+.settings-list > a:hover {
+  background: var(--surface-muted);
+}
+.settings-list > a > svg:first-child {
+  color: var(--action);
+  width: 21px;
+}
+.settings-list > a > svg:last-child {
+  margin-left: auto;
+  width: 18px;
+  color: var(--secondary);
+}
+.settings-list span {
+  min-width: 0;
+}
+.settings-list strong,
+.settings-list small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.settings-list strong {
+  font-size: 0.875rem;
+}
+.settings-list small {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--secondary);
+  margin-top: 5px;
+}
+.demo-tools-panel {
+  border-radius: 21px;
+  border: 1px solid var(--divider);
+  padding: 22px;
+  margin-top: 24px;
+  background: white;
+}
+.demo-tools-panel .support {
+  margin-bottom: 0;
+  font-size: 0.8125rem;
+}
+@media (min-width: 1120px) {
+  .app-shell.has-navigation .bottom-nav {
+    display: flex;
+  }
+  .app-shell.has-navigation .desktop-space {
+    max-height: calc(100dvh - 435px);
+    overflow-y: auto;
+  }
+}
+@media (max-width: 1119px) {
+  .app-shell .brandbar {
+    height: auto;
+    min-height: 68px;
+    padding-block: 12px;
+  }
+  .app-shell .brand {
+    flex-wrap: wrap;
+  }
+  .app-shell .bottom-nav {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .app-shell .bottom-nav a {
+    flex: 1 1 3rem;
+    min-width: max-content;
+  }
+  .app-shell .bottom-nav a span {
+    overflow-wrap: normal;
+    white-space: nowrap;
+  }
+  .app-shell.has-navigation main {
+    padding-bottom: calc(max(112px, 7rem) + env(safe-area-inset-bottom));
+  }
+}
+@media (max-width: 480px) {
+  .app-shell .bottom-nav {
+    width: calc(100% - 16px);
+    gap: 1px;
+    padding: 5px;
+    border-radius: 22px;
+  }
+  .app-shell .bottom-nav a {
+    padding: 7px 2px;
+    border-radius: 16px;
+  }
+  .settings-list > a {
+    padding: 18px 15px;
+    gap: 12px;
+  }
+}

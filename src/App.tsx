@@ -21,8 +21,11 @@ import {
   Settings2,
   BriefcaseBusiness,
 } from "lucide-react";
+import { useCommunity } from "./components/Community";
+import "./navigation-design.css";
 import { supabase, DEMO } from "./lib/auth";
 import { APP_CONFIG } from "../shared/domain";
+import { consumeReturnTo, rememberReturnTo } from "./lib/internal-return";
 import { Button, Loading, Notice, QuestArt } from "./components/ui";
 import Quest from "./pages/Quest";
 import Profile from "./pages/Profile";
@@ -30,41 +33,57 @@ import Onboarding from "./pages/Onboarding";
 import Journal from "./pages/Journal";
 import Rewards from "./pages/Rewards";
 import PublicQuest from "./pages/PublicQuest";
-import {
-  DEMO_PEOPLE,
-  demoPersona,
-  switchDemoPersona,
-  type DemoPersona,
-} from "./lib/demo-identity";
+
 const ActiveQuest = lazy(() => import("./pages/ActiveQuest"));
 const Operator = lazy(() => import("./pages/Operator"));
 const ImportProfile = lazy(() => import("./pages/ImportProfile"));
 const Discover = lazy(() => import("./pages/Discover"));
 const Activity = lazy(() => import("./pages/Activity"));
 const Creator = lazy(() => import("./pages/Creator"));
+const Series = lazy(() => import("./pages/Series"));
 const CommunityStudio = lazy(() => import("./pages/CommunityStudio"));
+const BusinessWorkspace = lazy(() =>
+  import("./pages/CommunityStudio").then((module) => ({
+    default: module.BusinessWorkspace,
+  })),
+);
+const CommunityAdmin = lazy(() =>
+  import("./pages/CommunityStudio").then((module) => ({
+    default: module.CommunityAdmin,
+  })),
+);
+const Settings = lazy(() => import("./pages/Settings"));
+const DemoTools = lazy(() =>
+  import("./pages/Settings").then((module) => ({ default: module.DemoTools })),
+);
 const OriginalQuest = lazy(() => import("./pages/OriginalQuest"));
 const LicenseOffer = lazy(() => import("./pages/LicenseOffer"));
 export default function App() {
   const [signedIn, setSignedIn] = useState(DEMO);
+  const [identity, setIdentity] = useState<string | null>(DEMO ? "demo" : null);
   const [loading, setLoading] = useState(!DEMO && !!supabase);
   const location = useLocation();
   const navigate = useNavigate();
-  const publicPage = /^\/(?:discover|posts\/|creators\/|quests\/)/.test(
-    location.pathname,
-  );
+  const isReel = /^\/posts\/[^/]+$/.test(location.pathname);
+  const publicPage =
+    /^\/(?:discover|posts\/|creators\/|quests\/)/.test(location.pathname) ||
+    /^\/series(?:\/[0-9a-f-]{36})?$/i.test(location.pathname);
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => {
       setSignedIn(!!data.session);
+      setIdentity(data.session?.user.id ?? null);
       setLoading(false);
     });
     const { data } = supabase.auth.onAuthStateChange((_e, session) => {
       if (_e === "SIGNED_OUT") {
         sessionStorage.removeItem("sq-quest-flow");
         sessionStorage.removeItem("sq-outing");
+        sessionStorage.removeItem("sq-return-to");
+        sessionStorage.removeItem("sq-profile-draft");
       }
       setSignedIn(!!session);
+      setIdentity(session?.user.id ?? null);
       setLoading(false);
     });
     return () => data.subscription.unsubscribe();
@@ -76,25 +95,30 @@ export default function App() {
     sessionStorage.getItem("sq-demo-started") ||
     localStorage.getItem("sidequest-demo-v1");
   const [welcome, setWelcome] = useState(DEMO && !started);
+  const accountAccess = useCommunity(
+    "me",
+    {},
+    signedIn && !welcome,
+    identity ?? "guest",
+  );
+  const admin = Boolean(
+    signedIn && accountAccess.data?.roles.includes("operator"),
+  );
   const navigationVisible =
     ((signedIn && !welcome) || publicPage) &&
-    !location.pathname.startsWith("/onboarding");
+    !location.pathname.startsWith("/onboarding") &&
+    !isReel;
   const isDiscover = location.pathname === "/discover";
   useEffect(() => {
     if ((!signedIn || welcome) && location.pathname === "/create")
-      sessionStorage.setItem(
-        "sq-return-to",
-        location.pathname + location.search,
-      );
+      rememberReturnTo(location.pathname + location.search);
     if (signedIn && location.pathname === "/auth/callback") {
-      const target = sessionStorage.getItem("sq-return-to") || "/create";
-      sessionStorage.removeItem("sq-return-to");
-      navigate(target, { replace: true });
+      navigate(consumeReturnTo(), { replace: true });
     }
   }, [signedIn, welcome, location.pathname, location.search, navigate]);
   return (
     <div
-      className={`app-shell ${navigationVisible ? "has-navigation" : ""} ${isDiscover ? "discover-shell" : ""}`}
+      className={`app-shell ${navigationVisible ? "has-navigation" : ""} ${isDiscover ? "discover-shell" : ""} ${isReel ? "reel-shell" : ""}`}
     >
       <a className="skip-link" href="#main">
         Skip to content
@@ -105,7 +129,12 @@ export default function App() {
             <Flag size={19} />
           </span>
           {APP_CONFIG.name}
-          <span className="beta">PILOT</span>
+          <span
+            className="beta"
+            title={DEMO ? "Local demonstration. No real payments." : "Pilot"}
+          >
+            {DEMO ? "DEMO" : "PILOT"}
+          </span>
         </Link>
         {navigationVisible ? (
           <details
@@ -124,7 +153,7 @@ export default function App() {
             <summary aria-label="Your space">
               <MoreHorizontal size={24} />
             </summary>
-            <SpaceLinks />
+            <SpaceLinks admin={admin} />
           </details>
         ) : (
           <span className="private-note">
@@ -132,36 +161,9 @@ export default function App() {
           </span>
         )}
       </header>
-      {DEMO && (
-        <div
-          className="demo-controls"
-          role="region"
-          aria-label="Local demo status"
-        >
-          <span className="demo-status">
-            <span className="demo-dot" /> Local demo{" "}
-            <span className="demo-context">· no real payments</span>
-          </span>
-          <label>
-            <span className="sr-only">Demo view</span>
-            <select
-              value={demoPersona()}
-              onChange={(event) =>
-                switchDemoPersona(event.target.value as DemoPersona)
-              }
-            >
-              {Object.entries(DEMO_PEOPLE).map(([key, person]) => (
-                <option key={key} value={key}>
-                  {person.role}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      )}
       {navigationVisible && (
         <div className="desktop-space">
-          <SpaceLinks />
+          <SpaceLinks admin={admin} />
           <p>
             Good stories start
             <br />
@@ -181,22 +183,49 @@ export default function App() {
           />
         ) : (
           <Suspense fallback={<Loading />}>
-            <Routes>
+            <Routes key={identity ?? "guest"}>
               <Route path="/" element={<Quest />} />
               <Route path="/create" element={<Quest />} />
               <Route path="/discover" element={<Discover />} />
               <Route path="/posts/:id" element={<Discover />} />
-              <Route path="/creators/:id" element={<Creator />} />
+              <Route
+                path="/creators/:id"
+                element={<Creator signedIn={signedIn} />}
+              />
               <Route path="/quests/:templateId" element={<PublicQuest />} />
               <Route path="/activity" element={<Activity />} />
               <Route path="/onboarding" element={<Onboarding />} />
               <Route path="/journal" element={<Journal />} />
               <Route path="/rewards" element={<Rewards />} />
-              <Route path="/profile" element={<Creator />} />
+              <Route
+                path="/profile"
+                element={<Creator signedIn={signedIn} />}
+              />
               <Route path="/account" element={<Profile />} />
               <Route path="/studio" element={<CommunityStudio />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/settings/demo-tools" element={<DemoTools />} />
+              <Route path="/business" element={<BusinessWorkspace />} />
+              <Route path="/admin" element={<CommunityAdmin />} />
               <Route path="/originals/new" element={<OriginalQuest />} />
               <Route path="/originals/:id" element={<OriginalQuest />} />
+              {[
+                "/series",
+                "/series/new",
+                "/series/:id",
+                "/series/:id/edit",
+              ].map((path) => (
+                <Route
+                  key={path}
+                  path={path}
+                  element={
+                    <Series
+                      key={`${signedIn}:${location.pathname}`}
+                      signedIn={signedIn}
+                    />
+                  }
+                />
+              ))}
               <Route path="/offers/:id" element={<LicenseOffer />} />
               <Route path="/profile/import" element={<ImportProfile />} />
               <Route path="/runs/:id" element={<ActiveQuest />} />
@@ -222,6 +251,7 @@ export default function App() {
           {[
             { to: "/create", label: "Create", icon: PlusCircle },
             { to: "/discover", label: "Discover", icon: Compass },
+            { to: "/rewards", label: "Rewards", icon: Gift },
             { to: "/activity", label: "Activity", icon: Bell },
             { to: "/profile", label: "Profile", icon: UserRound },
           ].map((item) => (
@@ -235,21 +265,23 @@ export default function App() {
     </div>
   );
 }
-function SpaceLinks() {
+function SpaceLinks({ admin }: { admin: boolean }) {
   return (
     <nav className="secondary-nav" aria-label="Your space">
       <Link to="/journal">
         <BookOpen size={19} /> Private journal
       </Link>
-      <Link to="/rewards">
-        <Gift size={19} /> Rewards
+      <Link to="/settings">
+        <Settings2 size={19} /> Settings
       </Link>
-      <Link to="/studio">
-        <BriefcaseBusiness size={19} /> Creator studio
+      <Link to="/business">
+        <BriefcaseBusiness size={19} /> Business workspace
       </Link>
-      <Link to="/account">
-        <Settings2 size={19} /> Account settings
-      </Link>
+      {admin && (
+        <Link to="/admin">
+          <ShieldCheck size={19} /> Admin
+        </Link>
+      )}
     </nav>
   );
 }
@@ -316,7 +348,7 @@ function Welcome({ onStart }: { onStart: () => void }) {
             className="text-button"
             onClick={() => {
               onStart();
-              navigate(sessionStorage.getItem("sq-return-to") || "/create");
+              navigate(consumeReturnTo());
             }}
           >
             Explore the demo first

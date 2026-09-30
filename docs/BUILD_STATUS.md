@@ -1,5 +1,105 @@
 # Build status — 2026-09-29
 
+## Creator experience and Quest Series
+
+The product handoff is implemented on top of the existing guided Create, profile,
+discovery, Maps, media, and licensing work. The five primary destinations are
+Create, Discover, Rewards, Activity, and Profile. Settings contains Demo tools;
+Business workspace and permission-gated Admin replace the Studio catch-all, with
+compatible redirects for old links.
+
+Profiles now support uploaded photos, unique usernames, persistent follows, actual
+counts, a portrait video grid, and Videos/Quests/Series/Private tabs. Reels open in
+a focused viewer. Authentication changes discard the previous account's private
+data immediately. Rewards separates proposals, accepted amounts awaiting manual
+fulfillment, verified payments, and quest points without implying automatic payouts.
+
+Series supports finite and ongoing authoring, drafts, frozen reviewed quest versions,
+ordered parts, explicit prerequisites, independent parts, participant-owned progress,
+refresh/resume, follows, and new-part Activity notifications. Real completion drives
+progress. Publication remains explicit; licensing remains scoped to the exact video.
+Account deletion redacts authored Series content while preserving other participants'
+accepted records. See [the implementation guide](CREATOR_SERIES.md).
+
+Verified locally for this handoff:
+
+- All 242 unit tests across 18 files pass. Typecheck, lint, build, API smoke, and
+  `git diff --check` pass. Vite retains its advisory chunk warning: the browser entry
+  is about 535 kB / 165 kB gzip; creator, Series, reel, and operator screens are split.
+- All 48 current browser scenarios passed across the combined run and focused
+  follow-ups. The combined run passed 46 of its 47 scenarios; its new Series
+  authoring test exposed accessible-select labels and an overly exact error-text
+  selector. Both were corrected. The final three Series scenarios pass together,
+  including the additional real capture → render → private completion → publication
+  → separate participant attempt journey. Existing capture, business approval,
+  licensing, fulfillment, profiles, recommendations, Maps, and pagination passed.
+- A fresh isolated PostgreSQL cluster applied every migration and the 33-variant
+  seed. Social and Series ownership, RLS/grants, follow/block behavior, frozen
+  versions, prerequisites, completion retries, source attribution, cleanup, and
+  deletion redaction passed alongside the existing concurrency/economic suite.
+  Supabase advisors reported no findings; database types were regenerated. No
+  existing or remote database was used.
+- Mobile/desktop layouts and 200% text were checked at 320/390/768/1440px. The
+  enlarged navigation wraps whole labels; photos fit their avatars; full-screen
+  reels exclude the desktop rail. Series and reel screenshots are under
+  `output/handoff-series-complete`; navigation/profile artifacts are under
+  `output/navigation-layout-visual` and `output/social-profile-final`.
+  Separate viewport captures `output/reel-large-text-top.png` and
+  `output/reel-large-text-actions.png` verify readable enlarged reel controls.
+
+Changes remain local. No push, deployment, remote migration, provider provisioning,
+or payment was performed. Live Supabase Auth and Cloudflare R2/Queue/Container still
+need the dedicated staging configuration and two-account checks. Apple Maps needs
+a valid domain-restricted token; its configured tests use an explicit SDK fixture.
+Profile parsing remains manual and reviewed, with no automatic parser configured.
+Payments continue to use manual verification. These are configuration boundaries,
+not claims of live provider integration.
+
+## Reliable discovery and Apple Maps
+
+Guided Create now checks viable quests against confirmed answers only. Canonical
+eligibility issues supply concrete recovery choices, preserving other answers and
+keeping boundaries and permissions enforced. Three complete small-group variants
+bring the catalog to 33 variants across 13 families; the reported Daytime/Bold,
+couple, $25, one-hour, at-home plan now has a suitable 45-minute, $0 quest.
+
+Profile detours preserve the selected template, inspiration, and outing. Actual
+target requirements expose adult/volunteer confirmations in every category.
+Custom profile text keeps spaces during typing, and confirmed preference chips
+represent all collected answers. Discover loads older pages with retry, deduplication,
+filter resets, stale-response protection, and stable timestamp/ID cursors.
+
+Apple Maps search, real-place selection, map preview, and directions are wired into
+Create, review, and accepted quests. Only a durable Place ID is stored. Missing
+configuration has an honest external Maps fallback. **A live Apple token is not
+configured**; configured browser checks use an explicit SDK fixture. Follow
+[Maps setup](MAPS.md) to connect and verify real Apple authorization and rendering.
+No monetization or paid placement was activated.
+
+Verified locally for this pass:
+
+- 195 unit tests across 13 files and all 31 browser scenarios passed. These include
+  the reported outing, early unknown answers, explicit recovery, hard boundaries,
+  onboarding return/Back/cancel, actual sequential typing, pagination, Maps retry
+  and persistence, plus the existing capture, publication, and licensing flows.
+- Typecheck, lint, and production build passed. Vite reports its advisory 500 kB
+  chunk warning for the 513 kB browser entry (159 kB gzip); the Apple loader is
+  dynamically imported. This is not a build failure.
+- A fresh isolated PostgreSQL cluster applied both additive migrations and the
+  33-variant seed. Real cursor round trips with timezone offsets and equal timestamps,
+  RLS, transactions, rewards, media, and commercial invariants passed. Supabase
+  security advisors reported no findings. No existing database was contacted.
+- Mobile browser screenshots are under `output/current-milestone-browser`, including
+  the Daytime/couple result and the explicitly mocked Apple place preview.
+- Maps search/results, missing-token fallback, and recovery layouts fit
+  320/390/768/1440px and 200% text at 320px without horizontal overflow or clipped
+  controls. The recovery heading now gives enlarged text its own row. Artifacts
+  are under `output/current-milestone-visual`. All 12 affected browser scenarios
+  passed again after the final heading and adult-confirmation wording changes.
+
+Changes remain local. No deployment, GitHub push, or remote resource change was
+made in this pass. The older milestone records below retain their original scope.
+
 ## Guided quest creation
 
 Create is the first primary destination. The outing form now asks one question at
@@ -25,7 +125,7 @@ feed loading/error/retry checks passed. See [design notes](DESIGN.md) for the vi
 layer and artifact locations. Existing privacy, capture, publishing, and licensing
 behavior remains covered by the regression suite.
 
-## Current milestone
+## Earlier community milestone
 
 The existing local app now has Create/Discover/Activity/Profile navigation, explicit
 public reel posts, personal Try-this-quest eligibility, reviewed original quests,

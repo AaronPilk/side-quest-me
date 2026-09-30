@@ -33,14 +33,15 @@ const prefs = (patch: Partial<Preferences> = {}): Preferences => ({
 });
 
 describe("complete authored catalog", () => {
-  it("has exactly ten stable families, three complete variants each, and two families per category", () => {
-    expect(catalog).toHaveLength(30);
-    expect(new Set(catalog.map((q) => q.id)).size).toBe(30);
-    const families = [...new Set(catalog.map((q) => q.familyId))];
+  it("preserves the original ten families and adds three complete coverage variants", () => {
+    expect(catalog).toHaveLength(33);
+    const original = catalog.slice(0, 30);
+    expect(new Set(catalog.map((q) => q.id)).size).toBe(33);
+    const families = [...new Set(original.map((q) => q.familyId))];
     expect(families).toHaveLength(10);
     for (const family of families)
       expect(
-        catalog
+        original
           .filter((q) => q.familyId === family)
           .map((q) => q.intensity)
           .sort(),
@@ -54,7 +55,9 @@ describe("complete authored catalog", () => {
     ])
       expect(
         new Set(
-          catalog.filter((q) => q.category === category).map((q) => q.familyId),
+          original
+            .filter((q) => q.category === category)
+            .map((q) => q.familyId),
         ).size,
       ).toBe(2);
     for (const quest of catalog) {

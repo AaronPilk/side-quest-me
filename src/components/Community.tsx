@@ -14,21 +14,23 @@ export function useCommunity<V extends CommunityView>(
   view: V,
   input: Record<string, unknown> = {},
   enabled = true,
+  identity = "",
 ) {
   type T = CommunityReadResults[V];
   const inputKey = JSON.stringify(input);
   const [revision, setRevision] = useState(0);
-  const [data, setData] = useState<T>();
+  const resourceKey = JSON.stringify([view, inputKey, enabled, identity]);
+  const [response, setResponse] = useState<{ key: string; data: T }>();
   const [error, setError] = useState("");
   useEffect(() => {
     if (!enabled) return;
     let active = true;
     setError("");
-    setData(undefined);
+    setResponse(undefined);
     communityApi
       .read<T>(view, JSON.parse(inputKey))
       .then((value) => {
-        if (active) setData(value);
+        if (active) setResponse({ key: resourceKey, data: value });
       })
       .catch((cause) => {
         if (active) setError((cause as Error).message);
@@ -36,8 +38,12 @@ export function useCommunity<V extends CommunityView>(
     return () => {
       active = false;
     };
-  }, [view, inputKey, revision, enabled]);
-  return { data, error, refresh: () => setRevision((value) => value + 1) };
+  }, [view, inputKey, revision, enabled, resourceKey]);
+  return {
+    data: enabled && response?.key === resourceKey ? response.data : undefined,
+    error: enabled ? error : "",
+    refresh: () => setRevision((value) => value + 1),
+  };
 }
 
 export function useCommunityAction(refresh?: () => void) {
@@ -94,16 +100,24 @@ export function words(value: string) {
 export function CreatorAvatar({
   avatar,
   name,
+  photoUrl,
 }: {
   avatar?: string;
   name: string;
+  photoUrl?: string | null;
 }) {
   return (
     <span
       className={`creator-avatar avatar-${avatar || "coral"}`}
       aria-hidden="true"
     >
-      {name ? name.trim().slice(0, 1).toUpperCase() : <UserRound size={20} />}
+      {photoUrl ? (
+        <img src={photoUrl} alt="" loading="lazy" />
+      ) : name ? (
+        name.trim().slice(0, 1).toUpperCase()
+      ) : (
+        <UserRound size={20} />
+      )}
     </span>
   );
 }
@@ -191,16 +205,18 @@ export function Planning({
 export function TryQuest({
   id,
   postId,
+  seriesPartId,
   children = "Try this quest",
 }: {
   id: string;
   postId?: string;
+  seriesPartId?: string;
   children?: ReactNode;
 }) {
   return (
     <Link
       className="button"
-      to={`/create?template=${encodeURIComponent(id)}${postId ? `&from=${encodeURIComponent(postId)}` : ""}`}
+      to={`/create?template=${encodeURIComponent(id)}${postId ? `&from=${encodeURIComponent(postId)}` : ""}${seriesPartId ? `&seriesPart=${encodeURIComponent(seriesPartId)}` : ""}`}
     >
       {children}
       <ArrowRight size={18} />

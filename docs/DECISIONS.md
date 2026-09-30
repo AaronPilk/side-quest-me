@@ -32,7 +32,7 @@ the snapshotted price once. Reserving is never presented as actual merchant fulf
 
 ## Curated recommendations first
 
-The thirty authored variants are filtered before deterministic ranking. Imported
+The 33 authored variants are filtered before deterministic ranking. Imported
 summaries remain reviewed text and do not weaken exclusions. Unparsed custom
 boundaries stop suggestions with an explanation; no model silently interprets them.
 AI is unnecessary for the core release.
@@ -70,6 +70,21 @@ The demo persona selector operates on browser-only records and actual local fixt
 media. Production mode has no persona switch or seeded community identity. SQL and
 Worker tests independently enforce authorization, idempotency, and narrow DTOs;
 browser demo success is not evidence of deployed cloud integration.
+
+## Series reuse real attempts and completion
+
+A Series groups reviewed quest versions using stable part identities and frozen
+content. Participant progress is derived from their own finalized runs. This avoids
+a second completion store drifting from the existing reward ledger or treating
+views as participation. Finite Series publish their planned parts together;
+ongoing Series may add new parts. Published part identities, order, versions, and
+prerequisites remain fixed. A changed or withdrawn quest version stops new starts
+with a clear explanation while accepted runs retain their snapshots.
+
+The Series acceptance wrapper shares the ordinary acceptance receipt and transaction,
+validates prerequisites and source attribution, and stamps the snapshot before its
+hash is frozen. Each video still requires explicit publication and a separate exact
+asset licensing agreement. No Series bonus or automatic payout policy is assumed.
 
 ## Single release owner
 

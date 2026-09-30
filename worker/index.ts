@@ -10,6 +10,7 @@ import {
   questVariantSchema,
   categorySchema,
 } from "../shared/domain";
+import { assessViability } from "../shared/viability";
 import { recommend, ineligibilityReasons } from "../shared/recommend";
 import {
   ApiError,
@@ -44,6 +45,18 @@ import {
   registerCommunityPrivate,
   COMMUNITY_PRIVATE_ROUTE,
 } from "./community";
+import {
+  registerSocialPublic,
+  registerSocialPrivate,
+  SOCIAL_PRIVATE_ROUTE,
+  cleanupSocialPhotos,
+} from "./social";
+import {
+  registerSeriesPublic,
+  registerSeriesPrivate,
+  SERIES_PRIVATE_ROUTE,
+  seriesError,
+} from "./series";
 export { SidequestRenderer } from "./media";
 
 const app = new Hono<AppBindings>();
@@ -119,6 +132,9 @@ app.get("/api/health", (c) =>
     demo: false,
   }),
 );
+app.get("/api/maps/config", (c) =>
+  c.json({ token: c.env.APPLE_MAPS_TOKEN || null }),
+);
 app.get("/api/quests/:templateId", async (c) => {
   const db = serviceDb(c.env);
   const { data, error } = await db
@@ -136,10 +152,14 @@ app.get("/api/quests/:templateId", async (c) => {
   return c.json(data.content);
 });
 registerCommunityPublic(app);
+registerSocialPublic(app);
+registerSeriesPublic(app);
 app.use("/api/*", async (c, next) => {
   const knownRoutes = [
     COMMUNITY_PRIVATE_ROUTE,
-    /^\/api\/(me|wallet|quests|quests\/recommend|quest-runs|quest-runs\/active|rewards|redemptions|operator)$/,
+    SOCIAL_PRIVATE_ROUTE,
+    SERIES_PRIVATE_ROUTE,
+    /^\/api\/(me|wallet|quests|quests\/recommend|quests\/viability|quest-runs|quest-runs\/active|rewards|redemptions|operator)$/,
     /^\/api\/quest-runs\/[^/]+(?:\/(abandon|uploads|clips|complete|renders|share|media))?$/,
     /^\/api\/media\/[^/]+(?:\/(upload|finalize|playback))?$/,
     /^\/api\/render-jobs\/[^/]+$/,
@@ -198,6 +218,8 @@ app.use("/api/*", async (c, next) => {
   await next();
 });
 registerCommunityPrivate(app);
+registerSocialPrivate(app);
+registerSeriesPrivate(app);
 async function me(c: AppContext) {
   const db = c.get("serviceDb");
   const init = await db.rpc("sq_upsert_profile", {
@@ -265,6 +287,37 @@ app.delete("/api/me", async (c) => {
   const result = await rpc(c, "sq_delete_account", {});
   await c.get("serviceDb").auth.admin.signOut(c.get("token"), "global");
   return c.json(result);
+});
+app.post("/api/quests/viability", async (c) => {
+  const { outing, confirmed, templateId } = await json(
+    c,
+    z
+      .object({
+        outing: outingSchema,
+        confirmed: z.array(outingSchema.keyof()).max(30),
+        templateId: z.string().max(120).optional(),
+      })
+      .strict(),
+  );
+  const [current, published] = await Promise.all([
+    me(c),
+    c
+      .get("userDb")
+      .from("quest_templates")
+      .select("id,content")
+      .eq("published", true),
+  ]);
+  if (published.error) dbError(published.error.message);
+  return c.json(
+    assessViability(
+      outing,
+      current.profile.preferences,
+      confirmed,
+      (published.data || [])
+        .filter((row) => !templateId || row.id === templateId)
+        .map((row) => questVariantSchema.parse(row.content)),
+    ),
+  );
 });
 app.post("/api/quests/recommend", async (c) => {
   const { outing, templateId } = await json(
@@ -346,6 +399,7 @@ app.post("/api/quest-runs", async (c) => {
         templateId: z.string().max(120),
         outing: outingSchema,
         inspiredByPostId: z.uuid().optional(),
+        seriesPartId: z.uuid().optional(),
         expectedCampaign: z
           .object({ id: z.uuid(), version: z.number().int().positive() })
           .strict()
@@ -380,21 +434,27 @@ app.post("/api/quest-runs", async (c) => {
       "This quest no longer fits your settings or boundaries. Find your quests again.",
       409,
     );
-  const result = await rpc(c, "sq_accept_run", {
-    template_id: input.templateId,
-    outing: {
-      ...input.outing,
-      role:
-        current.profile.preferences.role &&
-        quest.roles.includes(current.profile.preferences.role)
-          ? current.profile.preferences.role
-          : null,
+  const result = await rpc(
+    c,
+    input.seriesPartId ? "sq_accept_series_run" : "sq_accept_run",
+    {
+      template_id: input.templateId,
+      outing: {
+        ...input.outing,
+        role:
+          current.profile.preferences.role &&
+          quest.roles.includes(current.profile.preferences.role)
+            ? current.profile.preferences.role
+            : null,
+      },
+      expected_campaign: input.expectedCampaign,
+      ...(input.inspiredByPostId
+        ? { inspired_by_post: input.inspiredByPostId }
+        : {}),
+      ...(input.seriesPartId ? { series_part_id: input.seriesPartId } : {}),
     },
-    expected_campaign: input.expectedCampaign,
-    ...(input.inspiredByPostId
-      ? { inspired_by_post: input.inspiredByPostId }
-      : {}),
-  });
+    input.seriesPartId ? seriesError : dbError,
+  );
   return c.json(await runDto(c, result.run));
 });
 app.get("/api/quest-runs", async (c) => {
@@ -1055,6 +1115,7 @@ export default {
     if (error) throw new Error("Reconciliation failed");
     await dispatchPendingRenders(env, db);
     await cleanupMedia(env, db);
+    await cleanupSocialPhotos(env, db);
     const { data: deleting } = await db
       .from("profiles")
       .select("id,auth_user_id")

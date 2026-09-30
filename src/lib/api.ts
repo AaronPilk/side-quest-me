@@ -8,6 +8,7 @@ import {
   type QuestVariant,
 } from "../../shared/domain";
 import { catalog } from "../../shared/catalog";
+import { assessViability, type QuestViability } from "../../shared/viability";
 import { recommend } from "../../shared/recommend";
 import { accessToken, DEMO, supabase } from "./auth";
 import type { Clip, Me, Offer, Redemption, Run, Reel } from "./types";
@@ -18,6 +19,7 @@ import {
   resetDemoState,
 } from "./demo-identity";
 import { demoInspiration, demoOriginalTemplates } from "./demo-community";
+import { demoValidateSeriesPart } from "./demo-series";
 
 type DemoData = {
   me: Me;
@@ -219,6 +221,25 @@ export const api = {
           outing,
           ...(templateId ? { templateId } : {}),
         }),
+  viability: async (
+    outing: Outing,
+    confirmed: (keyof Outing)[],
+    templateId?: string,
+  ): Promise<QuestViability> =>
+    DEMO
+      ? assessViability(
+          outing,
+          read().me.profile.preferences,
+          confirmed,
+          [...catalog, ...demoOriginalTemplates()].filter(
+            (item) => !templateId || item.id === templateId,
+          ),
+        )
+      : mutation("/api/quests/viability", {
+          outing,
+          confirmed,
+          ...(templateId ? { templateId } : {}),
+        }),
   runs: async (): Promise<Run[]> =>
     DEMO ? read().runs : request("/api/quest-runs"),
   run: async (id: string): Promise<Run> => {
@@ -256,6 +277,7 @@ export const api = {
     outing: Outing,
     key: string,
     inspiredByPostId?: string,
+    seriesPartId?: string,
   ): Promise<Run> =>
     DEMO
       ? transaction((d) => {
@@ -265,6 +287,7 @@ export const api = {
               Object.entries(outing).sort(([a], [b]) => a.localeCompare(b)),
             ),
             inspiredByPostId ?? null,
+            ...(seriesPartId ? [seriesPartId] : []),
           ]);
           const receipt = d.acceptances?.[key];
           if (receipt) {
@@ -284,12 +307,17 @@ export const api = {
             };
             return run;
           };
-          if (inspiredByPostId) demoInspiration(inspiredByPostId, quest.id);
+          if (inspiredByPostId)
+            demoInspiration(inspiredByPostId, quest.id, seriesPartId);
           const active = d.runs.find((r) =>
             ["accepted", "in_progress"].includes(r.status),
           );
           if (active) {
-            if (active.quest.id === quest.id) return remember(active);
+            if (
+              active.quest.id === quest.id &&
+              (active.series?.partId ?? null) === (seriesPartId ?? null)
+            )
+              return remember(active);
             throw new Error(
               "You have a quest in progress. Continue it or abandon it first.",
             );
@@ -308,12 +336,16 @@ export const api = {
             throw new Error(
               "This quest no longer fits. Find your quests again.",
             );
+          const series = seriesPartId
+            ? demoValidateSeriesPart(seriesPartId, quest.id, d.runs)
+            : undefined;
           const run: Run = {
             id: crypto.randomUUID(),
             quest: structuredClone(variant),
             outing,
             role: selected.selectedRole,
             ...(inspiredByPostId ? { inspiredByPostId } : {}),
+            ...(series ? { series } : {}),
             status: "accepted",
             clips: [],
             createdAt: new Date().toISOString(),
@@ -328,6 +360,7 @@ export const api = {
             outing,
             expectedCampaign: quest.sponsorCampaign || null,
             ...(inspiredByPostId ? { inspiredByPostId } : {}),
+            ...(seriesPartId ? { seriesPartId } : {}),
           },
           key,
         ),

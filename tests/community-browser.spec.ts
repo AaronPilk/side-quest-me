@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { reviewQuestPlans } from "./quest-wizard-helpers";
+import { selectDemoPersona } from "./demo-persona-helper";
 
 test.use({ actionTimeout: 15_000 });
 
@@ -22,11 +23,7 @@ async function persona(
   page: Page,
   value: "creator" | "viewer" | "brand" | "operator",
 ) {
-  await page.getByRole("combobox", { name: "Demo view" }).selectOption(value);
-  await expect(page).toHaveURL(/\/discover$/);
-  await expect(page.getByRole("combobox", { name: "Demo view" })).toHaveValue(
-    value,
-  );
+  await selectDemoPersona(page, value);
 }
 async function noOverflow(page: Page) {
   expect(
@@ -481,10 +478,7 @@ test("creators can decline an inquiry and change profile/video availability with
     .click();
   await expect(page.getByText("declined", { exact: true })).toBeVisible();
   await page.goto("/profile");
-  await page
-    .locator("summary")
-    .filter({ hasText: /^Edit public profile$/ })
-    .click();
+  await page.getByRole("button", { name: "Edit profile", exact: true }).click();
   await page
     .getByRole("checkbox", { name: "Open to brand opportunities", exact: true })
     .uncheck();
@@ -493,10 +487,7 @@ test("creators can decline an inquiry and change profile/video availability with
     page.getByText("Public profile saved.", { exact: true }),
   ).toBeVisible();
   await page.reload();
-  await page
-    .locator("summary")
-    .filter({ hasText: /^Edit public profile$/ })
-    .click();
+  await page.getByRole("button", { name: "Edit profile", exact: true }).click();
   await expect(
     page.getByRole("checkbox", {
       name: "Open to brand opportunities",

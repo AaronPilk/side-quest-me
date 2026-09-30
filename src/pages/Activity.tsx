@@ -8,6 +8,8 @@ import {
   ShieldCheck,
   Sparkles,
   type LucideIcon,
+  Layers2,
+  UserPlus,
 } from "lucide-react";
 import {
   useCommunity,
@@ -26,6 +28,9 @@ const activityIcons: Record<string, LucideIcon> = {
   fulfillment_recorded: CheckCircle2,
   post_removed: ShieldCheck,
   offer_suspended: ShieldCheck,
+  creator_followed: UserPlus,
+  creator_follow: UserPlus,
+  series_part_published: Layers2,
 };
 
 export default function Activity() {

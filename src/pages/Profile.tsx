@@ -12,6 +12,7 @@ import { api } from "../lib/api";
 import { DEMO, supabase } from "../lib/auth";
 import { levelFromXp } from "../../shared/domain";
 import { preferenceChips } from "../../shared/profile";
+import { rememberReturnTo } from "../lib/internal-return";
 import {
   Button,
   PageTitle,
@@ -28,6 +29,7 @@ export default function Profile() {
   const [saveError, setSaveError] = useState(false);
   if (!data) return error ? <Notice error>{error}</Notice> : <Loading />;
   const level = levelFromXp(data.wallet.xp);
+  const chips = preferenceChips(data.profile.preferences);
   return (
     <>
       <PageTitle
@@ -102,9 +104,9 @@ export default function Profile() {
       </section>
       <section className="section confirmed-preferences">
         <h2>Confirmed preferences</h2>
-        {preferenceChips(data.profile.preferences).length ? (
+        {chips.length ? (
           <div className="review-chips">
-            {preferenceChips(data.profile.preferences).map((chip) => (
+            {chips.map((chip) => (
               <span className="chip selected" key={chip}>
                 {chip}
               </span>
@@ -112,8 +114,7 @@ export default function Profile() {
           </div>
         ) : (
           <p className="support">
-            No matching preferences confirmed yet. We’ll use the outing you
-            choose.
+            No preferences confirmed yet. We’ll use the outing you choose.
           </p>
         )}
         {data.profile.preferences.legacyUnconfirmed.length > 0 && (
@@ -124,7 +125,7 @@ export default function Profile() {
         )}
       </section>
       <div className="settings-list">
-        <Link to="/onboarding">
+        <Link to="/onboarding" onClick={() => rememberReturnTo("/account")}>
           <SlidersHorizontal size={20} />
           <span>
             <strong>Preferences & boundaries</strong>

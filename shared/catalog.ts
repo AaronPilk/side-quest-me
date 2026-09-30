@@ -35,7 +35,7 @@ type FamilyInput = {
   requirements: string[];
   completion: string;
   costNote?: string;
-  variants: [VariantInput, VariantInput, VariantInput];
+  variants: [VariantInput, VariantInput, VariantInput] | [VariantInput];
 };
 const beat = (
   label: string,
@@ -44,6 +44,9 @@ const beat = (
   caption = label,
 ): Beat => ({ label, action, filming, caption });
 const roleFits: Record<string, Role[]> = {
+  day_pitch_swap: ["main_character", "camera_person", "rotate"],
+  day_tiny_discovery: ["mastermind", "camera_person", "rotate"],
+  night_pocket_radio: ["main_character", "camera_person", "rotate"],
   date_pit_crew: ["mastermind", "camera_person"],
   date_menu_draft: ["main_character", "rotate"],
   day_secret_expert: ["mastermind", "camera_person"],
@@ -1146,6 +1149,146 @@ export const catalog: QuestVariant[] = [
             "Payoff",
             "Meet the performer immediately afterward and hear the honest verdict.",
             "Capture the post-set reaction. Every joke failing still counts.",
+          ),
+        ],
+      },
+    ],
+  }),
+  ...family({
+    familyId: "day_pitch_swap",
+    title: "The Two-Person Pitch Swap",
+    category: "daytime",
+    people: [2, 2],
+    interests: ["comedy", "making", "absurd", "competitive"],
+    requirements: [
+      "Two willing people use a space they are allowed to use. No audience, outside cast, purchase, or advance booking is required.",
+      "Pitch invented uses for ordinary objects; no real product claims, private disclosures, risky demonstrations, or filming of bystanders.",
+    ],
+    completion:
+      "Did both people deliver a one-minute pitch and respond to the agreed surprise prompt? A pitch falling apart counts.",
+    fallback:
+      "Stay at home and use a mug or folded paper. If performing on camera is uncomfortable, record the objects and give an honest recap after the live attempt.",
+    costNote:
+      "Free with two ordinary objects and paper you already own. The 45 minutes includes choosing props, preparing, two pitches, and the verdict. Optional travel is added separately.",
+    variants: [
+      {
+        intensity: "bold",
+        hook: "You have ten minutes to turn an ordinary object into a ridiculous invention. Then your partner changes the brief.",
+        minutes: 45,
+        settings: ["home", "outside"],
+        materials: [
+          "Two safe ordinary objects already owned",
+          "Paper or phone notes",
+          "Two willing pitch partners",
+        ],
+        beats: [
+          beat(
+            "Setup",
+            "Spend ten minutes inventing a harmless new use for your object. Agree two playful prompt cards, such as ‘now pitch it to a penguin’ or ‘explain it as a weather forecast’. Each person may veto a prompt before filming.",
+            "Film the ordinary props, preparation, and each person's confident prediction.",
+          ),
+          beat(
+            "The Moment",
+            "Take turns delivering a one-minute pitch while the other films or listens. Halfway through, the listener reveals one approved prompt. Keep going in the new style for twenty seconds, then swap roles.",
+            "Record the prompt reveal and the performer's genuine attempt to adapt, with their permission.",
+          ),
+          beat(
+            "Payoff",
+            "Reveal the original objects and give each invention one sincere compliment and one obviously silly award. Failed improvisation is a valid ending; nobody has to repeat a take.",
+            "Capture the two objects, your invented awards, and the pair's real verdict.",
+          ),
+        ],
+      },
+    ],
+  }),
+  ...family({
+    familyId: "day_tiny_discovery",
+    title: "Three Things You Never Noticed",
+    category: "daytime",
+    people: [1, 2],
+    interests: ["local_knowledge", "making", "spontaneous"],
+    requirements: [
+      "Stay in your home or an outdoor area you are allowed to access. No entry into private property, purchases, or conversations with strangers are required.",
+      "Film objects and textures, avoiding identifiable bystanders, house numbers, private documents, and location clues you do not want to share.",
+    ],
+    completion:
+      "Did you find three genuine details and explain which one surprised you most?",
+    fallback:
+      "Do the entire trail in one room: a texture, a forgotten object, and a patch of light all count. Remain stationary if walking is unsuitable.",
+    costNote:
+      "No purchase needed. The 30 minutes includes choosing a small accessible area, looking for details, and filming a short personal verdict. Optional travel is additional.",
+    variants: [
+      {
+        intensity: "chill",
+        hook: "A tiny expedition through a familiar place, with three details you usually walk past.",
+        minutes: 30,
+        settings: ["home", "outside"],
+        materials: [
+          "Your phone",
+          "A familiar room or small accessible outdoor area",
+        ],
+        beats: [
+          beat(
+            "Setup",
+            "Choose one room or a small familiar outdoor area. Set a fifteen-minute observation window and name three things to look for: an interesting texture, a sign of change, and an overlooked object.",
+            "Film yourself naming the three clues, or show a handwritten clue list.",
+          ),
+          beat(
+            "The Moment",
+            "Find one real detail for each clue. Stay within your chosen area and film only things you are allowed to show. If with a partner, each contributes at least one discovery.",
+            "Capture a close-up of the discovery you almost missed and explain why it caught your attention.",
+          ),
+          beat(
+            "Payoff",
+            "Choose the most surprising discovery and explain how you had overlooked it. An ordinary detail with an honest explanation is enough.",
+            "Record your final discovery and a short genuine verdict on your tiny expedition.",
+          ),
+        ],
+      },
+    ],
+  }),
+  ...family({
+    familyId: "night_pocket_radio",
+    title: "The Living-Room Radio Show",
+    category: "late_night",
+    people: [2, 4],
+    interests: ["comedy", "music", "absurd", "friendly_awkward"],
+    requirements: [
+      "Everyone agrees to a short private performance. This is a fictional show recorded at home, not an actual public broadcast or a prank call.",
+      "Use your own spoken words and sound effects. No commercial music, private disclosures, impersonation of real emergency services, or loud late-night noise.",
+    ],
+    completion:
+      "Did you perform a short original show with a live handoff and respond to the agreed prompt? Awkward pauses count.",
+    fallback:
+      "Use quiet voices and tabletop sound effects. Film the homemade show title and record your own recap if a partner prefers to stay off camera.",
+    costNote:
+      "Free with household props and phone notes. The 45 minutes includes writing, a rehearsal, a short live attempt, and the closing verdict. No venue or advance arrangements are needed.",
+    variants: [
+      {
+        intensity: "bold",
+        hook: "A news desk for extremely ordinary events. Your cohost has one approved interruption up their sleeve.",
+        minutes: 45,
+        settings: ["home"],
+        materials: [
+          "Two to four willing hosts",
+          "A handwritten show title",
+          "Phone notes and quiet household sound-effect props",
+        ],
+        beats: [
+          beat(
+            "Setup",
+            "Spend fifteen minutes making an original show: a dramatic report about an ordinary household event, an absurd weather update, and a quiet invented jingle. Agree a harmless surprise prompt and let everyone veto topics.",
+            "Film the hosts preparing the title and rehearsing their over-serious introductions.",
+          ),
+          beat(
+            "The Moment",
+            "Perform the one-minute show in a single live attempt. Hand off to your cohost, who reveals the approved prompt. Improvise for twenty seconds and bring the show back on track without starting again.",
+            "Capture the live handoff, prompt reveal, and genuine attempt to keep the show together.",
+          ),
+          beat(
+            "Payoff",
+            "Close the fictional show, break character, and name its best accidental moment. Nobody needs to act more embarrassed or repeat a reaction.",
+            "Film the hosts' immediate verdict or your own honest recap beside the homemade title.",
           ),
         ],
       },

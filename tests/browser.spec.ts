@@ -26,6 +26,22 @@ async function assertNoOverflow(page: Page) {
   ).toBe(true);
 }
 async function visitYourSpace(page: Page, name: string) {
+  if (name === "Rewards") {
+    await page
+      .getByRole("navigation", { name: "Primary" })
+      .getByRole("link", { name: "Rewards", exact: true })
+      .click();
+    await page.getByRole("tab", { name: "Perks", exact: true }).click();
+    return;
+  }
+  if (name === "Account settings") {
+    await visitYourSpace(page, "Settings");
+    await page
+      .getByRole("navigation", { name: "Settings", exact: true })
+      .getByRole("link", { name: /Account settings/ })
+      .click();
+    return;
+  }
   const desktopLink = page
     .locator(".desktop-space")
     .getByRole("link", { name, exact: true });
@@ -42,7 +58,7 @@ async function visitYourSpace(page: Page, name: string) {
   await expect(menu).not.toHaveAttribute("open");
 }
 
-test("ten-question onboarding works without import, preserves answers and exposes four tabs", async ({
+test("ten-question onboarding works without import, preserves answers and exposes five tabs", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -72,7 +88,7 @@ test("ten-question onboarding works without import, preserves answers and expose
   await page.getByRole("button", { name: "Looks right" }).click();
   await expect(
     page.getByRole("navigation", { name: "Primary" }).getByRole("link"),
-  ).toHaveCount(4);
+  ).toHaveCount(5);
   await findDefaultQuests(page);
   await expect(page.locator(".quest-card")).toHaveCount(2);
   await expect(page.locator(".quest-card").first()).toContainText(
@@ -411,7 +427,7 @@ async function fixtureOperatorAuth(page: Page, roles: string[]) {
     export const DEMO = false;
     export const accessToken = async () => 'ui-fixture-token';
     export const supabase = { auth: {
-      getSession: async () => ({ data: { session: { access_token: 'ui-fixture-token' } } }),
+      getSession: async () => ({ data: { session: { access_token: 'ui-fixture-token', user: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } } } }),
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } })
     } };`,
     }),

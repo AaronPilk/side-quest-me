@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ApplePlaceCard } from "../components/ApplePlaces";
 import PublishReel from "../components/PublishReel";
 import { useParams, Link } from "react-router-dom";
 import {
@@ -131,6 +132,26 @@ export default function ActiveQuest() {
             : "The moment is yours. Keep the story."
           : "Three moments. One story. Take them at your own pace."}
       </PageTitle>
+      {run.series && (
+        <section
+          className="series-attempt-link"
+          aria-label="Your series attempt"
+        >
+          <span className="eyebrow">PART {run.series.position}</span>
+          <h2>{run.series.title}</h2>
+          <p>{run.series.partTitle}</p>
+          <Link className="button secondary" to={`/series/${run.series.id}`}>
+            {run.status === "finalized"
+              ? "Continue your series"
+              : "View your series progress"}
+            <ArrowRight size={17} />
+          </Link>
+          <p className="fine-print">
+            Each part has its own attempt. Your videos stay private until you
+            publish them.
+          </p>
+        </section>
+      )}
       {run.quest.sponsorDisclosure && (
         <p className="support">Sponsored · {run.quest.sponsorDisclosure}</p>
       )}
@@ -263,6 +284,12 @@ export default function ActiveQuest() {
             </>
           )}
         </section>
+      )}
+      {run.outing.applePlaceId && run.outing.setting !== "home" && (
+        <ApplePlaceCard
+          placeId={run.outing.applePlaceId}
+          transport={run.outing.transport}
+        />
       )}
       <div className="section-heading">
         <h2>{done ? "Your saved moments" : "Make it happen"}</h2>

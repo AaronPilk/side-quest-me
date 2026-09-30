@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { QuestWizard } from "../components/QuestWizard";
+import { QuestWizard, editQuestPlans } from "../components/QuestWizard";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
@@ -21,7 +21,10 @@ import {
 } from "../../shared/domain";
 import { api, eligibility } from "../lib/api";
 import { DEMO } from "../lib/auth";
-import { ineligibilityReasons } from "../../shared/recommend";
+import { seriesApi } from "../lib/series-api";
+import type { QuestViability, QuestRecovery } from "../../shared/viability";
+import { QuestFit } from "../components/QuestFit";
+import { ApplePlaceCard } from "../components/ApplePlaces";
 import {
   Button,
   Notice,
@@ -36,6 +39,16 @@ export default function Quest() {
   const [params, setParams] = useSearchParams();
   const requestedTemplate = params.get("template") || undefined;
   const inspiredBy = params.get("from") || undefined;
+  const seriesPartId = params.get("seriesPart") || undefined;
+  const seriesPart = useResource(
+    () => (seriesPartId ? seriesApi.part(seriesPartId) : Promise.resolve(null)),
+    [seriesPartId],
+  );
+  const seriesBlocked = Boolean(
+    seriesPartId &&
+    (!seriesPart.data?.canStart ||
+      seriesPart.data.part.templateId !== requestedTemplate),
+  );
   const target = useResource(
     () =>
       requestedTemplate ? api.quest(requestedTemplate) : Promise.resolve(null),
@@ -54,11 +67,18 @@ export default function Quest() {
   });
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
   const [selected, setSelected] = useState<Candidate>();
+  const [fit, setFit] = useState<QuestViability>();
   const [alternatives, setAlternatives] = useState<Candidate[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const resultsHeading = useRef<HTMLHeadingElement>(null);
   const [acceptKey] = useState(crypto.randomUUID());
+  useEffect(() => {
+    if (seriesPartId) {
+      setCandidates(null);
+      setSelected(undefined);
+    }
+  }, [seriesPartId]);
   useEffect(() => {
     if (target.data) {
       setOuting((current) => ({
@@ -82,7 +102,26 @@ export default function Quest() {
     }
   }, [candidates, selected]);
   function update(patch: Partial<Outing>) {
-    setOuting((current) => ({ ...current, ...patch }));
+    setOuting((current) => ({
+      ...current,
+      ...patch,
+      ...(patch.setting && patch.setting !== current.setting
+        ? {
+            applePlaceId: null,
+            venuePermission: false,
+            confirmedVenueCostMinor: null,
+            adultEligible: false,
+            adultContext: false,
+            ...(patch.setting === "home"
+              ? {
+                  transport: "none" as const,
+                  travelMinutes: 0,
+                  travelCostMinor: 0,
+                }
+              : {}),
+          }
+        : {}),
+    }));
     setCandidates(null);
     setError("");
   }
@@ -92,25 +131,51 @@ export default function Quest() {
     try {
       outingSchema.parse(outing);
       const choices = await api.quests(outing, requestedTemplate);
+      const [assessment, others] = await Promise.all([
+        choices.length
+          ? Promise.resolve(undefined)
+          : api.viability(
+              outing,
+              Object.keys(outingSchema.shape) as (keyof Outing)[],
+              requestedTemplate,
+            ),
+        requestedTemplate && !choices.length
+          ? api.quests(outing)
+          : Promise.resolve([]),
+      ]);
+      setFit(assessment);
+      setAlternatives(others);
       setCandidates(choices);
-      setAlternatives(
-        requestedTemplate && !choices.length ? await api.quests(outing) : [],
-      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Check your outing details.");
     } finally {
       setBusy(false);
     }
   }
+  function recover(recovery: QuestRecovery) {
+    editQuestPlans(
+      outing,
+      recovery.requiresConfirmation ? recovery.fields : [],
+      requestedTemplate,
+    );
+    update(recovery.patch);
+  }
   async function accept() {
     setBusy(true);
     setError("");
     try {
+      if (seriesBlocked)
+        throw new Error(
+          seriesPart.error ||
+            seriesPart.data?.reason ||
+            "Open the series to review this part before starting.",
+        );
       const run = await api.accept(
         selected!,
         outing,
         acceptKey,
         selected!.id === requestedTemplate ? inspiredBy : undefined,
+        selected!.id === requestedTemplate ? seriesPartId : undefined,
       );
       sessionStorage.removeItem("sq-quest-flow");
       navigate(`/runs/${run.id}`);
@@ -154,6 +219,12 @@ export default function Quest() {
           </span>
           <span>{money(selected.estimatedCostMaxMinor)} group estimate</span>
         </div>
+        {outing.applePlaceId && outing.setting !== "home" && (
+          <ApplePlaceCard
+            placeId={outing.applePlaceId}
+            transport={outing.transport}
+          />
+        )}
         <section className="section">
           <h2>The three moments</h2>
           <ol className="beats-preview">
@@ -265,20 +336,49 @@ export default function Quest() {
           <ChevronRight />
         </Link>
       )}
-      {candidates === null && (!requestedTemplate || target.data) && (
-        <QuestWizard
-          key={requestedTemplate || "new-quest"}
-          outing={outing}
-          update={update}
-          onFind={discover}
-          targetId={requestedTemplate}
-          busy={busy}
-          error={error || runs.error || me.error}
-          needsProfile={Boolean(
-            me.data && !me.data.profile.onboardingCompleted,
+      {seriesPartId && (
+        <Notice
+          error={Boolean(
+            seriesPart.error || (seriesPart.data && seriesBlocked),
           )}
-        />
+        >
+          {seriesPart.error ||
+            (seriesPart.data ? (
+              <>
+                <Link to={`/series/${seriesPart.data.series.id}`}>
+                  {seriesPart.data.series.title}
+                </Link>
+                {" · "}Part {seriesPart.data.part.position}:{" "}
+                {seriesPart.data.part.title}
+                {seriesBlocked && (
+                  <p>
+                    {seriesPart.data.reason ||
+                      "This link does not match the selected quest. Open the series to choose its current part."}
+                  </p>
+                )}
+              </>
+            ) : (
+              "Checking this series part…"
+            ))}
+        </Notice>
       )}
+      {candidates === null &&
+        !seriesBlocked &&
+        (!requestedTemplate || target.data) && (
+          <QuestWizard
+            key={`${requestedTemplate || "new-quest"}:${seriesPartId || "standalone"}`}
+            outing={outing}
+            update={update}
+            onFind={discover}
+            targetId={requestedTemplate}
+            target={target.data}
+            busy={busy}
+            error={error || runs.error || me.error}
+            needsProfile={Boolean(
+              me.data && !me.data.profile.onboardingCompleted,
+            )}
+          />
+        )}
       {candidates !== null && (
         <section className="section results quest-results">
           <button
@@ -304,22 +404,19 @@ export default function Quest() {
           </div>
           {error && <Notice error>{error}</Notice>}
           {candidates.length === 0 ? (
-            <Notice>
-              {requestedTemplate && target.data && me.data && (
-                <ul>
-                  {ineligibilityReasons(
-                    target.data,
-                    outing,
-                    me.data.profile.preferences,
-                  ).map((reason) => (
-                    <li key={reason}>{reason}</li>
-                  ))}
-                </ul>
-              )}
-              {me.data?.profile.preferences.otherExclusion
-                ? "Your custom boundary needs review. Replace it with matching listed exclusions or edit it before choosing a quest; we won’t guess what it means."
-                : "Try more time, a different group, or a private setting. Required arrangements and unknown venue costs must be confirmed. Your boundaries stay in place."}
-            </Notice>
+            fit ? (
+              <QuestFit
+                fit={fit}
+                final
+                onChoose={recover}
+                onEdit={() => {
+                  editQuestPlans(outing, [], requestedTemplate);
+                  setCandidates(null);
+                }}
+              />
+            ) : (
+              <Notice>Review your answers to find a plan that fits.</Notice>
+            )
           ) : (
             candidates.map((q) => (
               <button

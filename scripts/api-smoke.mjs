@@ -53,6 +53,14 @@ for (const path of [
   "/api/community/me",
   "/api/community/operator",
   "/api/community/offers/11111111-1111-4111-8111-111111111111/media",
+  "/api/social/me",
+  "/api/social/profile/11111111-1111-4111-8111-111111111111",
+  "/api/social/photo/11111111-1111-4111-8111-111111111111",
+  "/api/series",
+  "/api/series/mine",
+  "/api/series/templates",
+  "/api/series/11111111-1111-4111-8111-111111111111",
+  "/api/series/parts/11111111-1111-4111-8111-111111111111",
 ]) {
   const communitySetup = await request(path, 503);
   assert.equal(communitySetup.error.code, "setup_required");
@@ -69,5 +77,5 @@ assert.equal(page.status, 200);
 assert.match(page.headers.get("content-type") || "", /text\/html/);
 assert.match(html, /<div id="root">/);
 console.log(
-  "PASS: local Worker health JSON; API404 JSON; unconfigured profile/community/commercial services503 with bounded error envelopes and no demo fallback; no token/cookie leaks; private no-store; invalid share404; SPA journal fallback.",
+  "PASS: local Worker health JSON; API404 JSON; unconfigured profile/community/commercial/social/Series services503 with bounded error envelopes and no demo fallback; no token/cookie leaks; private no-store; invalid share404; SPA journal fallback.",
 );

@@ -267,7 +267,7 @@ export function resetPreferenceAnswer(
   );
 }
 
-/** Only explicit survey answers produce review chips. Imported guesses never override these. */
+/** Review only saved structured answers; imported text never creates a claim. */
 export function preferenceChips(preferences: Preferences): string[] {
   preferences = normalizePreferences(preferences);
   const chips: string[] = [];
@@ -312,8 +312,69 @@ export function preferenceChips(preferences: Preferences): string[] {
       `Skill: ${SURVEY_QUESTIONS.find((question) => question.key === "skills")!.options.find((option) => option.value === skill)!.label}`,
     );
   }
+  // Every answer type has a representation, including explicit neutral choices.
+  // These labels report what was chosen without claiming every field affects rank.
+  const remainingHumor = {
+    friendly_awkward: "Enjoys awkward but friendly encounters",
+    competitive: "Enjoys competitive humor among friends",
+    surprises: "Enjoys surprises for someone they know",
+  };
+  for (const [value, label] of Object.entries(remainingHumor))
+    if (preferences.humor?.includes(value as never)) chips.push(label);
+  for (const category of preferences.categories || [])
+    chips.push(
+      `Interested in ${SURVEY_QUESTIONS[0].options.find((option) => option.value === category)!.label}`,
+    );
+  const participation = {
+    fan_club: "Would organize a fan club for a friend",
+    open_mic: "Would perform at an open mic",
+    secret_expert: "Would bring a secret expert to game night",
+    mystery_date: "Would take a mystery date",
+    meal_challenge: "Would host an earn-your-meal challenge",
+    spontaneous: "Would try something spontaneous",
+    not_sure: "Participation still undecided",
+  };
+  for (const premise of preferences.premises || [])
+    chips.push(participation[premise]);
+  if (preferences.approach && preferences.approach !== "group_only")
+    chips.push(
+      {
+        invitation: "Comfortable with a clear invitation",
+        conversation: "Happy to start conversations",
+        depends: "Approaching people depends on the situation",
+      }[preferences.approach],
+    );
+  if (preferences.preparation === "a_few_things")
+    chips.push("Happy to collect a few things");
+  if (preferences.preparation === "varies") chips.push("Preparation varies");
+  if (preferences.usualIntensity)
+    chips.push(
+      {
+        chill: "Usually chooses Chill",
+        bold: "Usually chooses Bold",
+        full_send: "Usually chooses Full Send",
+        depends: "Usual level depends on the group",
+      }[preferences.usualIntensity],
+    );
+  if (preferences.sharing)
+    chips.push(
+      {
+        public: "May share on public socials",
+        friends: "May share with friends",
+        private: "Prefers a private journal",
+        decide_later: "Will decide about sharing after seeing the reel",
+      }[preferences.sharing],
+    );
+  if (preferences.skills?.includes("none"))
+    chips.push("No special skill requested");
+  if (preferences.otherSkill) chips.push(`Skill: ${preferences.otherSkill}`);
+  if (preferences.humorExamples) chips.push("Humor examples saved");
   const boundaries = (preferences.exclusions || []).map(
     (value) => exclusions[value],
   );
+  if (preferences.otherExclusion)
+    boundaries.unshift("Custom boundary saved — needs review");
+  if (preferences.exclusions?.length === 0)
+    boundaries.push("No listed boundaries");
   return [...boundaries, ...chips].slice(0, 6);
 }

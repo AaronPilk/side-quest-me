@@ -9,8 +9,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const temporary = mkdtempSync(join(tmpdir(), "sidequest-catalog-"));
 try {
-  // Compile these two local fixture modules only; this never executes imported profile text.
-  for (const name of ["domain", "catalog"]) {
+  // Compile these local catalog dependencies only; this never executes imported profile text.
+  for (const name of ["places", "domain", "catalog"]) {
     let output = ts.transpileModule(
       readFileSync(join(root, "shared", `${name}.ts`), "utf8"),
       {
@@ -26,8 +26,9 @@ try {
         `require(${JSON.stringify(require.resolve("zod"))})`,
       )
       .replace(
-        'require("./domain")',
-        `require(${JSON.stringify(join(temporary, "domain.cjs"))})`,
+        /require\("\.\/(domain|places)"\)/g,
+        (_match, dependency) =>
+          `require(${JSON.stringify(join(temporary, `${dependency}.cjs`))})`,
       );
     writeFileSync(join(temporary, `${name}.cjs`), output);
   }

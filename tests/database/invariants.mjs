@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { runCommunityTests } from "./community-invariants.mjs";
+import { runSocialTests } from "./social-invariants.mjs";
+import { runSeriesTests } from "./series-invariants.mjs";
+import { runHostedHelperTests } from "./hosted-helper-invariants.mjs";
 export async function runDatabaseTests(sql) {
+  await runHostedHelperTests(sql);
   const quote = (v) => `'${String(v).replaceAll("'", "''")}'`;
   const json = (v) => `${quote(JSON.stringify(v))}::jsonb`;
   const hash = (v) =>
@@ -29,10 +33,10 @@ export async function runDatabaseTests(sql) {
   );
   const templates = JSON.parse(
     await sql(
-      "select jsonb_agg(jsonb_build_object('id',id,'family',family_id,'intensity',intensity,'category',category)) from quest_templates;",
+      "select jsonb_agg(jsonb_build_object('id',id,'family',family_id,'intensity',intensity,'category',category) order by id) from quest_templates;",
     ),
   );
-  assert.equal(templates.length, 30);
+  assert.equal(templates.length, 33);
   assert.equal(await scalar('select count(*) from campaigns;'), '0');
   const distinct = [...new Map(templates.map((t) => [t.family, t])).values()];
   console.log(
@@ -1076,7 +1080,9 @@ export async function runDatabaseTests(sql) {
     [],
   );
   await runCommunityTests(sql);
+  await runSocialTests(sql);
+  await runSeriesTests(sql);
   console.log(
-    "PASS: 30 seeds, real RLS/privileges, transactions, concurrent acceptance/awards/stock/spending/consumption, idempotency, evidence, fenced render, share revoke, deletion, ledger reconciliation.",
+    "PASS: 33 seeds, real RLS/privileges, transactions, concurrent acceptance/awards/stock/spending/consumption, idempotency, evidence, fenced render, share revoke, deletion, ledger reconciliation.",
   );
 }

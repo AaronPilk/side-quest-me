@@ -11,6 +11,24 @@ import { request } from "./api";
 import { DEMO } from "./auth";
 import { demoMutate, demoRead } from "./demo-community";
 import { demoActor } from "./demo-identity";
+import { demoSocialIdentity, demoSocialBlock } from "./demo-social";
+import { clearDemoSeriesFollowsForBlock } from "./demo-series";
+
+function withDemoIdentity<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(withDemoIdentity) as T;
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  const result = Object.fromEntries(
+    Object.entries(record).map(([key, item]) => [key, withDemoIdentity(item)]),
+  );
+  if (
+    typeof record.id === "string" &&
+    typeof record.displayName === "string" &&
+    "publishedCount" in record
+  )
+    Object.assign(result, demoSocialIdentity(record.id));
+  return result as T;
+}
 
 export const communityApi = {
   read: async <T>(
@@ -18,7 +36,7 @@ export const communityApi = {
     input: Record<string, unknown> = {},
   ): Promise<T> => {
     const parsed = communityReadSchema.parse(input);
-    if (DEMO) return demoRead<T>(view, parsed);
+    if (DEMO) return withDemoIdentity(demoRead<T>(view, parsed));
     const paths: Partial<Record<CommunityView, string>> = {
       post: "posts",
       creator: "creators",
@@ -41,7 +59,14 @@ export const communityApi = {
     key = crypto.randomUUID(),
   ): Promise<T> => {
     const operation = communityMutationSchema.parse({ action, input });
-    if (DEMO) return demoMutate<T>(action, operation.input, key);
+    if (DEMO) {
+      const result = await demoMutate<T>(action, operation.input, key);
+      if (operation.action === "block" && operation.input.blocked) {
+        demoSocialBlock(demoActor().id, operation.input.userId);
+        clearDemoSeriesFollowsForBlock(demoActor().id, operation.input.userId);
+      }
+      return withDemoIdentity(result);
+    }
     return request<T>("/api/community/mutate", {
       method: "POST",
       headers: { "Idempotency-Key": key },

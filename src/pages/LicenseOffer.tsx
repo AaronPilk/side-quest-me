@@ -77,7 +77,8 @@ export default function LicenseOfferPage() {
         <LicenseTermsView terms={data.acceptedTerms ?? data.terms} />
         <p className="support">
           This license concerns this video only. It gives no access to the
-          creator’s social accounts. XP, points and rewards are separate.
+          creator’s social accounts or other Series parts, including future
+          parts. XP, points and rewards are separate.
         </p>
       </section>
       {pending && canRespond && (

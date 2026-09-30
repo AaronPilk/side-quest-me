@@ -26,6 +26,7 @@
     "db:types": "node scripts/db-test.mjs --generate-types"
   },
   "dependencies": {
+    "@apple/mapkit-loader": "1.0.0",
     "@cloudflare/containers": "0.3.7",
     "@supabase/supabase-js": "2.117.2",
     "hono": "4.13.9",

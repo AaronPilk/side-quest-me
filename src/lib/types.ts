@@ -1,4 +1,5 @@
 import type { Outing, Profile, QuestVariant } from "../../shared/domain";
+import type { SeriesContext } from "../../shared/series";
 export type Clip = {
   id: string;
   generation: number;
@@ -32,6 +33,7 @@ export type Run = {
   createdAt: string;
   completedAt?: string;
   inspiredByPostId?: string;
+  series?: SeriesContext;
   rewardDecision?: { xp: number; points: number; reason: string };
   render?: Reel;
 };

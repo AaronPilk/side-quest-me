@@ -1,6 +1,6 @@
 # Sidequest database
 
-Postgres is the sole relational authority. Apply `supabase/migrations/*` and then `supabase/seed.sql` to a **new, explicitly selected Sidequest project**. The seed contains thirty authored quest variants, no sponsors, funded offers, balances, or operator accounts. A fixture is not funding.
+Postgres is the sole relational authority. Apply `supabase/migrations/*` and then `supabase/seed.sql` to a **new, explicitly selected Sidequest project**. The seed contains 33 authored quest variants, no sponsors, funded offers, balances, or operator accounts. A fixture is not funding.
 
 `node scripts/db-test.mjs` creates an isolated, temporary PostgreSQL cluster with a private Unix socket, installs minimal Auth test tables/roles, rebuilds migrations and seed, runs actual transactions/concurrent sessions/RLS checks, and shuts down/removes that cluster. Requires `initdb`, `pg_ctl`, and `psql` (`pg_config --bindir` is supported). It never connects to a live project. `node scripts/db-test.mjs --advisors` also runs the Supabase CLI security advisors using an ephemeral loopback TLS listener/certificate, then removes them. Observed on PostgreSQL 17 / CLI 2.101.0: no security issues at warning/error level. These tests prove database behavior, not live Supabase Auth delivery or hosted Data API configuration. The Auth fixtures model the columns used by the app; they are not deployed migrations. `node scripts/db-test.mjs --generate-types` generates `shared/database.generated.ts` from actual migrated table columns, foreign keys, and RPC signatures; it uses local SQL introspection so Docker and hosted credentials are unnecessary. `shared/database.types.ts` is a separately labeled narrow hand-authored DTO layer.
 
@@ -20,7 +20,7 @@ supabase migration list --linked
 supabase db advisors --linked --type security --level warn --fail-on warn
 ```
 
-`--include-seed` loads only the thirty authored variants; it creates no sponsor, campaign, redeemable reward, wallet credit, or operator. Keep staging and production project links/credentials separate. A future production push needs its own explicitly checked target and migration review.
+`--include-seed` loads only the 33 authored variants; it creates no sponsor, campaign, redeemable reward, wallet credit, or operator. Keep staging and production project links/credentials separate. A future production push needs its own explicitly checked target and migration review.
 
 The committed Auth callback URLs are local development URLs. Configure the chosen hosted project's Site URL and exact deployed `/auth/callback` URL in Auth settings, plus its email delivery settings. Do not push this local Auth configuration blindly to production with `supabase config push`.
 

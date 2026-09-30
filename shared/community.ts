@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { questVariantSchema, type QuestVariant } from "./domain";
+import type { SeriesContext } from "./series";
 const text = (max: number) => z.string().trim().max(max);
 const version = z.number().int().nonnegative();
 const id = z.uuid();
@@ -240,13 +241,33 @@ export const communityMutationSchema = z.discriminatedUnion("action", [
     })
     .strict(),
 ]);
+// Keep legacy timestamp-only cursors readable. New cursors include the post ID
+// so a page boundary cannot hide other posts published at the same instant.
+const cursorTimestamp = z.iso.datetime({ offset: true });
+export const feedCursorSchema = z
+  .string()
+  .max(100)
+  .refine((value) => {
+    const [timestamp, postId, extra] = value.split("|");
+    return (
+      cursorTimestamp.safeParse(timestamp).success &&
+      extra === undefined &&
+      (postId === undefined || id.safeParse(postId).success)
+    );
+  }, "Invalid feed cursor");
+
+export function parseFeedCursor(value: string) {
+  const [timestamp, postId] = feedCursorSchema.parse(value).split("|");
+  return { timestamp, postId };
+}
+
 export const communityReadSchema = z
   .object({
     id: id.optional(),
     templateId: text(120).optional(),
     brandOnly: z.boolean().optional(),
     limit: z.number().int().min(1).max(50).optional(),
-    before: z.iso.datetime().optional(),
+    before: feedCursorSchema.optional(),
   })
   .strict();
 export type CommunityView =
@@ -262,6 +283,8 @@ export type CommunityView =
   | "operator";
 export interface CreatorProfile {
   id: string;
+  username?: string | null;
+  photoUrl?: string | null;
   displayName: string;
   avatarKey: z.infer<typeof avatarKeySchema>;
   bio: string;
@@ -274,6 +297,7 @@ export interface CreatorProfile {
 }
 export interface CommunityPost {
   id: string;
+  series?: SeriesContext | null;
   creator: CreatorProfile;
   quest: QuestVariant;
   questAuthor: CreatorProfile | null;
