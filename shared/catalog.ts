@@ -1,3 +1,4 @@
+import { activityCatalog } from "./activity-recipes";
 import {
   AWARDS,
   type Category,
@@ -1294,6 +1295,7 @@ export const catalog: QuestVariant[] = [
       },
     ],
   }),
+  ...activityCatalog,
 ];
 
 export function getQuest(id: string): QuestVariant | undefined {

@@ -18,7 +18,6 @@ import {
 import { rememberReturnTo } from "../lib/internal-return";
 import { ApplePlacePicker, ApplePlaceCard } from "./ApplePlaces";
 import { QuestFit, useQuestFit } from "./QuestFit";
-import type { QuestRecovery } from "../../shared/viability";
 import { Button, Chips, Notice, money } from "./ui";
 
 type Step =
@@ -29,7 +28,6 @@ type Step =
   | "time"
   | "setting"
   | "travel"
-  | "arrangements"
   | "review";
 const questions: Record<
   Step,
@@ -57,7 +55,7 @@ const questions: Record<
   },
   time: {
     title: "How much time do you have?",
-    description: "This includes getting there and back.",
+    description: "Choose the time you want to leave for your adventure.",
     fields: ["durationMinutes"],
   },
   setting: {
@@ -66,20 +64,10 @@ const questions: Record<
     fields: ["setting"],
   },
   travel: {
-    title: "How are you getting there?",
-    description: "We’ll leave room for the journey in your time and budget.",
-    fields: ["area", "transport", "travelMinutes", "travelCostMinor"],
-  },
-  arrangements: {
-    title: "Anything already arranged?",
-    description: "Only confirm what’s ready. Leave the rest unchecked.",
-    fields: [
-      "arrangementConfirmed",
-      "venuePermission",
-      "confirmedVenueCostMinor",
-      "adultEligible",
-      "adultContext",
-    ],
+    title: "Where should we go?",
+    description:
+      "Find somewhere nearby, or choose an area. You can decide later.",
+    fields: ["area", "transport", "applePlaceId"],
   },
   review: {
     title: "Ready to find your quest?",
@@ -95,7 +83,6 @@ function stepsFor(outing: Outing, targetId?: string): Step[] {
     "time",
     "setting",
     ...(outing.setting === "home" ? [] : (["travel"] as Step[])),
-    "arrangements",
     "review",
   ];
 }
@@ -110,13 +97,13 @@ function restoreProgress(outing: Outing, targetId?: string): Progress {
   try {
     const draft = JSON.parse(sessionStorage.getItem("sq-quest-flow") || "null");
     if (
-      [1, 2].includes(draft?.version) &&
+      [1, 2, 3].includes(draft?.version) &&
       draft.targetId === (targetId || null) &&
-      steps.includes(draft.step)
+      (steps.includes(draft.step) || draft.step === "arrangements")
     )
       return {
-        step: draft.step,
-        editing: draft.editing === true,
+        step: draft.step === "arrangements" ? "review" : draft.step,
+        editing: draft.step !== "arrangements" && draft.editing === true,
         confirmed: Array.isArray(draft.confirmed)
           ? draft.confirmed.filter((key: string) => key in outingSchema.shape)
           : [],
@@ -146,7 +133,7 @@ export function editQuestPlans(
     "sq-quest-flow",
     JSON.stringify({
       ...current,
-      version: 2,
+      version: 3,
       targetId: targetId || null,
       step,
       editing: step !== "review",
@@ -178,7 +165,6 @@ export function QuestWizard({
     restoreProgress(outing, targetId),
   );
   const location = useLocation();
-  const [mapsOpen, setMapsOpen] = useState(Boolean(outing.applePlaceId));
   const [validation, setValidation] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
   const steps = stepsFor(outing, targetId);
@@ -186,15 +172,12 @@ export function QuestWizard({
   const index = steps.indexOf(step);
   const question = questions[step];
   const review = step === "review";
-  const knownFields = review
-    ? (Object.keys(outingSchema.shape) as (keyof Outing)[])
-    : [
-        ...new Set([
-          ...progress.confirmed,
-          ...(targetId ? (["category", "intensity"] as (keyof Outing)[]) : []),
-        ]),
-      ];
-  const matching = useQuestFit(outing, knownFields, targetId);
+  const matching = useQuestFit(
+    outing,
+    Object.keys(outingSchema.shape) as (keyof Outing)[],
+    targetId,
+    review,
+  );
   const adultConfirmationNeeded = Boolean(
     target?.adultOnly ||
     target?.requiresVolunteer ||
@@ -214,40 +197,10 @@ export function QuestWizard({
     }));
     setValidation("");
   }
-  function chooseRecovery(recovery: QuestRecovery) {
-    if (recovery.requiresConfirmation) {
-      const destination =
-        steps.find((id) =>
-          questions[id].fields.some((field) => recovery.fields.includes(field)),
-        ) || "arrangements";
-      setProgress((current) => ({
-        ...current,
-        step: destination,
-        editing: review || current.editing,
-        requiredFields: recovery.fields,
-      }));
-    } else {
-      updateOuting(recovery.patch);
-      setProgress((current) => ({
-        ...current,
-        step: stepsFor({ ...outing, ...recovery.patch }, targetId).includes(
-          current.step,
-        )
-          ? current.step
-          : "arrangements",
-        confirmed: [
-          ...new Set([
-            ...current.confirmed,
-            ...(Object.keys(recovery.patch) as (keyof Outing)[]),
-          ]),
-        ],
-      }));
-    }
-  }
   useEffect(() => {
     sessionStorage.setItem(
       "sq-quest-flow",
-      JSON.stringify({ version: 2, targetId: targetId || null, ...progress }),
+      JSON.stringify({ version: 3, targetId: targetId || null, ...progress }),
     );
   }, [progress, targetId]);
   useEffect(() => {
@@ -277,9 +230,10 @@ export function QuestWizard({
       confirmed: [...new Set([...current.confirmed, ...question.fields])],
     }));
     if (review) await onFind();
-    else if (progress.editing && !["setting", "travel"].includes(step))
-      go("review", false);
-    else go(steps[index + 1]);
+    else if (progress.editing) {
+      if (step === "setting" && outing.setting !== "home") go("travel", true);
+      else go("review", false);
+    } else go(steps[index + 1], false);
   }
   // Numeric fields can be temporarily invalid while editing; never let a
   // display-only calculation crash the form before validation can explain it.
@@ -296,33 +250,6 @@ export function QuestWizard({
     CATEGORIES.find((c) => c.id === outing.category)?.label || "";
   const intensity =
     INTENSITIES.find((i) => i.id === outing.intensity)?.label || "";
-  const confirmations = [
-    outing.arrangementConfirmed
-      ? "People / equipment ready"
-      : "No arrangements confirmed",
-    ...(outing.setting === "venue"
-      ? [
-          outing.venuePermission
-            ? "Filming permission confirmed"
-            : "Filming permission unconfirmed",
-          outing.confirmedVenueCostMinor === null
-            ? "Venue cost unknown"
-            : `${money(outing.confirmedVenueCostMinor)} venue cost`,
-          outing.adultEligible
-            ? "Venue age requirement met"
-            : "Venue age requirement unconfirmed",
-          outing.adultContext
-            ? "Adult nightlife included"
-            : "Adult nightlife excluded",
-        ]
-      : adultConfirmationNeeded
-        ? [
-            outing.adultEligible
-              ? "Adult volunteers confirmed"
-              : "Adult volunteers unconfirmed",
-          ]
-        : []),
-  ];
   const rows: { step: Step; label: string; value: string }[] = [
     ...(!targetId
       ? [
@@ -345,8 +272,10 @@ export function QuestWizard({
       label: "Time",
       value:
         outing.durationMinutes === null
-          ? "Flexible"
-          : `${outing.durationMinutes} minutes, including travel`,
+          ? "Unlimited time"
+          : outing.durationMinutes % 60 === 0
+            ? `${outing.durationMinutes / 60} ${outing.durationMinutes === 60 ? "hour" : "hours"}`
+            : `${outing.durationMinutes} minutes (saved plan)`,
     },
     {
       step: "setting",
@@ -363,15 +292,12 @@ export function QuestWizard({
       : [
           {
             step: "travel" as const,
-            label: "Travel",
-            value: `${outing.area ? `${outing.area} · ` : ""}${outing.transport === "none" ? "No transport needed" : outing.transport} · ${outing.travelMinutes} min round trip · ${money(outing.travelCostMinor)}`,
+            label: "Place",
+            value:
+              outing.area ||
+              (outing.applePlaceId ? "Place selected" : "Choose along the way"),
           },
         ]),
-    {
-      step: "arrangements",
-      label: "Arrangements",
-      value: confirmations.join(" · "),
-    },
   ];
   return (
     <div className="quest-wizard">
@@ -498,19 +424,9 @@ export function QuestWizard({
                 Budget (USD)
                 <div className="money-input quest-budget">
                   <span>$</span>
-                  <input
-                    aria-label="Budget in dollars"
-                    type="number"
-                    required
-                    min="0"
-                    max="10000"
-                    step="0.01"
-                    value={outing.budgetMinor / 100}
-                    onChange={(e) =>
-                      update({
-                        budgetMinor: Math.round(Number(e.target.value) * 100),
-                      })
-                    }
+                  <BudgetInput
+                    value={outing.budgetMinor}
+                    onChange={(budgetMinor) => update({ budgetMinor })}
                   />
                 </div>
               </label>
@@ -545,34 +461,25 @@ export function QuestWizard({
               <Chips
                 label="Available time"
                 options={[
-                  { id: "30", label: "30 min" },
                   { id: "60", label: "1 hour" },
-                  { id: "120", label: "2 hours" },
-                  { id: "flexible", label: "Flexible" },
+                  { id: "180", label: "3 hours" },
+                  { id: "300", label: "5 hours" },
+                  { id: "unlimited", label: "Unlimited time" },
                 ]}
-                value={String(outing.durationMinutes ?? "flexible")}
+                value={String(outing.durationMinutes ?? "unlimited")}
                 onChange={(v) =>
                   update({
-                    durationMinutes: v === "flexible" ? null : Number(v),
+                    durationMinutes: v === "unlimited" ? null : Number(v),
                   })
                 }
               />
-              <label className="space-top">
-                Custom available time (minutes)
-                <input
-                  type="number"
-                  min="15"
-                  max="720"
-                  value={outing.durationMinutes ?? ""}
-                  placeholder="Flexible"
-                  onChange={(e) =>
-                    update({
-                      durationMinutes:
-                        e.target.value === "" ? null : Number(e.target.value),
-                    })
-                  }
-                />
-              </label>
+              {outing.durationMinutes !== null &&
+                ![60, 180, 300].includes(outing.durationMinutes) && (
+                  <p className="support">
+                    Your saved plan allows {outing.durationMinutes} minutes.
+                    Choose a time above to change it.
+                  </p>
+                )}
             </>
           )}
           {step === "setting" && (
@@ -630,47 +537,7 @@ export function QuestWizard({
                   ))}
                 </select>
               </label>
-              <div className="form-grid">
-                <label>
-                  Round-trip travel (min)
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    max="240"
-                    value={outing.travelMinutes}
-                    onChange={(e) =>
-                      update({ travelMinutes: Number(e.target.value) })
-                    }
-                  />
-                </label>
-                <label>
-                  Travel estimate (USD)
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    max="1000"
-                    step="0.01"
-                    value={outing.travelCostMinor / 100}
-                    onChange={(e) =>
-                      update({
-                        travelCostMinor: Math.round(
-                          Number(e.target.value) * 100,
-                        ),
-                      })
-                    }
-                  />
-                </label>
-              </div>
-              <details
-                className="quest-location"
-                open={mapsOpen}
-                onToggle={(e) => setMapsOpen(e.currentTarget.open)}
-              >
-                <summary>
-                  Choose an area or place <span>Optional</span>
-                </summary>
+              <div className="quest-location">
                 <label>
                   Area
                   <input
@@ -680,7 +547,7 @@ export function QuestWizard({
                     onChange={(e) => update({ area: e.target.value })}
                   />
                 </label>
-                {mapsOpen && outing.setting !== "home" && (
+                {outing.setting !== "home" && (
                   <ApplePlacePicker
                     area={outing.area}
                     setting={outing.setting}
@@ -697,11 +564,75 @@ export function QuestWizard({
                     }
                   />
                 )}
-              </details>
+              </div>
             </>
           )}
-          {step === "arrangements" && (
-            <div className="quest-arrangements">
+          {review && (
+            <div className="quest-review">
+              {rows.map((row) => (
+                <button
+                  type="button"
+                  className="quest-review-row"
+                  key={row.step}
+                  aria-label={`Edit ${row.step}`}
+                  aria-describedby={`quest-review-${row.step}`}
+                  disabled={busy}
+                  onClick={() => go(row.step, true)}
+                >
+                  <span>
+                    <small>{row.label}</small>
+                    <strong id={`quest-review-${row.step}`}>{row.value}</strong>
+                  </span>
+                  <ChevronRight size={18} aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+          )}
+          {review && (
+            <details
+              className="quest-arrangements"
+              open={Boolean(
+                outing.travelMinutes > 0 ||
+                outing.travelCostMinor > 0 ||
+                target?.arrangementRequired ||
+                target?.adultOnly ||
+                target?.requiresVolunteer ||
+                target?.venuePermissionRequired ||
+                progress.requiredFields.some((field) =>
+                  [
+                    "arrangementConfirmed",
+                    "venuePermission",
+                    "confirmedVenueCostMinor",
+                    "adultEligible",
+                    "adultContext",
+                  ].includes(field),
+                ),
+              )}
+            >
+              <summary>
+                More options <span>Optional</span>
+              </summary>
+              {(outing.travelMinutes > 0 || outing.travelCostMinor > 0) && (
+                <div className="quest-saved-travel">
+                  <p className="support">
+                    Your saved plan reserves {outing.travelMinutes} minutes and{" "}
+                    {money(outing.travelCostMinor)} for travel.
+                  </p>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() =>
+                      update({ travelMinutes: 0, travelCostMinor: 0 })
+                    }
+                  >
+                    Clear saved travel estimates
+                  </button>
+                </div>
+              )}
+              <p className="support">
+                Only add details you already know. These help match quests that
+                need a booking, equipment or permission.
+              </p>
               <label className="check-row">
                 <input
                   type="checkbox"
@@ -799,30 +730,10 @@ export function QuestWizard({
                 </>
               )}
               <p className="support">
-                Quests that need unconfirmed arrangements won’t be included.
+                Quests that require these details stay unavailable until you
+                confirm them.
               </p>
-            </div>
-          )}
-          {review && (
-            <div className="quest-review">
-              {rows.map((row) => (
-                <button
-                  type="button"
-                  className="quest-review-row"
-                  key={row.step}
-                  aria-label={`Edit ${row.step}`}
-                  aria-describedby={`quest-review-${row.step}`}
-                  disabled={busy}
-                  onClick={() => go(row.step, true)}
-                >
-                  <span>
-                    <small>{row.label}</small>
-                    <strong id={`quest-review-${row.step}`}>{row.value}</strong>
-                  </span>
-                  <ChevronRight size={18} aria-hidden="true" />
-                </button>
-              ))}
-            </div>
+            </details>
           )}
         </div>
         {review && outing.applePlaceId && outing.setting !== "home" && (
@@ -831,26 +742,14 @@ export function QuestWizard({
             transport={outing.transport}
           />
         )}
-        {matching.fit && (
+        {review && matching.fit && matching.fit.viableCount > 0 && (
           <QuestFit
             fit={matching.fit}
-            final={review}
+            final
             busy={busy}
-            onChoose={chooseRecovery}
+            onChoose={() => {}}
             onEdit={() => go(steps[0], false)}
           />
-        )}
-        {matching.error && (
-          <p className="support" role="status">
-            {matching.error}{" "}
-            <button
-              type="button"
-              className="text-button"
-              onClick={matching.retry}
-            >
-              Retry match check
-            </button>
-          </p>
         )}
         {(validation || error) && <Notice error>{validation || error}</Notice>}
         <div className="quest-flow-actions">
@@ -908,5 +807,41 @@ export function QuestWizard({
         </div>
       )}
     </div>
+  );
+}
+
+function BudgetInput({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (minor: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value / 100));
+  return (
+    <input
+      aria-label="Budget in dollars"
+      type="number"
+      inputMode="decimal"
+      required
+      min="0"
+      max="10000"
+      step="0.01"
+      value={draft}
+      onFocus={(event) => {
+        if (event.currentTarget.value === "0") event.currentTarget.select();
+      }}
+      onChange={(event) => {
+        const next = event.currentTarget.value.replace(/^(-?)0+(?=\d)/, "$1");
+        setDraft(next);
+        onChange(next === "" ? Number.NaN : Math.round(Number(next) * 100));
+      }}
+      onBlur={() => {
+        if (draft === "") {
+          setDraft("0");
+          onChange(0);
+        }
+      }}
+    />
   );
 }

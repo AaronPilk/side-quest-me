@@ -11,8 +11,18 @@ export const applePlaceIdSchema = z
 export function applePlaceUrl(id: string): string {
   return `https://maps.apple.com/place?${new URLSearchParams({ "place-id": applePlaceIdSchema.parse(id) })}`;
 }
-export function appleSearchUrl(query: string): string {
-  return `https://maps.apple.com/search?${new URLSearchParams({ query: query.trim().slice(0, 250) || "parks" })}`;
+export function appleSearchUrl(
+  query: string,
+  center?: { latitude: number; longitude: number },
+): string {
+  return `https://maps.apple.com/search?${new URLSearchParams({
+    query: query.trim().slice(0, 250) || "parks",
+    ...(center &&
+    Number.isFinite(center.latitude) &&
+    Number.isFinite(center.longitude)
+      ? { center: `${center.latitude},${center.longitude}` }
+      : {}),
+  })}`;
 }
 export function appleDirectionsUrl(
   id: string,

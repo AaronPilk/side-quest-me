@@ -12,7 +12,10 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { api } from "../lib/api";
-import { DEMO } from "../lib/auth";
+import { DEMO, supabase } from "../lib/auth";
+import { demoActor } from "../lib/demo-identity";
+import { loadCaptureDraft, deleteCaptureDraft } from "../lib/capture-drafts";
+import { filmingGuide } from "../lib/capture-session";
 import {
   Button,
   Notice,
@@ -40,6 +43,32 @@ export default function ActiveQuest() {
   const [key] = useState(crypto.randomUUID());
   const [share, setShare] = useState<{ id: string; url: string }>();
   const [preparedShare, setPreparedShare] = useState<File>();
+  const [draftSlots, setDraftSlots] = useState<number[]>([]);
+  useEffect(() => {
+    let canceled = false;
+    void (async () => {
+      const owner = DEMO
+        ? `demo:${demoActor().id}`
+        : (await supabase?.auth.getSession())?.data.session?.user.id;
+      if (!owner || !run) return;
+      const slots = await Promise.all(
+        [0, 1, 2].map(async (part) => {
+          const draft = await loadCaptureDraft(owner, run.id, part).catch(
+            () => undefined,
+          );
+          return draft &&
+            draft.baseClipId ===
+              (run.clips.find((clip) => clip.slot === part)?.id || null)
+            ? part
+            : -1;
+        }),
+      );
+      if (!canceled) setDraftSlots(slots.filter((part) => part >= 0));
+    })();
+    return () => {
+      canceled = true;
+    };
+  }, [run, slot]);
   useEffect(() => {
     if (!run?.render || !["queued", "processing"].includes(run.render.status))
       return;
@@ -130,7 +159,7 @@ export default function ActiveQuest() {
           ? run.status === "review_needed"
             ? "Submitted for review. Your reel stays private while your attempt is reviewed."
             : "The moment is yours. Keep the story."
-          : "Three moments. One story. Take them at your own pace."}
+          : "Three parts. One story. Stop between takes, save each part, and come back whenever you’re ready."}
       </PageTitle>
       {run.series && (
         <section
@@ -291,6 +320,29 @@ export default function ActiveQuest() {
           transport={run.outing.transport}
         />
       )}
+      {!done && !abandoned && (
+        <details className="filming-story-plan">
+          <summary>Your filming plan · hook, action, loop</summary>
+          <ol>
+            {run.quest.beats.map((beat, index) => {
+              const guide = filmingGuide(run.quest, index);
+              return (
+                <li key={beat.label}>
+                  <strong>{guide.title}</strong>
+                  <p>{guide.prompt}</p>
+                  <p>{guide.shot}</p>
+                  <p className="support">{guide.tip}</p>
+                </li>
+              );
+            })}
+          </ol>
+          <p className="fine-print">
+            Film 5–15 seconds per part, across as many short takes as fit.
+            Finish and save a part before leaving. Uploaded parts stay with your
+            quest; local drafts stay on this device for 7 days.
+          </p>
+        </details>
+      )}
       <div className="section-heading">
         <h2>{done ? "Your saved moments" : "Make it happen"}</h2>
         <span className="support">{run.clips.length} / 3 saved</span>
@@ -306,6 +358,9 @@ export default function ActiveQuest() {
                 </span>
                 <h2>{beat.label}</h2>
                 {clip && <span className="pill success">Uploaded</span>}
+                {draftSlots.includes(i) && (
+                  <span className="pill local-draft">Draft on this device</span>
+                )}
               </div>
               <p>{beat.action}</p>
               <div className="shot">
@@ -336,7 +391,12 @@ export default function ActiveQuest() {
               )}
               {!abandoned && (
                 <Button secondary onClick={() => setSlot(i)}>
-                  {clip ? (
+                  {draftSlots.includes(i) ? (
+                    <>
+                      <Camera size={17} />
+                      Continue draft
+                    </>
+                  ) : clip ? (
                     <>
                       <RotateCcw size={16} />
                       {done ? "Adjust reel clip" : "Review or replace"}
@@ -446,6 +506,16 @@ export default function ActiveQuest() {
               return;
             try {
               await api.deleteRunMedia(run.id);
+              const owner = DEMO
+                ? `demo:${demoActor().id}`
+                : (await supabase?.auth.getSession())?.data.session?.user.id;
+              if (owner)
+                await Promise.all(
+                  [0, 1, 2].map((part) =>
+                    deleteCaptureDraft(owner, run.id, part),
+                  ),
+                ).catch(() => {});
+              setDraftSlots([]);
               refresh();
             } catch (e) {
               setFailure((e as Error).message);

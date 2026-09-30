@@ -7,3 +7,6 @@ SHARE_SIGNING_KEY=REPLACE_WITH_DIFFERENT_RANDOM_SERVER_ONLY_SECRET
 
 # Optional public, domain-restricted MapKit JS token from Apple Developer. Never put a .p8 private key here.
 APPLE_MAPS_TOKEN=
+
+# Optional server-only Ticketmaster Discovery key for nearby Ticketmaster / Universe / Front Gate listings.
+TICKETMASTER_API_KEY=

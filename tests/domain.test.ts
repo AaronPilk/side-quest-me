@@ -19,9 +19,20 @@ import {
   familyEligibility,
   ineligibilityReasons,
   nextUtcReset,
-  recommend,
+  recommend as recommendFromCatalog,
 } from "../shared/recommend";
 import { COPY_PROFILE_PROMPT, SURVEY_QUESTIONS } from "../shared/profile";
+
+// These regressions compare specific original families and their original ranking.
+// Keep the comparison set fixed; activity-catalog.test.ts exercises the expanded inventory.
+const recommend = (...args: Parameters<typeof recommendFromCatalog>) =>
+  recommendFromCatalog(
+    args[0],
+    args[1],
+    args[2],
+    args[3],
+    args[4] ?? catalog.slice(0, 33),
+  );
 
 const outing = (patch: Partial<Outing> = {}): Outing => ({
   ...DEFAULT_OUTING,
@@ -33,10 +44,10 @@ const prefs = (patch: Partial<Preferences> = {}): Preferences => ({
 });
 
 describe("complete authored catalog", () => {
-  it("preserves the original ten families and adds three complete coverage variants", () => {
-    expect(catalog).toHaveLength(33);
+  it("preserves original families while expanding the authored catalog", () => {
+    expect(catalog).toHaveLength(1113);
     const original = catalog.slice(0, 30);
-    expect(new Set(catalog.map((q) => q.id)).size).toBe(33);
+    expect(new Set(catalog.map((q) => q.id)).size).toBe(1113);
     const families = [...new Set(original.map((q) => q.familyId))];
     expect(families).toHaveLength(10);
     for (const family of families)

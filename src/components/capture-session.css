@@ -1,0 +1,119 @@
+.capture-content > .section-heading {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #19191d;
+  box-shadow: 0 -24px 0 #19191d;
+  padding: 8px 0;
+}
+.filming-guide {
+  border-left: 2px solid #8bb8ff;
+  padding: 2px 0 2px 14px;
+  margin: 18px 0;
+  font-size: 0.82rem;
+}
+.filming-guide > strong {
+  color: #a4c5ff;
+}
+.filming-guide p {
+  margin: 7px 0;
+  line-height: 1.5;
+}
+.filming-guide .shot-direction {
+  color: #c5c5ce;
+}
+.filming-guide summary {
+  min-height: 32px;
+  padding-top: 8px;
+  color: #a4c5ff;
+  cursor: pointer;
+}
+.filming-guide details p {
+  color: #c5c5ce;
+}
+.take-progress {
+  display: flex;
+  gap: 3px;
+  height: 7px;
+  overflow: hidden;
+  background: #44444d;
+  border-radius: 7px;
+  margin: 16px 0;
+}
+.take-progress > span {
+  display: block;
+  background: #8bb8ff;
+  flex-shrink: 1;
+}
+.take-progress > .current-take {
+  background: #ff5b72;
+}
+.capture-actions {
+  text-align: center;
+}
+.take-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  margin: 18px 0 8px;
+}
+.take-controls > .button {
+  width: auto;
+}
+.record-control {
+  border: 4px solid white;
+  box-shadow: inset 0 0 0 4px #19191d;
+  border-radius: 50%;
+  background: #ef4663;
+  color: white;
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.record-control:disabled {
+  opacity: 0.5;
+}
+.record-control.is-recording {
+  background: #b81f3b;
+}
+.record-control-label {
+  color: #dddde5;
+  font-size: 0.76rem;
+  margin: 7px 0 14px;
+}
+.camera-open .capture-frame {
+  max-height: 45svh;
+  margin: 16px auto;
+}
+.camera-open .filming-guide {
+  font-size: 0.76rem;
+}
+.camera-open .filming-guide > p:not(.shot-direction) {
+  display: none;
+}
+.filming-story-plan {
+  background: var(--surface, #fff);
+  border: 1px solid var(--divider, #e3e5ec);
+  border-radius: 20px;
+  padding: 20px;
+  margin: 24px 0;
+}
+.filming-story-plan summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 28px;
+}
+.filming-story-plan ol {
+  padding-left: 22px;
+}
+.filming-story-plan li {
+  margin: 12px 0;
+  line-height: 1.55;
+}
+.capture-beat .local-draft {
+  color: #9a6600;
+  background: #fff1cf;
+}

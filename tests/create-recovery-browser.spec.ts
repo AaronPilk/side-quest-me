@@ -130,7 +130,7 @@ test("Daytime Bold for a couple with $25 and one hour at home finds a real quest
   await next(page);
   await page.getByRole("button", { name: "Bold", exact: true }).click();
   await next(page);
-  await expect(page.getByText(/\d+ possible quests?/)).toBeVisible();
+  await expect(page.locator(".quest-recovery")).toHaveCount(0);
   await page.getByRole("button", { name: "Couple", exact: true }).click();
   await next(page);
   await page.getByRole("spinbutton", { name: "Budget in dollars" }).fill("25");
@@ -141,10 +141,15 @@ test("Daytime Bold for a couple with $25 and one hour at home finds a real quest
   await next(page);
   await expect(
     page.getByRole("heading", {
-      name: "Anything already arranged?",
+      name: "Ready to find your quest?",
       exact: true,
     }),
   ).toBeVisible();
+  await expect(page.locator(".quest-arrangements")).not.toHaveAttribute(
+    "open",
+    "",
+  );
+  await page.locator(".quest-arrangements summary").click();
   await expect(page.getByRole("checkbox").first()).not.toBeChecked();
   await reviewQuestPlans(page);
   const expected = {
@@ -191,7 +196,7 @@ test("Daytime Bold for a couple with $25 and one hour at home finds a real quest
   ).toMatchObject(expected);
 });
 
-test("early viability ignores unanswered group, budget, time, setting and arrangements", async ({
+test("unfinished plans show no premature matches or failure claims", async ({
   page,
 }) => {
   await openOriginal(
@@ -210,7 +215,9 @@ test("early viability ignores unanswered group, budget, time, setting and arrang
       arrangementRequired: true,
     }),
   );
-  await expect(page.getByText(/1 possible quest/)).toBeVisible();
+  await expect(page.locator(".quest-fit-status, .quest-recovery")).toHaveCount(
+    0,
+  );
   expect(await savedOuting(page)).toMatchObject({
     group: "couple",
     budgetMinor: 0,
@@ -220,7 +227,9 @@ test("early viability ignores unanswered group, budget, time, setting and arrang
   });
   await page.getByRole("button", { name: "Friends", exact: true }).click();
   await next(page);
-  await expect(page.getByText(/1 possible quest/)).toBeVisible();
+  await expect(page.locator(".quest-fit-status, .quest-recovery")).toHaveCount(
+    0,
+  );
   expect(await savedOuting(page)).toMatchObject({
     participants: 4,
     budgetMinor: 0,
@@ -235,18 +244,7 @@ for (const requirement of ["adultOnly", "requiresVolunteer"] as const)
     page,
   }) => {
     await openOriginal(page, original({ [requirement]: true }));
-    for (
-      let step = 0;
-      step < 7 &&
-      !(await page
-        .getByRole("heading", {
-          name: "Anything already arranged?",
-          exact: true,
-        })
-        .isVisible());
-      step++
-    )
-      await next(page);
+    await reviewQuestPlans(page);
     const adultConfirmation = page.getByRole("checkbox", { name: /adults/i });
     await expect(adultConfirmation).toBeVisible();
     await expect(adultConfirmation).not.toBeChecked();
@@ -268,9 +266,6 @@ for (const requirement of ["adultOnly", "requiresVolunteer"] as const)
       setting: "home",
     });
     await page.getByRole("button", { name: "Edit plans", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Edit arrangements", exact: true })
-      .click();
     await adultConfirmation.check();
     await reviewQuestPlans(page);
     await page
@@ -293,37 +288,33 @@ for (const requirement of ["adultOnly", "requiresVolunteer"] as const)
     });
   });
 
-test("an explicit recovery fixes the actual group mismatch and preserves every other answer", async ({
+test("a target that needs another group never changes the user's group or offers mismatched alternatives", async ({
   page,
 }) => {
   await openOriginal(page, original());
   await page.getByRole("button", { name: "Solo", exact: true }).click();
   await reviewQuestPlans(page);
   const before = await savedOuting(page);
+  await expect(page.locator(".quest-recovery")).toHaveCount(0);
   await page
     .getByRole("button", { name: "Check this quest", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Let’s adjust the plan", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page
-      .getByText(
-        "This quest needs 2–2 participants, including its supporting cast.",
-        { exact: true },
-      )
-      .first(),
-  ).toBeVisible();
-  await expect(page.locator(".quest-card")).toHaveCount(0);
-  expect(await savedOuting(page)).toEqual(before);
-  await expect(page.getByText(/choose a private setting/i)).toHaveCount(0);
-  await page.getByRole("button", { name: "Try 2 people", exact: true }).click();
-  await expect(
     page.getByRole("heading", {
-      name: "Ready to find your quest?",
+      name: "No matches for these answers yet",
       exact: true,
     }),
   ).toBeVisible();
+  await expect(page.locator(".quest-card")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Try / })).toHaveCount(0);
+  await expect(page.getByText(/This quest needs/)).toHaveCount(0);
+  expect(await savedOuting(page)).toEqual(before);
+  await page
+    .getByRole("button", { name: "Review my answers", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Edit group", exact: true }).click();
+  await page.getByRole("button", { name: "Couple", exact: true }).click();
+  await reviewQuestPlans(page);
   expect(await savedOuting(page)).toEqual({
     ...before,
     participants: 2,
@@ -349,7 +340,10 @@ test("recovery never bypasses a confirmed custom boundary", async ({
     .click();
   await expect(page.locator(".quest-card")).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "Let’s adjust the plan", exact: true }),
+    page.getByRole("heading", {
+      name: "No matches for these answers yet",
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(
     page

@@ -11,6 +11,9 @@ import {
   categorySchema,
 } from "../shared/domain";
 import { assessViability } from "../shared/viability";
+import { nearbyQuerySchema } from "../shared/events";
+import { searchNearbyEvents } from "./events";
+import { publishedQuests } from "./catalog";
 import { recommend, ineligibilityReasons } from "../shared/recommend";
 import {
   ApiError,
@@ -135,6 +138,32 @@ app.get("/api/health", (c) =>
 app.get("/api/maps/config", (c) =>
   c.json({ token: c.env.APPLE_MAPS_TOKEN || null }),
 );
+app.get("/api/events/config", (c) =>
+  c.json({ configured: Boolean(c.env.TICKETMASTER_API_KEY) }),
+);
+app.post("/api/events/nearby", async (c) => {
+  if (c.env.API_RATE_LIMITER) {
+    const limit = await c.env.API_RATE_LIMITER.limit({
+      key: `events:${c.req.header("CF-Connecting-IP") || "unknown"}`,
+    });
+    if (!limit.success)
+      throw new ApiError(
+        "rate_limited",
+        "Please wait a moment before searching again.",
+        429,
+      );
+  }
+  const query = await json(c, nearbyQuerySchema, 1024);
+  try {
+    return c.json(await searchNearbyEvents(query, c.env.TICKETMASTER_API_KEY));
+  } catch {
+    throw new ApiError(
+      "events_unavailable",
+      "Nearby events couldn’t load. Try again shortly or browse the event sites below.",
+      503,
+    );
+  }
+});
 app.get("/api/quests/:templateId", async (c) => {
   const db = serviceDb(c.env);
   const { data, error } = await db
@@ -301,41 +330,35 @@ app.post("/api/quests/viability", async (c) => {
   );
   const [current, published] = await Promise.all([
     me(c),
-    c
-      .get("userDb")
-      .from("quest_templates")
-      .select("id,content")
-      .eq("published", true),
+    publishedQuests(c.get("userDb"), {
+      templateId,
+      ...(confirmed.includes("category") ? { category: outing.category } : {}),
+      ...(confirmed.includes("intensity")
+        ? { intensity: outing.intensity }
+        : {}),
+    }),
   ]);
-  if (published.error) dbError(published.error.message);
   return c.json(
-    assessViability(
-      outing,
-      current.profile.preferences,
-      confirmed,
-      (published.data || [])
-        .filter((row) => !templateId || row.id === templateId)
-        .map((row) => questVariantSchema.parse(row.content)),
-    ),
+    assessViability(outing, current.profile.preferences, confirmed, published),
   );
 });
 app.post("/api/quests/recommend", async (c) => {
-  const { outing, templateId } = await json(
+  const { outing, templateId, offset } = await json(
     c,
     z
       .object({
         outing: outingSchema,
         templateId: z.string().max(120).optional(),
+        offset: z.number().int().min(0).max(30_000).default(0),
       })
       .strict(),
   );
   const profile = (await me(c)).profile;
-  const { data: published, error } = await c
-    .get("userDb")
-    .from("quest_templates")
-    .select("id,content")
-    .eq("published", true);
-  if (error) dbError(error.message);
+  const published = await publishedQuests(c.get("userDb"), {
+    templateId,
+    category: outing.category,
+    intensity: outing.intensity,
+  });
   const { data: history } = await c
     .get("userDb")
     .from("quest_runs")
@@ -352,9 +375,8 @@ app.post("/api/quests/recommend", async (c) => {
       awardedAt: r.reward_decision?.xp > 0 ? r.finalized_at : null,
     })),
     new Date(),
-    (published || [])
-      .filter((p) => !templateId || p.id === templateId)
-      .map((p) => questVariantSchema.parse(p.content)),
+    published,
+    offset,
   );
   for (const q of candidates) {
     const { data: campaigns, error: campaignError } = await c

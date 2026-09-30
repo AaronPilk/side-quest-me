@@ -738,6 +738,7 @@ export interface Database {
           content: Json
           published: boolean
           created_at: string
+          variant_key: string
         }
         Insert: {
           id: string
@@ -749,6 +750,7 @@ export interface Database {
           content: Json
           published?: boolean
           created_at?: string
+          variant_key?: string
         }
         Update: {
           id?: string
@@ -760,6 +762,7 @@ export interface Database {
           content?: Json
           published?: boolean
           created_at?: string
+          variant_key?: string
         }
         Relationships: []
       }

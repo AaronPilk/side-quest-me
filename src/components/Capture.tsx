@@ -1,6 +1,25 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, Upload, Square, RotateCcw, X, Video } from "lucide-react";
-import { DEMO } from "../lib/auth";
+import {
+  Camera,
+  Upload,
+  Square,
+  RotateCcw,
+  X,
+  Video,
+  Check,
+  Plus,
+  Bookmark,
+} from "lucide-react";
+import { DEMO, supabase } from "../lib/auth";
+import { demoActor } from "../lib/demo-identity";
+import { TakeClock, filmingGuide } from "../lib/capture-session";
+import {
+  captureDraftGeneration,
+  loadCaptureDraft,
+  saveCaptureDraft,
+  deleteCaptureDraft,
+} from "../lib/capture-drafts";
+import "./capture-session.css";
 import { api, request } from "../lib/api";
 import type { Clip, Run } from "../lib/types";
 import { Button, Notice } from "./ui";
@@ -51,6 +70,11 @@ export default function Capture({
   const [busy, setBusy] = useState(false);
   const [camera, setCamera] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const [takes, setTakes] = useState<number[]>([]);
+  const [draftMessage, setDraftMessage] = useState("");
+  const [draftReady, setDraftReady] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [countdown, setCountdown] = useState(0);
   const [source, setSource] = useState("gallery");
@@ -64,6 +88,12 @@ export default function Capture({
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const closed = useRef(false);
+  const clock = useRef(new TakeClock());
+  const draftOwner = useRef<string | null>(null);
+  const draftGeneration = useRef(captureDraftGeneration());
+  const leaveAfterFinish = useRef(false);
+  const draftWrite = useRef<Promise<void>>(Promise.resolve());
+  const guide = filmingGuide(run.quest, slot);
   const closeButton = useRef<HTMLButtonElement>(null);
   function release() {
     if (timer.current) clearInterval(timer.current);
@@ -84,7 +114,10 @@ export default function Capture({
     return () => {
       closed.current = true;
       try {
-        if (recorder.current?.state === "recording") recorder.current.stop();
+        if (recorder.current && recorder.current.state !== "inactive") {
+          clock.current.pause(performance.now());
+          recorder.current.stop();
+        }
       } catch {
         /* A browser interruption may already have stopped it. */
       } finally {
@@ -104,17 +137,165 @@ export default function Capture({
       video.current.srcObject = stream.current;
   }, [camera]);
   useEffect(() => {
+    let canceled = false;
+    const prepare = async () => {
+      try {
+        const owner = DEMO
+          ? `demo:${demoActor().id}`
+          : (await supabase?.auth.getSession())?.data.session?.user.id;
+        if (canceled || !owner) return;
+        draftOwner.current = owner;
+        const saved = await loadCaptureDraft(owner, run.id, slot);
+        if (canceled || !saved) return;
+        if (saved.baseClipId !== (existing?.id || null)) {
+          await deleteCaptureDraft(owner, run.id, slot);
+          return;
+        }
+        setFile(saved.file);
+        setDuration(saved.duration);
+        setStart(saved.start);
+        setEnd(saved.end);
+        setFit(saved.fit);
+        setCrop(saved.crop);
+        setMute(saved.mute);
+        setCaption(saved.caption);
+        setSource(saved.source);
+        setDraftMessage(
+          "Draft restored from this device. Review and save this part, then film your next part.",
+        );
+      } catch {
+        if (!canceled)
+          setDraftMessage(
+            "Local drafts are unavailable. Upload each part before leaving.",
+          );
+      } finally {
+        if (!canceled) setDraftReady(true);
+      }
+    };
+    void prepare();
+    return () => {
+      canceled = true;
+    };
+  }, [run.id, slot, existing?.id]);
+
+  // Finishing on background/track loss makes one playable container, including
+  // paused takes. Independent MP4/WebM recordings are never concatenated.
+  useEffect(() => {
     const interrupt = () => {
-      if (document.hidden && recorder.current?.state === "recording") {
-        recorder.current.stop();
+      if (
+        document.hidden &&
+        recorder.current?.state !== "inactive" &&
+        recorder.current
+      ) {
+        finishPart();
         setError(
-          "Recording was interrupted. Review the captured clip or retake it. Your other clips are saved.",
+          "Camera interrupted. Your captured takes are now a draft to review. Save this part before filming another.",
         );
       }
     };
+    const pageLeaving = () => {
+      if (recorder.current && recorder.current.state !== "inactive")
+        finishPart();
+    };
     document.addEventListener("visibilitychange", interrupt);
-    return () => document.removeEventListener("visibilitychange", interrupt);
+    window.addEventListener("pagehide", pageLeaving);
+    return () => {
+      document.removeEventListener("visibilitychange", interrupt);
+      window.removeEventListener("pagehide", pageLeaving);
+    };
   }, []);
+
+  async function keepDraft(
+    blob: Blob,
+    seconds: number,
+    selectedStart = start,
+    selectedEnd = end,
+  ) {
+    if (!draftOwner.current)
+      throw new Error(
+        "Your local draft identity is unavailable. Upload this part before leaving.",
+      );
+    const owner = draftOwner.current;
+    const write = () =>
+      saveCaptureDraft(
+        {
+          owner,
+          run: run.id,
+          slot,
+          baseClipId: existing?.id || null,
+          file: blob,
+          duration: seconds,
+          start: selectedStart,
+          end: selectedEnd,
+          fit,
+          crop,
+          mute,
+          caption,
+          source,
+          updatedAt: Date.now(),
+        },
+        draftGeneration.current,
+      );
+    // Serialize the initial recording save and later trim edits.
+    draftWrite.current = draftWrite.current.catch(() => {}).then(write);
+    await draftWrite.current;
+    if (!closed.current)
+      setDraftMessage(
+        "Draft saved on this device for 7 days. Upload it to keep it with your quest.",
+      );
+  }
+
+  function finishPart() {
+    const active = recorder.current;
+    if (!active || active.state === "inactive") return;
+    clock.current.pause(performance.now());
+    setElapsed(clock.current.seconds(performance.now()));
+    setTakes([...clock.current.takes]);
+    setFinishing(true);
+    setRecording(false);
+    setPaused(false);
+    try {
+      active.stop();
+    } catch {
+      setFinishing(false);
+      release();
+      setCamera(false);
+      setError(
+        "The camera stopped before it could finish this part. Your uploaded parts are still saved.",
+      );
+    }
+  }
+
+  function pauseTake() {
+    const active = recorder.current;
+    if (!active || active.state !== "recording") return;
+    try {
+      active.pause();
+      clock.current.pause(performance.now());
+      setElapsed(clock.current.seconds(performance.now()));
+      setTakes([...clock.current.takes]);
+      setRecording(false);
+      setPaused(true);
+    } catch {
+      finishPart();
+    }
+  }
+
+  function resumeTake() {
+    const active = recorder.current;
+    if (!active || active.state !== "paused") return;
+    try {
+      active.resume();
+      clock.current.resume(performance.now());
+      setRecording(true);
+      setPaused(false);
+    } catch {
+      finishPart();
+      setError(
+        "This camera cannot continue that take. Review the footage already captured.",
+      );
+    }
+  }
   async function openCamera(deviceId?: string) {
     setError("");
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
@@ -123,7 +304,7 @@ export default function Capture({
       );
       return;
     }
-    if (cameraBusy || recording || countdown > 0) return;
+    if (cameraBusy || recording || paused || finishing || countdown > 0) return;
     setCameraBusy(true);
     release();
     setCamera(false);
@@ -143,6 +324,16 @@ export default function Capture({
         return;
       }
       stream.current = acquired;
+      acquired.getTracks().forEach((track) => {
+        track.onended = () => {
+          if (recorder.current && recorder.current.state !== "inactive") {
+            finishPart();
+            setError(
+              "Camera disconnected. Review the takes captured before it stopped.",
+            );
+          }
+        };
+      });
       setCameraDevice(
         acquired.getVideoTracks()[0]?.getSettings().deviceId || deviceId || "",
       );
@@ -180,7 +371,8 @@ export default function Capture({
     if (next) void openCamera(next.deviceId);
   }
   function record() {
-    if (!stream.current) return;
+    if (!stream.current || countdown > 0 || recording || paused || finishing)
+      return;
     setCountdown(3);
     let left = 3;
     countdownTimer.current = setInterval(() => {
@@ -196,47 +388,74 @@ export default function Capture({
         "video/mp4",
       ].find((m) => MediaRecorder.isTypeSupported(m));
       try {
-        const began = performance.now();
-        recorder.current = new MediaRecorder(
+        const active = new MediaRecorder(
           stream.current,
           mime ? { mimeType: mime, videoBitsPerSecond: 4_000_000 } : undefined,
         );
+        recorder.current = active;
+        clock.current = new TakeClock();
+        setTakes([]);
         chunks.current = [];
-        recorder.current.ondataavailable = (e) => {
+        active.ondataavailable = (e) => {
           if (e.data.size) chunks.current.push(e.data);
         };
-        recorder.current.onerror = () => {
+        active.onerror = () => {
+          clock.current.pause(performance.now());
           setError(
-            "Recording stopped unexpectedly. Try again or upload a clip.",
+            "Recording stopped unexpectedly. Review any captured footage or try again.",
           );
-          release();
+          if (active.state !== "inactive") finishPart();
+          else release();
           setRecording(false);
+          setPaused(false);
         };
-        recorder.current.onstop = () => {
+        active.onstop = async () => {
+          clock.current.pause(performance.now());
           const blob = new Blob(chunks.current, {
-            type: recorder.current?.mimeType || chunks.current[0]?.type,
+            type: active.mimeType || chunks.current[0]?.type,
           });
           const measuredElapsed =
-            Math.floor((performance.now() - began) / 100) / 10;
+            Math.floor(clock.current.seconds(performance.now()) * 1000) / 1000;
           release();
-          if (closed.current) return;
-          setCamera(false);
-          setRecording(false);
+          if (!closed.current) {
+            setCamera(false);
+            setRecording(false);
+            setPaused(false);
+            setFinishing(false);
+          }
           if (blob.size) {
-            setFile(blob);
-            setDuration(measuredElapsed);
-            setStart(0);
-            setEnd(Math.min(10, measuredElapsed));
-          } else setError("No video was recorded. Try again or upload a clip.");
+            if (!closed.current) {
+              setFile(blob);
+              setDuration(measuredElapsed);
+              setStart(0);
+              setEnd(Math.min(15, measuredElapsed));
+            }
+            try {
+              await keepDraft(
+                blob,
+                measuredElapsed,
+                0,
+                Math.min(15, measuredElapsed),
+              );
+              if (leaveAfterFinish.current && !closed.current) onClose();
+            } catch {
+              if (!closed.current)
+                setError(
+                  "This browser could not save the local draft. Keep this screen open and upload the part to save it.",
+                );
+            }
+          } else if (!closed.current)
+            setError("No video was recorded. Try again or upload a clip.");
         };
-        recorder.current.start(250);
+        active.start(250);
+        clock.current.resume(performance.now());
         setRecording(true);
+        setPaused(false);
         setElapsed(0);
         timer.current = setInterval(() => {
-          const seconds = (performance.now() - began) / 1000;
+          const seconds = clock.current.seconds(performance.now());
           setElapsed(seconds);
-          if (seconds >= 15 && recorder.current?.state === "recording")
-            recorder.current.stop();
+          if (seconds >= 15 && active.state === "recording") finishPart();
         }, 100);
       } catch {
         release();
@@ -266,15 +485,29 @@ export default function Capture({
     setDuration(0);
     setStart(0);
     setEnd(10);
+    void keepDraft(f, 0, 0, 10).catch(() =>
+      setDraftMessage(
+        "Local draft unavailable. Upload this part before leaving.",
+      ),
+    );
   }
-  function close() {
-    if (
-      (file || recording) &&
-      !confirm(
-        "Leave this recording? This unsaved clip will be lost. Your uploaded clips stay saved.",
-      )
-    )
+  async function close() {
+    if (busy || finishing) return;
+    if (recorder.current && recorder.current.state !== "inactive") {
+      leaveAfterFinish.current = true;
+      finishPart();
       return;
+    }
+    if (file) {
+      try {
+        await keepDraft(file, duration);
+      } catch {
+        setError(
+          "Your draft could not be saved. Upload this part or discard it before leaving.",
+        );
+        return;
+      }
+    }
     onClose();
   }
   async function save() {
@@ -367,6 +600,11 @@ export default function Capture({
         mute,
         caption,
       });
+      await draftWrite.current.catch(() => {});
+      if (draftOwner.current)
+        await deleteCaptureDraft(draftOwner.current, run.id, slot).catch(
+          () => {},
+        );
       onSaved();
       onClose();
     } catch (e) {
@@ -379,7 +617,7 @@ export default function Capture({
   }
   return (
     <div
-      className="capture-overlay"
+      className={`capture-overlay ${camera ? "camera-open" : ""}`}
       role="dialog"
       aria-modal="true"
       aria-label={`Capture ${run.quest.beats[slot].label}`}
@@ -411,12 +649,39 @@ export default function Capture({
             className="icon-button"
             aria-label="Exit capture"
             onClick={close}
+            disabled={busy || finishing}
           >
             <X />
           </button>
         </div>
         <h1>{run.quest.beats[slot].label}</h1>
-        <p>{run.quest.beats[slot].filming}</p>
+        <div className="filming-guide">
+          <strong>{guide.title}</strong>
+          <p>{guide.prompt}</p>
+          <p className="shot-direction">{guide.shot}</p>
+          <details>
+            <summary>Story tip</summary>
+            <p>{guide.tip}</p>
+          </details>
+        </div>
+        {camera && (
+          <div
+            className="take-progress"
+            aria-label={`${takes.length} completed takes, ${elapsed.toFixed(1)} of 15 seconds`}
+          >
+            {takes.map((take, index) => (
+              <span key={index} style={{ width: `${(take / 15) * 100}%` }} />
+            ))}
+            {recording && (
+              <span
+                className="current-take"
+                style={{
+                  width: `${(Math.max(0, elapsed - takes.reduce((sum, take) => sum + take, 0)) / 15) * 100}%`,
+                }}
+              />
+            )}
+          </div>
+        )}
         <div className="capture-frame">
           {camera ? (
             <video
@@ -463,53 +728,115 @@ export default function Capture({
               {countdown}
             </div>
           )}
-          {recording && (
+          {(recording || paused || finishing) && (
             <div
               className="record-timer"
               role="timer"
               aria-label={`${Math.floor(elapsed)} seconds recorded`}
             >
-              <span /> {elapsed.toFixed(1)}s{" "}
-              {elapsed >= 10 ? "✓ Target reached" : "/ 10s target"}
+              {recording && <span />} {elapsed.toFixed(1)}s / 15s
+              {paused ? " · Take stopped" : ""}
             </div>
           )}
         </div>
         {camera ? (
           <div className="capture-actions">
-            {recording ? (
-              <Button onClick={() => recorder.current?.stop()}>
-                <Square size={18} />
-                Stop recording
-              </Button>
-            ) : (
-              <Button disabled={countdown > 0 || cameraBusy} onClick={record}>
-                <Camera size={18} />
-                Start recording
-              </Button>
+            <p className="support">
+              Film a little, stop, then add another take. Keep 5–15 seconds in
+              this part.
+            </p>
+            <div className="take-controls">
+              {recording ? (
+                <button
+                  className="record-control is-recording"
+                  onClick={pauseTake}
+                  aria-label="Stop take"
+                >
+                  <Square fill="currentColor" size={26} />
+                </button>
+              ) : paused ? (
+                <button
+                  className="record-control"
+                  onClick={resumeTake}
+                  aria-label="Add take"
+                >
+                  <Plus size={30} />
+                </button>
+              ) : (
+                <button
+                  className="record-control"
+                  disabled={countdown > 0 || cameraBusy || finishing}
+                  onClick={record}
+                  aria-label="Start recording"
+                >
+                  <Camera size={28} />
+                </button>
+              )}
+              {(recording || paused) && (
+                <Button secondary disabled={elapsed < 5} onClick={finishPart}>
+                  <Check size={18} />
+                  Finish part
+                </Button>
+              )}
+            </div>
+            <p className="record-control-label">
+              {recording
+                ? "Stop take"
+                : paused
+                  ? "Add take"
+                  : finishing
+                    ? "Finishing your part…"
+                    : "Start recording"}
+            </p>
+            {paused && elapsed < 5 && (
+              <p className="support">
+                Add at least {(5 - elapsed).toFixed(1)} more seconds to use this
+                part.
+              </p>
             )}
             {cameras.length > 1 && (
               <button
                 className="text-button"
-                disabled={cameraBusy || recording || countdown > 0}
+                disabled={
+                  cameraBusy ||
+                  recording ||
+                  paused ||
+                  finishing ||
+                  countdown > 0
+                }
                 onClick={switchCamera}
               >
                 <RotateCcw size={16} />
                 Switch camera
               </button>
             )}
-            <button
-              className="text-button"
-              onClick={() => {
-                release();
-                setCamera(false);
-                setCountdown(0);
-              }}
-            >
-              Cancel camera
-            </button>
+            {paused && (
+              <button className="text-button" onClick={close}>
+                <Bookmark size={16} />
+                Save draft & leave
+              </button>
+            )}
+            {!recording && !paused && !finishing && (
+              <button
+                className="text-button"
+                onClick={() => {
+                  release();
+                  setCamera(false);
+                  setCountdown(0);
+                }}
+              >
+                Cancel camera
+              </button>
+            )}
           </div>
         ) : preview ? (
           <>
+            {file && duration > 0 && duration < 5 && (
+              <Notice error>
+                This draft is shorter than 5 seconds. Retake this part or upload
+                a longer clip. Your other parts stay saved.
+              </Notice>
+            )}
             <div className="form-grid">
               <label>
                 Start (seconds)
@@ -586,6 +913,7 @@ export default function Capture({
             <Button
               busy={busy}
               disabled={
+                !draftReady ||
                 end - start < 5 ||
                 end - start > 15 ||
                 start < 0 ||
@@ -597,19 +925,51 @@ export default function Capture({
             </Button>
             <button
               className="text-button"
-              onClick={() => {
+              disabled={busy}
+              onClick={async () => {
+                if (
+                  file &&
+                  !confirm(
+                    "Discard this local draft and record again? Your uploaded parts stay saved.",
+                  )
+                )
+                  return;
+                await draftWrite.current.catch(() => {});
+                if (draftOwner.current)
+                  await deleteCaptureDraft(
+                    draftOwner.current,
+                    run.id,
+                    slot,
+                  ).catch(() => {});
                 setFile(undefined);
                 setPreview("");
                 setDuration(0);
+                setDraftMessage("");
               }}
             >
               <RotateCcw size={16} />
               Retake or replace
             </button>
+            {file && (
+              <>
+                <button className="text-button" disabled={busy} onClick={close}>
+                  <Bookmark size={16} />
+                  Save draft & leave
+                </button>
+                <p className="fine-print">
+                  This part is finished. Save it and return for your next part
+                  whenever you’re ready. Adding takes is available before you
+                  finish a part.
+                </p>
+              </>
+            )}
           </>
         ) : (
           <div className="stack">
-            <Button busy={cameraBusy} onClick={() => openCamera()}>
+            <Button
+              busy={cameraBusy || !draftReady}
+              onClick={() => openCamera()}
+            >
               <Camera size={18} />
               Record this moment
             </Button>
@@ -618,7 +978,7 @@ export default function Capture({
               Upload a clip
               <input
                 type="file"
-                disabled={cameraBusy}
+                disabled={cameraBusy || !draftReady}
                 accept="video/*"
                 onChange={selectFile}
               />
@@ -627,7 +987,7 @@ export default function Capture({
               Use phone camera
               <input
                 type="file"
-                disabled={cameraBusy}
+                disabled={cameraBusy || !draftReady}
                 accept="video/*"
                 capture="environment"
                 onChange={selectFile}
@@ -638,6 +998,11 @@ export default function Capture({
               <br />A saved clip is confirmed only after server validation.
             </p>
           </div>
+        )}
+        {draftMessage && (
+          <p className="fine-print" role="status">
+            {draftMessage}
+          </p>
         )}
         {error && <Notice error>{error}</Notice>}
       </div>

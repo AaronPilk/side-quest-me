@@ -46,4 +46,54 @@ describe("public Maps configuration and authenticated discovery boundary", () =>
       error: { code: "setup_required" },
     });
   });
+  it("reports event configuration without exposing the server key", async () => {
+    const response = await worker.fetch(
+      new Request("https://app.test/api/events/config"),
+      {
+        TICKETMASTER_API_KEY: "fixture-server-secret",
+      } as AppEnv,
+      {} as ExecutionContext,
+    );
+    expect(await response.json()).toEqual({ configured: true });
+  });
+  it("keeps missing event inventory explicit and rejects invalid coordinates", async () => {
+    for (const [body, expected] of [
+      [{ area: "Seattle", days: 7 }, 200],
+      [{ center: { latitude: 120, longitude: 0 } }, 422],
+    ] as const) {
+      const response = await worker.fetch(
+        new Request("https://app.test/api/events/nearby", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        {} as AppEnv,
+        {} as ExecutionContext,
+      );
+      expect(response.status).toBe(expected);
+      if (expected === 200)
+        expect(await response.json()).toEqual({
+          configured: false,
+          events: [],
+          checkedAt: null,
+        });
+    }
+  });
+  it("bounds public provider usage before making upstream calls", async () => {
+    const limit = vi.fn(async () => ({ success: false }));
+    const response = await worker.fetch(
+      new Request("https://app.test/api/events/nearby", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "CF-Connecting-IP": "192.0.2.1",
+        },
+        body: JSON.stringify({ area: "Seattle" }),
+      }),
+      { API_RATE_LIMITER: { limit } } as unknown as AppEnv,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(429);
+    expect(limit).toHaveBeenCalledWith({ key: "events:192.0.2.1" });
+  });
 });

@@ -22,7 +22,7 @@ export const INTENSITIES = [
   {
     id: "full_send",
     label: "Full Send",
-    description: "Commit to the setup. Bring a cast, a plan, and a reveal.",
+    description: "Go all in on the challenge. Build up to a memorable reveal.",
   },
 ] as const;
 export const categorySchema = z.enum([
@@ -363,6 +363,11 @@ export const questVariantSchema = z
   .object({
     id: z.string().regex(/^[a-z_]+_v\d+$/),
     familyId: z.string().regex(/^[a-z_]+$/),
+    variantKey: z
+      .string()
+      .regex(/^[a-z_]+$/)
+      .max(40)
+      .optional(),
     version: z.number().int().positive(),
     category: categorySchema,
     intensity: intensitySchema,

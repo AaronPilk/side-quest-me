@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { storeRendererObject } from "./renderer-storage";
 import {
   MEDIA_LIMITS,
   renderManifestSchema,
@@ -149,42 +150,39 @@ async function encodeJob(
     outputKey = `renders/${job.id}/${job.fence}/${result.metadata.sha256}.mp4`;
     thumbnailKey = `renders/${job.id}/${job.fence}/${result.metadata.sha256}.jpg`;
     const output = await rendererFetch(env, `/outputs/${outputId}`);
-    if (
-      !output.ok ||
-      !output.body ||
-      Number(output.headers.get("content-length")) !== result.metadata.bytes
-    )
-      throw new MediaRouteError("Rendered output transport failed.", 502);
     // R2 verifies the supplied SHA-256 while consuming this stream. This is the object we promote.
-    const stored = await env.MEDIA.put(outputKey, output.body, {
-      sha256: result.metadata.sha256,
-      httpMetadata: {
-        contentType: "video/mp4",
-        cacheControl: "private, no-store",
+    await storeRendererObject(
+      env.MEDIA,
+      outputKey,
+      output,
+      result.metadata.bytes,
+      MEDIA_LIMITS.maxOutputBytes,
+      {
+        sha256: result.metadata.sha256,
+        httpMetadata: {
+          contentType: "video/mp4",
+          cacheControl: "private, no-store",
+        },
+        customMetadata: { jobId: job.id, fence: String(job.fence) },
       },
-      customMetadata: { jobId: job.id, fence: String(job.fence) },
-    });
-    if (!stored || stored.size !== result.metadata.bytes)
-      throw new MediaRouteError(
-        "Rendered object failed storage verification.",
-        502,
-      );
+    );
     const thumbnail = await rendererFetch(
       env,
       `/outputs/${outputId}/thumbnail`,
     );
-    if (
-      !thumbnail.ok ||
-      !thumbnail.body ||
-      Number(thumbnail.headers.get("content-length")) > 2 * 1024 * 1024
-    )
-      throw new MediaRouteError("Rendered thumbnail is unavailable.", 502);
-    await env.MEDIA.put(thumbnailKey, thumbnail.body, {
-      httpMetadata: {
-        contentType: "image/jpeg",
-        cacheControl: "private, no-store",
+    await storeRendererObject(
+      env.MEDIA,
+      thumbnailKey,
+      thumbnail,
+      Number(thumbnail.headers.get("content-length")),
+      2 * 1024 * 1024,
+      {
+        httpMetadata: {
+          contentType: "image/jpeg",
+          cacheControl: "private, no-store",
+        },
       },
-    });
+    );
     commitAttempted = true;
     const { error } = await db.rpc("sq_finish_render", {
       p_job: job.id,

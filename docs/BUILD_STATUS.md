@@ -1,11 +1,38 @@
-# Build status — 2026-09-29
+# Build status — 2026-09-30
 
-**Deployment update — 2026-09-30:** The user selected the existing Side quest Me
-Supabase project. Its eight migrations and 33 quests are live. Cloudflare private
-storage, queue, bootstrap Worker, server secrets, Auth callbacks, and GitHub release
-variables are configured. The application release and cloud rendering verification
-await the Cloudflare deployment token. See [deployment status](DEPLOYMENT.md).
-The verification history below describes the earlier local implementation pass.
+The app is live on [Cloudflare](https://sidequest-me.aaron-9c3.workers.dev).
+The selected Supabase database has nine migrations and 1,113 authored variants
+across 73 families. The current feedback release is undergoing final deployment
+and cloud-render verification; see [the deployment record](DEPLOYMENT.md).
+
+## Current feedback milestone
+
+- Budget entry clears correctly and normalizes leading zeroes. Time choices are
+  one, three, or five hours, or unlimited.
+- Create asks six core questions plus nearby places when relevant. Manual travel
+  estimates and the mandatory arrangements questionnaire are removed. Existing
+  saved estimates remain visible and explicitly removable in review.
+- Full Send outdoor dates for two now have matching activities. No intensity,
+  participant count, or boundary is silently changed. More quest ideas loads
+  further distinct matching families; backend catalog reads exceed the database's
+  default 1,000-row response cap safely.
+- Current-area location, optional Apple Maps, and a server-side Ticketmaster event
+  adapter are implemented. Eventbrite is an external browse link. Live provider
+  keys are still required; no scraped or invented event inventory is presented.
+- Capture supports stopping and adding takes before finishing each part, saved
+  finished drafts across refresh, and quest-specific hook/action/payoff/loop prompts.
+  A restored finished part can be uploaded or replaced; it cannot append a new take.
+- The production renderer's R2 stream-length failure has a tested bounded streaming
+  fix. Its resource configuration now supports a one-vCPU instance, capped at one.
+
+Typecheck, lint, 272 unit tests, deployment configuration checks, isolated PostgreSQL
+regression tests/advisors, and build pass. Final browser and production results are
+pending the release. Vite reports only its advisory large-entry warning (584.5 kB,
+180.8 kB gzip). SMTP, Apple Maps and live events need the provider settings listed
+in the deployment guide. Imported-profile review stays manual and explicit.
+
+The sections below retain the verification history of earlier local milestones;
+their deployment statements describe those earlier passes.
 
 ## Creator experience and Quest Series
 

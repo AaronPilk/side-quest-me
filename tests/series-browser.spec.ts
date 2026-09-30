@@ -115,7 +115,6 @@ test("Series authoring, private drafts, prerequisites, following, and participan
     "What’s your budget?",
     "How much time do you have?",
     "Where are we doing this?",
-    "Anything already arranged?",
     "Ready to find your quest?",
   ]) {
     await page.getByRole("button", { name: "Continue", exact: true }).click();

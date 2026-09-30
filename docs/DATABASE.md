@@ -1,12 +1,15 @@
 # Sidequest database
 
 **Hosted setup — 2026-09-30:** The user selected `fpwpsxerogbwlnrvuurm` (Side quest
-Me). All eight migrations and the 33-quest seed have been applied and verified.
+Me). All nine migrations and 1,113 authored quest variants across 73 families have
+been applied and verified. The additive catalog migration preserves original IDs
+and accepted snapshots; `variant_key` distinguishes briefs within a family and
+intensity without inventing revision numbers.
 Hosted security and performance advisors report no warnings or errors. See
 [the deployment record](DEPLOYMENT.md). The local-development history below is
 retained for reproducibility.
 
-Postgres is the sole relational authority. Apply `supabase/migrations/*` and then `supabase/seed.sql` to a **new, explicitly selected Sidequest project**. The seed contains 33 authored quest variants, no sponsors, funded offers, balances, or operator accounts. A fixture is not funding.
+Postgres is the sole relational authority. Apply `supabase/migrations/*` and then `supabase/seed.sql` to a **new, explicitly selected Sidequest project**. The seed contains 1,113 authored quest variants, no sponsors, funded offers, balances, or operator accounts. A fixture is not funding.
 
 `node scripts/db-test.mjs` creates an isolated, temporary PostgreSQL cluster with a private Unix socket, installs minimal Auth test tables/roles, rebuilds migrations and seed, runs actual transactions/concurrent sessions/RLS checks, and shuts down/removes that cluster. Requires `initdb`, `pg_ctl`, and `psql` (`pg_config --bindir` is supported). It never connects to a live project. `node scripts/db-test.mjs --advisors` also runs the Supabase CLI security advisors using an ephemeral loopback TLS listener/certificate, then removes them. Observed on PostgreSQL 17 / CLI 2.101.0: no security issues at warning/error level. These tests prove database behavior, not live Supabase Auth delivery or hosted Data API configuration. The Auth fixtures model the columns used by the app; they are not deployed migrations. `node scripts/db-test.mjs --generate-types` generates `shared/database.generated.ts` from actual migrated table columns, foreign keys, and RPC signatures; it uses local SQL introspection so Docker and hosted credentials are unnecessary. `shared/database.types.ts` is a separately labeled narrow hand-authored DTO layer.
 
@@ -26,7 +29,7 @@ supabase migration list --linked
 supabase db advisors --linked --type security --level warn --fail-on warn
 ```
 
-`--include-seed` loads only the 33 authored variants; it creates no sponsor, campaign, redeemable reward, wallet credit, or operator. Keep staging and production project links/credentials separate. A future production push needs its own explicitly checked target and migration review.
+`--include-seed` loads only the 1,113 authored variants; it creates no sponsor, campaign, redeemable reward, wallet credit, or operator. Keep staging and production project links/credentials separate. A future production push needs its own explicitly checked target and migration review.
 
 The committed Auth callback URLs are local development URLs. Configure the chosen hosted project's Site URL and exact deployed `/auth/callback` URL in Auth settings, plus its email delivery settings. Do not push this local Auth configuration blindly to production with `supabase config push`.
 
@@ -48,7 +51,7 @@ All actor mutation RPCs below take `(p_actor uuid, p_input jsonb, p_key text, p_
 
 | RPC                           | `p_input`                                                                                                                                                                            | Result                                                                                                                                               |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sq_accept_run`               | `template_id`, `outing` (shared camelCase Outing, role may be null), optional legacy top-level `role`, `expected_campaign` (reviewed `{id,version}` or null)                              | `{run,eligibility}`; template is looked up and content, nullable role, and policy are frozen                                                            |
+| `sq_accept_run`               | `template_id`, `outing` (shared camelCase Outing, role may be null), optional legacy top-level `role`, `expected_campaign` (reviewed `{id,version}` or null)                         | `{run,eligibility}`; template is looked up and content, nullable role, and policy are frozen                                                         |
 | `sq_abandon_run`              | `run_id`                                                                                                                                                                             | run                                                                                                                                                  |
 | `sq_reserve_upload`           | `run_id,slot,expected_bytes,mime,capture_source?` (camera/gallery is advisory, default gallery)                                                                                      | pending asset with server-generated staging key and 15-minute expiry                                                                                 |
 | `sq_seal_media`               | `asset_id,object_key,bytes,mime,duration_ms,sha256,metadata`                                                                                                                         | immutable sealed asset; server-only trusted probe/copy input                                                                                         |

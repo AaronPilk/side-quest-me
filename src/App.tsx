@@ -24,6 +24,7 @@ import {
 import { useCommunity } from "./components/Community";
 import "./navigation-design.css";
 import { supabase, DEMO } from "./lib/auth";
+import { clearCaptureDrafts } from "./lib/capture-drafts";
 import { APP_CONFIG } from "../shared/domain";
 import { consumeReturnTo, rememberReturnTo } from "./lib/internal-return";
 import { Button, Loading, Notice, QuestArt } from "./components/ui";
@@ -77,6 +78,7 @@ export default function App() {
     });
     const { data } = supabase.auth.onAuthStateChange((_e, session) => {
       if (_e === "SIGNED_OUT") {
+        void clearCaptureDrafts().catch(() => {});
         sessionStorage.removeItem("sq-quest-flow");
         sessionStorage.removeItem("sq-outing");
         sessionStorage.removeItem("sq-return-to");

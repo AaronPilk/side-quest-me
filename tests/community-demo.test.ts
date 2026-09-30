@@ -683,8 +683,13 @@ describe("durable demo acceptance receipts", () => {
     "rejects changed %s intent when an acceptance key is reused",
     async (change) => {
       const { api } = await import("../src/lib/api");
-      const candidates = await api.quests({ ...DEFAULT_OUTING });
-      const quest = candidates.find((item) => item.id === catalog[0].id)!;
+      // This receipt regression targets the original quest explicitly; new
+      // catalog entries may legitimately occupy the three recommendation slots.
+      const [quest] = await api.quests({ ...DEFAULT_OUTING }, catalog[0].id);
+      const [alternative] = await api.quests(
+        { ...DEFAULT_OUTING },
+        "date_menu_draft_chill_v1",
+      );
       const attempt = await api.accept(
         quest,
         { ...DEFAULT_OUTING },
@@ -693,9 +698,7 @@ describe("durable demo acceptance receipts", () => {
       await api.abandon(attempt.id);
       await expect(
         api.accept(
-          change === "quest"
-            ? candidates.find((item) => item.id !== quest.id)!
-            : quest,
+          change === "quest" ? alternative : quest,
           {
             ...DEFAULT_OUTING,
             ...(change === "outing" ? { budgetMinor: 500 } : {}),

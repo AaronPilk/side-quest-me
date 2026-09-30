@@ -17,6 +17,7 @@ export type AppEnv = Env &
     REDEMPTION_SIGNING_KEY: string;
     SHARE_SIGNING_KEY: string;
     APPLE_MAPS_TOKEN?: string;
+    TICKETMASTER_API_KEY?: string;
   };
 export type AppBindings = {
   Bindings: AppEnv;

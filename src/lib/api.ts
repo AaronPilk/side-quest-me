@@ -206,7 +206,11 @@ export const api = {
       throw new Error("This quest is unavailable. Choose another quest.");
     return quest;
   },
-  quests: async (outing: Outing, templateId?: string): Promise<Candidate[]> =>
+  quests: async (
+    outing: Outing,
+    templateId?: string,
+    offset = 0,
+  ): Promise<Candidate[]> =>
     DEMO
       ? recommend(
           outing,
@@ -216,10 +220,12 @@ export const api = {
           [...catalog, ...demoOriginalTemplates()].filter(
             (item) => !templateId || item.id === templateId,
           ),
+          offset,
         )
       : mutation("/api/quests/recommend", {
           outing,
           ...(templateId ? { templateId } : {}),
+          ...(offset ? { offset } : {}),
         }),
   viability: async (
     outing: Outing,

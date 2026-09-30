@@ -34,7 +34,8 @@ describe("guided creation viability and explicit recovery", () => {
       arrangementConfirmed: false,
     });
     const choices = recommend(plan, prefs());
-    expect(choices.map((q) => q.id)).toContain("day_pitch_swap_bold_v1");
+    expect(choices).toHaveLength(3);
+    expect(ineligibilityReasons(target(), plan, prefs())).toEqual([]);
     expect(
       choices.every((q) => !q.arrangementRequired && q.minParticipants <= 2),
     ).toBe(true);

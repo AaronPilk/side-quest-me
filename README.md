@@ -3,10 +3,10 @@
 A mobile-first React/Vite PWA for discovering real-world quests, making your own
 version, keeping or publishing a reel, and optionally licensing an existing video.
 
-**Current state:** working local app with actual FFmpeg rendering and tested
-PostgreSQL migrations. The selected live Supabase database, private Cloudflare
-storage/queue, Worker secrets, and GitHub production configuration are prepared.
-The full application release awaits its Cloudflare deployment token. See
+**Current state:** deployed at [sidequest-me.aaron-9c3.workers.dev](https://sidequest-me.aaron-9c3.workers.dev)
+with Supabase Auth/database, private Cloudflare storage, a render queue, and an
+FFmpeg Container. The catalog contains 1,113 authored variants across 73 families.
+Email delivery, in-app Apple Maps, and live event search need provider configuration. See
 [deployment status and remaining setup](docs/DEPLOYMENT.md). Demo rewards are
 examples only: they cannot spend points, reserve stock, or issue codes.
 
@@ -30,13 +30,17 @@ account menu; Admin appears only for authorized staff. The ten-question onboardi
 and uses an explicit manual review. Unanswered questions remain unknown. Select an
 at-home, Chill, zero-budget outing for the quickest path. Create asks one outing
 question at a time, saves progress in the current browser tab, and lets you edit
-a final review before finding matching quests. Travel and venue questions follow
-your setting; trying a discovered quest keeps its scene and energy while asking
-for your own plans. Viability checks explain actual constraints and offer explicit
-adjustments when a combination has no match. Optional [Apple Maps place selection](docs/MAPS.md)
+a final review before finding matching quests. Time choices are one, three, or five
+hours, or unlimited. Nearby places follow an away-from-home setting; arrangements
+are optional review controls. Trying a discovered quest keeps its scene and energy
+while asking for your own plans. More quest ideas loads distinct matching families
+without changing the plan. Optional [Apple Maps place selection and nearby events](docs/MAPS.md)
 connects an outing to a real place and directions once a MapKit JS token is configured.
 Accept a quest,
-record/upload three 5–15-second selections, and complete it. The local renderer
+record/upload three 5–15-second selections, and complete it. While filming a part,
+stop and add takes before finishing; saved finished parts can be revisited later
+on the same browser. Quest-specific prompts cover the opening hook, actual action,
+payoff, and a closing shot that loops to the opening. The local renderer
 saves actual files under `.local/media`; demo profile/progress stays in browser
 storage. Local progress is a simulation, not proof of the production economy.
 
@@ -100,7 +104,7 @@ node scripts/config-smoke.mjs
 ```
 
 Database tests start a fresh temporary PostgreSQL cluster, apply every migration
-and the 33-variant seed, run real concurrent transactions and RLS checks,
+and the 1,113-variant seed, run real concurrent transactions and RLS checks,
 then stop/remove the cluster. They do not contact an existing database. The
 advisor mode briefly enables loopback TLS for the CLI. It is also local.
 
@@ -172,7 +176,7 @@ npx wrangler deploy --dry-run
 ```
 
 These commands create resources only when deliberately run with a selected target.
-See [the deployment record](docs/DEPLOYMENT.md) for the prepared production resources;
+See [the deployment record](docs/DEPLOYMENT.md) for the existing production resources;
 do not recreate them. Full dry-run validation needs Docker. Let the Actions workflow
 perform the actual deployment.
 Configure the chosen hostname and Supabase callback allowlist to match
@@ -183,8 +187,9 @@ Configure the chosen hostname and Supabase callback allowlist to match
 - `src/`: five consumer tabs, social profiles, authored Series, public creator posts, original quest review, structured
   licensing, email sign-in, confirmed preferences, capture/review, private journal,
   export, rewards, and restricted operator tools.
-- `shared/`: canonical types, hard filters, deterministic ranking and 33
-  complete authored variants across 13 families. Branding lives in `APP_CONFIG`.
+- `shared/`: canonical types, hard filters, deterministic ranking and 1,113
+  authored variants across 73 families. See [catalog structure](docs/ACTIVITY_CATALOG.md).
+  Branding lives in `APP_CONFIG`.
 - `worker/`: JWT/session checks, RLS reads, narrow transaction endpoints,
   private media, explicit sharing, Queue dispatch and scheduled recovery/cleanup.
 - `supabase/`: schema, immutable ledger/evidence/snapshots, fenced jobs,

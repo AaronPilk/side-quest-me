@@ -17,6 +17,15 @@ export type TriedFamily =
   | { familyId: string; attemptedAt?: string; awardedAt?: string | null };
 const DAY_MS = 86_400_000;
 
+/** Stable within one UTC day. Editorial briefs rotate without inventing a new
+ * reward family, changing preference scores, or weakening any hard filter. */
+function dailyBriefOrder(id: string, now: Date): number {
+  let hash = 2166136261;
+  for (const character of `${now.toISOString().slice(0, 10)}:${id}`)
+    hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
+  return hash;
+}
+
 function preferenceLabel(value: string): string {
   const labels: Record<string, string> = {
     making: "making and design",
@@ -245,7 +254,10 @@ export function recommend(
   triedFamilies: TriedFamily[] = [],
   now = new Date(),
   variants: QuestVariant[] = catalog,
+  offset = 0,
 ): Candidate[] {
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > 30_000)
+    throw new RangeError("Invalid quest page.");
   const outing = outingSchema.parse(outingInput);
   const preferences = normalizePreferences(preferencesInput);
   const tried = new Set(
@@ -393,7 +405,13 @@ export function recommend(
     })
     .sort(
       (a, b) =>
-        b.score - a.score || a.candidate.id.localeCompare(b.candidate.id),
+        b.score - a.score ||
+        a.candidate.familyId.localeCompare(b.candidate.familyId) ||
+        (a.candidate.familyId.startsWith("activity_")
+          ? dailyBriefOrder(a.candidate.id, now) -
+            dailyBriefOrder(b.candidate.id, now)
+          : 0) ||
+        a.candidate.id.localeCompare(b.candidate.id),
     );
   const seen = new Set<string>();
   return ranked
@@ -401,7 +419,7 @@ export function recommend(
       ({ candidate }) =>
         !seen.has(candidate.familyId) && !!seen.add(candidate.familyId),
     )
-    .slice(0, 3)
+    .slice(offset, offset + 3)
     .map((item) => item.candidate);
 }
 

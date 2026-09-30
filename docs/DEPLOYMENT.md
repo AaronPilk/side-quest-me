@@ -1,98 +1,89 @@
 # Sidequest deployment — 2026-09-30
 
-The user selected the existing **Side quest Me** Supabase project in the **TRACT
-Mortgage** organization. Do not create a replacement or reuse another app's resources.
+The app is live at **https://sidequest-me.aaron-9c3.workers.dev**. The user selected
+the existing **Side quest Me** Supabase project in the **TRACT Mortgage** organization.
+Do not create a replacement or reuse another app's resources.
 
-## Prepared live resources
+## Live resources
 
-| Service            | Selected resource                  | Status                                                    |
-| ------------------ | ---------------------------------- | --------------------------------------------------------- |
-| GitHub             | `AaronPilk/side-quest-me`, `main`  | Application code pushed; Checks workflow runs on push     |
-| GitHub environment | `production`                       | All eight deployment variables configured                 |
-| Supabase           | `fpwpsxerogbwlnrvuurm`             | Eight migrations applied; 33 quests / 13 families seeded  |
-| Cloudflare account | `9c332c75b96cc642621dad5d86d4bf18` | Existing Aaron account                                    |
-| Worker             | `sidequest-me`                     | Bootstrap responds 503 until the full application release |
-| R2                 | `sidequest-me-media`               | Created; public `r2.dev` access disabled                  |
-| Queue              | `sidequest-me-renders`             | Created; application consumer installed by deployment     |
-| Container          | `sidequest-me-sidequestrenderer`   | Created by the first full deployment; not yet deployed    |
+| Service            | Selected resource                  | Status                                                          |
+| ------------------ | ---------------------------------- | --------------------------------------------------------------- |
+| GitHub             | `AaronPilk/side-quest-me`, `main`  | Checks on push; manual production deployment                    |
+| GitHub environment | `production`                       | Eight variables and account-scoped deployment token installed   |
+| Supabase           | `fpwpsxerogbwlnrvuurm`             | Nine migrations; 1,113 published variants / 73 families         |
+| Cloudflare account | `9c332c75b96cc642621dad5d86d4bf18` | Existing Aaron account                                          |
+| Worker             | `sidequest-me`                     | Production app; health returns 200                              |
+| R2                 | `sidequest-me-media`               | Private; public `r2.dev` disabled                               |
+| Queue              | `sidequest-me-renders`             | Producer, consumer, and five-minute recovery schedule installed |
+| Container          | `sidequest-me-sidequestrenderer`   | FFmpeg image deployed; one instance maximum                     |
 
-Target origin: `https://sidequest-me.aaron-9c3.workers.dev`.
-The Supabase Site URL and exact `/auth/callback` allowlist entry already match it.
-Email sign-in and email confirmation remain enabled. Custom SMTP is not configured.
+The first complete release succeeded in [GitHub Actions](https://github.com/AaronPilk/side-quest-me/actions/runs/36740095380).
+The subsequent feedback release and full-length render verification are in progress.
+The renderer configuration now specifies 1 vCPU, 3 GiB memory, and 4 GB disk to
+support the 45-second maximum reel within its four-minute encoding budget. No
+billing plan was changed. See [media verification](MEDIA.md).
 
-All six server secrets are installed on the Worker: `SUPABASE_URL`,
-`SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `RENDERER_INTERNAL_TOKEN`,
-`REDEMPTION_SIGNING_KEY`, and `SHARE_SIGNING_KEY`. No secret values belong in this
-repository. Ignored local bootstrap files are restricted to the local user.
+Supabase's Site URL and exact `/auth/callback` allowlist match the live origin.
+Email sign-in and email confirmation are enabled. All six server secrets are
+installed: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`,
+`RENDERER_INTERNAL_TOKEN`, `REDEMPTION_SIGNING_KEY`, and `SHARE_SIGNING_KEY`.
+Secret values stay out of source and browser bundles. Local recovery files are
+ignored and restricted to the local user.
 
-`SIDEQUEST_AREA` currently reads **Sidequest pilot**, with USD currency. There are
-no merchants, funded rewards, balances, or accounts seeded. Choose the actual pilot
-area before creating geographically scoped offers.
+`SIDEQUEST_AREA` currently reads **Sidequest pilot**, with USD currency. No funded
+rewards, merchant inventory, wallet credits, or operator accounts were seeded.
+Choose the actual pilot area before creating geographically scoped offers.
 
-## Finish the first release
+## Future releases
 
-1. In [Cloudflare account API tokens](https://dash.cloudflare.com/9c332c75b96cc642621dad5d86d4bf18/api-tokens),
-   create a deployment token scoped to this account. It needs Workers Scripts
-   Edit, Workers R2 Storage Edit, Queues Edit, and Workers Containers Write/Edit.
-   Permission labels can appear as Write rather than Edit. Do not grant access
-   to other accounts. The connected API cannot create tokens for the user.
-2. Save it as **CLOUDFLARE_API_TOKEN** in the repository's
-   [production environment](https://github.com/AaronPilk/side-quest-me/settings/environments).
-   Alternatively run this command, then paste the token into the hidden prompt:
+The saved GitHub token now has Workers Scripts Edit, Workers R2 Storage Edit,
+Queues Edit, and Workers Containers Write/Edit. It does not need replacing.
+After Checks passes, deploy with:
 
-   ```sh
-   gh secret set CLOUDFLARE_API_TOKEN --repo AaronPilk/side-quest-me --env production
-   ```
+```sh
+gh workflow run deploy.yml --repo AaronPilk/side-quest-me --ref main -f environment=production
+gh run list --repo AaronPilk/side-quest-me --workflow deploy.yml --limit 1
+```
 
-3. After the Checks workflow passes, dispatch the existing deployment workflow:
+GitHub's Ubuntu runner builds the FFmpeg Docker image and the explicitly selected
+Worker/frontend configuration. Do not enable a competing Cloudflare Git deployment.
+A missing credential or invalid public Supabase configuration fails before build.
+The default repository Wrangler names are development resources; never deploy
+that configuration directly over the selected production app.
 
-   ```sh
-   gh workflow run deploy.yml --repo AaronPilk/side-quest-me --ref main -f environment=production
-   gh run list --repo AaronPilk/side-quest-me --workflow deploy.yml --limit 1
-   ```
-
-   GitHub's Ubuntu runner builds the FFmpeg Docker image. The workflow builds the
-   exact configured Worker and frontend together, then runs Wrangler. Avoid also
-   enabling a separate Cloudflare Git auto-deployment. A missing token or invalid
-   browser Supabase configuration now fails before installation/build.
-
-4. Confirm the workflow, Worker, queue consumer, and Container rollout complete.
-   Check `/api/health`, the Create flow, sign-in, persistence, and a real three-clip
-   render. A Worker URL alone does not prove its Container is ready.
-
-The Cloudflare account's Container billing/availability has not been verified by a
-full deployment. If Cloudflare asks for a plan upgrade, review that in the dashboard
-before proceeding. No billing plan was changed during setup.
-
-## Before inviting users
+## Remaining provider setup
 
 Configure a sender domain and custom SMTP in
-[Supabase Authentication email settings](https://supabase.com/dashboard/project/fpwpsxerogbwlnrvuurm/auth/smtp).
-Use your chosen email provider's SMTP host, port, username, password, and verified
-From address. Keep email confirmation enabled. Supabase's default sender is limited
-to project-team addresses; see [Supabase SMTP documentation](https://supabase.com/docs/guides/auth/auth-smtp).
+[Supabase Authentication email settings](https://supabase.com/dashboard/project/fpwpsxerogbwlnrvuurm/auth/smtp)
+before inviting ordinary users. Supply the provider's SMTP host, port, username,
+password, and verified From address. Keep email confirmation enabled. Supabase's
+default sender is limited to project-team addresses;
+see [Supabase SMTP documentation](https://supabase.com/docs/guides/auth/auth-smtp).
 
-For live Apple Maps place search, install `APPLE_MAPS_TOKEN` on the Worker using a
-public MapKit JS token restricted to the deployed domain. Never upload Apple's
-`.p8` signing key to the frontend. See [Maps setup](MAPS.md). Without this token,
-the app clearly presents the manual-location fallback.
+For in-app Apple Maps search, install `APPLE_MAPS_TOKEN`, a public MapKit JS token
+restricted to the deployed domain. Apple's private `.p8` key must never enter the
+frontend. For live nearby event listings, install server-only `TICKETMASTER_API_KEY`.
+Both integrations have honest unconfigured states; current-area selection and
+external browsing remain available. Eventbrite is an external browsing link, not
+an automated event feed. See [provider setup and limitations](MAPS.md).
 
-Optional later: connect your own domain, update `SIDEQUEST_ORIGIN` and Supabase's
-Site URL/callback allowlist, and rebuild. A custom domain is not required for the
-initial `workers.dev` release.
+A custom domain is optional. If adding one, update `SIDEQUEST_ORIGIN`, Supabase's
+Site URL and exact callback, and the Apple token domain allowlist, then rebuild.
 
-## Verification completed during setup
+## Verification record
 
-- Hosted migration history matches all eight local migrations; a second dry run
-  reports the remote database up to date.
-- All 30 public and nine private application tables have RLS. Browser roles cannot
-  execute service-only mutation RPCs. No example economic records were seeded.
-- Hosted security/performance advisors have no warnings or errors. Informational
-  notices describe deliberately service-only tables, unused indexes, and connection
-  allocation on the new empty project.
-- The optional hosted auto-RLS helper's browser execution grant was removed by a
-  compatible migration; its event-trigger behavior remains tested.
-- Local database regression suite, deployment-config checks, lint, typecheck, and
-  production-configured build passed. The browser bundle contains none of the four
-  server-only secret values. Previous local app verification covered 242 unit tests
-  and 48 browser scenarios; public-cloud end-to-end verification remains pending.
+- The hosted catalog migration is additive; original IDs and historical snapshots
+  remain unchanged. The remote migration dry run reports up to date.
+- Hosted security advisors report no warnings or errors. All application tables
+  retain RLS and service-only mutation RPC permissions.
+- Live two-account verification passed Auth, profile save/edit/removal, confirmed
+  preference matching, boundaries, private uploads, and cross-account denial.
+- The initial video test exposed lost stream-length metadata between the Container
+  SDK and R2. Fixed-length streaming is covered by eight actual workerd tests,
+  including exact bytes, truncation, overflow, source/storage failures and checksum
+  rejection. The production rerun is pending this release.
+- Temporary verification accounts and media from the first run were deleted;
+  retained records were redacted and synthetic footage earned no rewards.
+- Local typecheck, lint, 272 unit tests, deployment configuration checks, isolated
+  PostgreSQL regression/advisor tests, and build pass. Final browser and production
+  verification results will be recorded after the new release.

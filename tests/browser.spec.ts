@@ -90,7 +90,7 @@ test("ten-question onboarding works without import, preserves answers and expose
     page.getByRole("navigation", { name: "Primary" }).getByRole("link"),
   ).toHaveCount(5);
   await findDefaultQuests(page);
-  await expect(page.locator(".quest-card")).toHaveCount(2);
+  await expect(page.locator(".quest-card")).toHaveCount(3);
   await expect(page.locator(".quest-card").first()).toContainText(
     "No purchase needed",
   );
@@ -332,7 +332,7 @@ test("three real uploads complete once, render a portrait MP4, download, and sta
   expect(errors).toEqual([]);
 });
 
-test("synthetic browser recording produces a usable clip and releases camera and microphone tracks", async ({
+test("synthetic recording combines paused takes, restores its draft after refresh and releases camera tracks", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -382,20 +382,31 @@ test("synthetic browser recording produces a usable clip and releases camera and
   dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "Record this moment" }).click();
   await dialog.getByRole("button", { name: "Start recording" }).click();
-  await expect(
-    dialog.getByRole("button", { name: "Stop recording" }),
-  ).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Stop take" })).toBeVisible();
   await expect
     .poll(
       async () =>
         Number.parseFloat((await dialog.getByRole("timer").innerText()).trim()),
       { timeout: 12_000 },
     )
+    .toBeGreaterThanOrEqual(3);
+  await dialog.getByRole("button", { name: "Stop take" }).click();
+  const stoppedAt = await dialog.getByRole("timer").innerText();
+  await page.waitForTimeout(1600);
+  await expect(dialog.getByRole("timer")).toHaveText(stoppedAt);
+  await dialog.getByRole("button", { name: "Add take" }).click();
+  await expect
+    .poll(async () =>
+      Number.parseFloat((await dialog.getByRole("timer").innerText()).trim()),
+    )
     .toBeGreaterThanOrEqual(6);
-  await dialog.getByRole("button", { name: "Stop recording" }).click();
+  await dialog.getByRole("button", { name: "Stop take" }).click();
+  await expect(dialog.locator(".take-progress > span")).toHaveCount(2);
+  await dialog.getByRole("button", { name: "Save draft & leave" }).click();
+  await expect(dialog).toBeHidden();
   await expect(
-    dialog.getByRole("button", { name: "Use clip · Upload & validate" }),
-  ).toBeEnabled();
+    page.getByText("Draft on this device", { exact: true }),
+  ).toBeVisible();
   expect(
     await page.evaluate(() =>
       (
@@ -403,6 +414,17 @@ test("synthetic browser recording produces a usable clip and releases camera and
       ).qaMediaTracks.map((track) => track.readyState),
     ),
   ).toEqual(["ended", "ended"]);
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Continue draft", exact: true })
+    .click();
+  dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByText(/Draft restored from this device/),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Use clip · Upload & validate" }),
+  ).toBeEnabled();
   await dialog
     .getByRole("button", { name: "Use clip · Upload & validate" })
     .click();
@@ -415,6 +437,12 @@ test("synthetic browser recording produces a usable clip and releases camera and
   });
   expect(clipRange.end).toBeLessThanOrEqual(clipRange.duration + 0.05);
   expect(clipRange.end - clipRange.start).toBeGreaterThanOrEqual(5);
+  expect(clipRange.duration).toBeLessThan(7.5);
+  await page.reload();
+  await expect(page.getByText("Uploaded", { exact: true })).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Continue draft", exact: true }),
+  ).toHaveCount(0);
 });
 
 // These UI-contract checks stub authentication and API responses. Real Postgres tests

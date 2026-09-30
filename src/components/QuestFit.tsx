@@ -9,6 +9,7 @@ export function useQuestFit(
   outing: Outing,
   confirmed: (keyof Outing)[],
   targetId?: string,
+  enabled = true,
 ) {
   const signature = JSON.stringify({
     outing,
@@ -22,6 +23,7 @@ export function useQuestFit(
   }>({ key: "" });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     const input = JSON.parse(signature) as {
       outing: Outing;
@@ -47,7 +49,7 @@ export function useQuestFit(
       active = false;
       clearTimeout(timer);
     };
-  }, [signature, attempt]);
+  }, [signature, attempt, enabled]);
   return {
     fit: state.key === signature ? state.fit : undefined,
     error: state.key === signature ? state.error : undefined,
@@ -77,26 +79,41 @@ export function QuestFit({
         {!final && <span>· We’ll check the remaining details as you go.</span>}
       </p>
     );
+  // A partial draft is not a failed plan. Only explain an empty result after
+  // the user has finished their answers; never offer to rewrite their choices.
+  if (!final) return null;
+  const requirementFields = new Set<keyof Outing>([
+    "arrangementConfirmed",
+    "venuePermission",
+    "confirmedVenueCostMinor",
+    "adultEligible",
+    "adultContext",
+  ]);
+  const requirements = fit.recoveries.filter(
+    (recovery) =>
+      recovery.requiresConfirmation &&
+      recovery.fields.every((field) => requirementFields.has(field)) &&
+      Object.keys(recovery.patch).length === 0,
+  );
+  const boundaryReasons = fit.reasons.filter((reason) =>
+    /boundary|boundaries/i.test(reason),
+  );
   return (
     <section className="quest-recovery" aria-label="Quest matching help">
       <h3>
         <SlidersHorizontal size={17} />
-        Let’s adjust the plan
+        No matches for these answers yet
       </h3>
       <p className="support">
-        {final
-          ? "These details are keeping the closest quests from fitting."
-          : "Based on your answers so far, no quest can fit this combination."}
+        Your choices are saved. We haven’t found a published quest that meets
+        all of them.
       </p>
-      <ul>
-        {fit.reasons.map((reason) => (
-          <li key={reason}>{reason}</li>
-        ))}
-      </ul>
-      {fit.recoveries.length > 0 && (
-        <p className="support">Only change a plan if it works for you.</p>
-      )}
-      {fit.recoveries.map((recovery) => (
+      {boundaryReasons.map((reason) => (
+        <p className="support" key={reason}>
+          {reason}
+        </p>
+      ))}
+      {requirements.slice(0, 2).map((recovery) => (
         <div className="quest-recovery-option" key={recovery.id}>
           <p>{recovery.description}</p>
           <button
@@ -119,13 +136,10 @@ export function QuestFit({
           Review my answers
         </button>
         <Link to="/discover">Browse ideas</Link>
-        {fit.reasons.some((reason) => /boundary|boundaries/.test(reason)) && (
+        {boundaryReasons.length > 0 && (
           <Link to="/account">Review my boundaries</Link>
         )}
       </div>
-      <p className="fine-print">
-        Your boundaries stay in place. Nothing changes until you choose it.
-      </p>
     </section>
   );
 }

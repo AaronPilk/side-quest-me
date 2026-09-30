@@ -1451,6 +1451,24 @@ main {
 }
 .quest-arrangements {
   padding: 0 2px;
+  margin-top: 20px;
+}
+.quest-arrangements summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding: 10px 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.quest-arrangements summary span {
+  margin-left: 8px;
+  color: var(--secondary);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+.quest-saved-travel {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--divider);
 }
 .quest-arrangements .check-row {
   padding: 16px 0;
@@ -1743,4 +1761,42 @@ main {
 }
 .apple-place-card .fine-print {
   margin-bottom: 0;
+}
+
+.nearby-events {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+.nearby-events h3 {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.nearby-events > .button {
+  margin-top: 0.75rem;
+}
+.nearby-event-results {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.nearby-event {
+  padding: 1rem;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 1rem;
+}
+.nearby-event h4 {
+  margin: 0.6rem 0 0.4rem;
+  font-size: 1rem;
+}
+.nearby-event p {
+  margin: 0.35rem 0;
+}
+.nearby-event a {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+  margin-top: 0.5rem;
 }

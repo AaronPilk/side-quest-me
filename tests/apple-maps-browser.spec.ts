@@ -36,11 +36,10 @@ async function openTravel(
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
     page.getByRole("heading", {
-      name: "How are you getting there?",
+      name: "Where should we go?",
       exact: true,
     }),
   ).toBeVisible();
-  await page.locator(".quest-location summary").click();
 }
 
 async function installMockSdk(page: Page, configFailure = false) {
@@ -178,12 +177,6 @@ test("mocked Apple search selection persists only its ID through review, accepta
   await page
     .getByRole("combobox", { name: "Getting there", exact: true })
     .selectOption("walk");
-  await page
-    .getByRole("spinbutton", { name: "Round-trip travel (min)", exact: true })
-    .fill("10");
-  await page
-    .getByRole("spinbutton", { name: "Travel estimate (USD)", exact: true })
-    .fill("3");
   await pickMockPlace(page);
   expect(await draft(page)).toMatchObject({
     applePlaceId: mockPlace.id,
@@ -191,8 +184,8 @@ test("mocked Apple search selection persists only its ID through review, accepta
     participants: 2,
     durationMinutes: 60,
     area: "Seattle",
-    travelMinutes: 10,
-    travelCostMinor: 300,
+    travelMinutes: 0,
+    travelCostMinor: 0,
     venuePermission: false,
     arrangementConfirmed: false,
   });
@@ -266,7 +259,7 @@ test("mocked Apple search selection persists only its ID through review, accepta
     budgetMinor: 2500,
     participants: 2,
     durationMinutes: 60,
-    travelMinutes: 10,
+    travelMinutes: 0,
   });
   const stored = await storageText(page);
   for (const field of [
@@ -290,16 +283,12 @@ test("changing or removing a mocked place clears prior venue confirmations and h
   await installMockSdk(page);
   await openTravel(page, "At a venue");
   await pickMockPlace(page);
-  await page
-    .getByRole("spinbutton", { name: "Round-trip travel (min)", exact: true })
-    .fill("10");
-  await page
-    .getByRole("spinbutton", { name: "Travel estimate (USD)", exact: true })
-    .fill("3");
   await reviewQuestPlans(page);
-  await page
-    .getByRole("button", { name: "Edit arrangements", exact: true })
-    .click();
+  const options = page.locator(".quest-arrangements");
+  if (!(await options.getAttribute("open"))) {
+    if (!(await options.evaluate((node) => (node as HTMLDetailsElement).open)))
+      await options.locator("summary").click();
+  }
   await page
     .getByRole("checkbox", {
       name: "We’ve arranged the required people, equipment or performance slot.",
@@ -445,4 +434,92 @@ test("mocked Apple connection and search failures retry, stale results stay hidd
     page.getByRole("button", { name: new RegExp(secondPlace.name) }),
   ).toBeVisible();
   expect((await draft(page)).applePlaceId ?? null).toBeNull();
+});
+
+test("current area works without Maps configuration and nearby events use that location without changing the quest", async ({
+  page,
+}) => {
+  await page.route("**/api/maps/config", (route) =>
+    route.fulfill({ json: { token: null } }),
+  );
+  await page.route("**/api/events/config", (route) =>
+    route.fulfill({ json: { configured: true } }),
+  );
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: {
+        getCurrentPosition: (success: (value: unknown) => void) =>
+          success({ coords: { latitude: 47.620123, longitude: -122.350456 } }),
+      },
+    }),
+  );
+  let fail = true;
+  const requests: unknown[] = [];
+  await page.route("**/api/events/nearby", (route) => {
+    requests.push(route.request().postDataJSON());
+    return fail
+      ? route.fulfill({ status: 503, json: {} })
+      : route.fulfill({
+          json: {
+            configured: true,
+            checkedAt: "2026-09-30T16:00:00Z",
+            events: [
+              {
+                id: "fixture-event",
+                name: "MOCK local concert — browser fixture",
+                date: "2026-10-01",
+                time: "19:30:00",
+                venue: "MOCK venue",
+                city: "Seattle",
+                source: "Universe",
+                price: null,
+                url: "https://www.universe.com/events/fixture",
+              },
+            ],
+          },
+        });
+  });
+  await openTravel(page);
+  await page
+    .getByRole("button", { name: "Use my current area", exact: true })
+    .click();
+  await expect(
+    page.getByText(/Using your current area for nearby searches/),
+  ).toBeVisible();
+  const href = await page
+    .getByRole("link", { name: "Browse in Apple Maps" })
+    .getAttribute("href");
+  expect(new URL(href!).searchParams.get("center")).toBe(
+    "47.620123,-122.350456",
+  );
+  const before = await draft(page);
+  await page
+    .getByRole("button", { name: "Find nearby events", exact: true })
+    .click();
+  await expect(page.getByText(/Nearby events couldn’t load/)).toBeVisible();
+  fail = false;
+  await page
+    .getByRole("button", { name: "Find nearby events", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "MOCK local concert — browser fixture" }),
+  ).toBeVisible();
+  expect(requests.at(-1)).toMatchObject({
+    center: { latitude: 47.620123, longitude: -122.350456 },
+    days: 7,
+  });
+  expect(await draft(page)).toEqual(before);
+  await expect(
+    page.getByText(/Check ticket price and availability/),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Use entered area instead", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "MOCK local concert — browser fixture" }),
+  ).toHaveCount(0);
+  const stored = await storageText(page);
+  expect(stored).not.toContain("47.620123");
+  expect(stored).not.toContain("MOCK local concert");
 });

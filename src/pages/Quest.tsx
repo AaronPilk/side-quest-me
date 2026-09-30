@@ -71,6 +71,9 @@ export default function Quest() {
   const [alternatives, setAlternatives] = useState<Candidate[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const discoveryGeneration = useRef(0);
+  const resultsVisible = candidates !== null && !selected;
   const resultsHeading = useRef<HTMLHeadingElement>(null);
   const [acceptKey] = useState(crypto.randomUUID());
   useEffect(() => {
@@ -95,13 +98,20 @@ export default function Quest() {
     if (outingSchema.safeParse(outing).success)
       sessionStorage.setItem("sq-outing", JSON.stringify(outing));
   }, [outing]);
+  useEffect(
+    () => () => {
+      discoveryGeneration.current++;
+    },
+    [],
+  );
   useEffect(() => {
-    if (candidates !== null && !selected) {
+    if (resultsVisible) {
       resultsHeading.current?.focus({ preventScroll: true });
       window.scrollTo(0, 0);
     }
-  }, [candidates, selected]);
+  }, [resultsVisible]);
   function update(patch: Partial<Outing>) {
+    discoveryGeneration.current++;
     setOuting((current) => ({
       ...current,
       ...patch,
@@ -126,6 +136,7 @@ export default function Quest() {
     setError("");
   }
   async function discover() {
+    const generation = ++discoveryGeneration.current;
     setBusy(true);
     setError("");
     try {
@@ -143,13 +154,38 @@ export default function Quest() {
           ? api.quests(outing)
           : Promise.resolve([]),
       ]);
+      if (generation !== discoveryGeneration.current) return;
       setFit(assessment);
       setAlternatives(others);
       setCandidates(choices);
+      setHasMore(!requestedTemplate && choices.length === 3);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Check your outing details.");
     } finally {
       setBusy(false);
+    }
+  }
+  async function moreIdeas() {
+    if (busy || !candidates) return;
+    const generation = ++discoveryGeneration.current;
+    setBusy(true);
+    setError("");
+    try {
+      const next = await api.quests(outing, undefined, candidates.length);
+      if (generation !== discoveryGeneration.current) return;
+      setCandidates((previous) => {
+        const unique = new Map(
+          (previous || []).map((quest) => [quest.familyId, quest]),
+        );
+        next.forEach((quest) => unique.set(quest.familyId, quest));
+        return [...unique.values()];
+      });
+      setHasMore(next.length === 3);
+    } catch (cause) {
+      if (generation === discoveryGeneration.current)
+        setError((cause as Error).message);
+    } finally {
+      if (generation === discoveryGeneration.current) setBusy(false);
     }
   }
   function recover(recovery: QuestRecovery) {
@@ -384,6 +420,7 @@ export default function Quest() {
           <button
             className="back"
             aria-label="Edit plans"
+            disabled={busy}
             onClick={() => {
               setError("");
               setCandidates(null);
@@ -422,6 +459,7 @@ export default function Quest() {
               <button
                 className="quest-card"
                 key={q.id}
+                disabled={busy}
                 onClick={() => {
                   setSelected(q);
                   window.scrollTo(0, 0);
@@ -456,6 +494,22 @@ export default function Quest() {
                 </div>
               </button>
             ))
+          )}
+          {candidates.length > 0 && !requestedTemplate && (
+            <div className="quest-more-ideas">
+              {hasMore ? (
+                <Button secondary busy={busy} onClick={moreIdeas}>
+                  More quest ideas
+                </Button>
+              ) : (
+                <p className="support">
+                  You’ve seen all the activities that fit this plan.
+                </p>
+              )}
+              <p className="fine-print">
+                Every choice keeps your setting, intensity, group and budget.
+              </p>
+            </div>
           )}
           {!candidates.length && alternatives.length > 0 && (
             <div className="section">

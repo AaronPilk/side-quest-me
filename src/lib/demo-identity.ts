@@ -1,3 +1,5 @@
+import { clearCaptureDrafts } from "./capture-drafts";
+
 export const DEMO_PEOPLE = {
   creator: {
     id: "11111111-1111-4111-8111-111111111111",
@@ -40,6 +42,7 @@ export function demoDataKey(persona: DemoPersona = demoPersona()) {
 
 /** The local renderer is shared by all four personas; resetting it resets their browser records together. */
 export function resetDemoState() {
+  void clearCaptureDrafts().catch(() => {});
   for (const persona of Object.keys(DEMO_PEOPLE) as DemoPersona[])
     localStorage.removeItem(demoDataKey(persona));
   localStorage.removeItem("sidequest-community-demo-v1");

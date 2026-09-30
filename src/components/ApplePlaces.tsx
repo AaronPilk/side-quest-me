@@ -8,6 +8,7 @@ import {
 } from "../../shared/places";
 import { loadAppleMaps, uniquePlaces } from "../lib/apple-maps";
 import { Button, Notice } from "./ui";
+import NearbyEvents from "./NearbyEvents";
 
 function PlaceMap({ place, mapkit }: { place: Place; mapkit: MapKit }) {
   const element = useRef<HTMLDivElement>(null);
@@ -163,7 +164,9 @@ export function ApplePlacePicker({
   const generation = useRef(0);
   const searchRequest = useRef<AbortController | null>(null);
   const mounted = useRef(true);
-  const searchQuery = [query.trim(), area.trim()].filter(Boolean).join(" in ");
+  const searchQuery = [query.trim(), center ? "" : area.trim()]
+    .filter(Boolean)
+    .join(" in ");
   useEffect(() => {
     mounted.current = true;
     let active = true;
@@ -188,7 +191,7 @@ export function ApplePlacePicker({
     setPlaces(null);
     setBusy(false);
   }, [query, area, center]);
-  async function search() {
+  async function search(near = center) {
     if (!kit || !query.trim()) return;
     searchRequest.current?.abort();
     const controller = new AbortController();
@@ -198,10 +201,13 @@ export function ApplePlacePicker({
     setError("");
     setPlaces(null);
     try {
-      const response = await new kit.Search().search(searchQuery, {
-        ...(center ? { coordinate: center } : {}),
-        signal: controller.signal,
-      });
+      const response = await new kit.Search().search(
+        near ? query.trim() : searchQuery,
+        {
+          ...(near ? { coordinate: near } : {}),
+          signal: controller.signal,
+        },
+      );
       if (request === generation.current)
         setPlaces(uniquePlaces(response.places));
     } catch {
@@ -215,7 +221,7 @@ export function ApplePlacePicker({
   }
   return (
     <div className="apple-place-picker">
-      <h3>Find a real place</h3>
+      <h3>Find a place near you</h3>
       <p className="support">
         Choose a meeting point for your quest. Your answers still set the budget
         and requirements.
@@ -235,60 +241,69 @@ export function ApplePlacePicker({
           }}
         />
       </label>
-      {kit && (
-        <div className="place-search-actions">
+      <div className="place-search-actions">
+        {kit && (
           <Button
             type="button"
             busy={busy}
             disabled={!query.trim()}
-            onClick={search}
+            onClick={() => void search()}
           >
             <Search size={17} />
             Find places
           </Button>
+        )}
+        <button
+          type="button"
+          className="text-button"
+          disabled={locating}
+          onClick={() => {
+            if (!navigator.geolocation) {
+              setError(
+                "Location isn’t available. Type your town or neighborhood in Area instead.",
+              );
+              return;
+            }
+            setLocating(true);
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                if (mounted.current) {
+                  const near = {
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                  };
+                  setCenter(near);
+                  setLocating(false);
+                  setError("");
+                }
+              },
+              () => {
+                if (mounted.current) {
+                  setLocating(false);
+                  setError(
+                    "Location access is off. You can still search by town or place name.",
+                  );
+                }
+              },
+              { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
+            );
+          }}
+        >
+          <LocateFixed size={17} />
+          {locating ? "Finding your area…" : "Use my current area"}
+        </button>
+      </div>
+      {center && (
+        <p className="fine-print">
+          Using your current area for nearby searches. Your precise location
+          stays off your profile.
           <button
             type="button"
             className="text-button"
-            disabled={locating}
-            onClick={() => {
-              if (!navigator.geolocation) {
-                setError(
-                  "Location isn’t available. Type your town or neighborhood in Area instead.",
-                );
-                return;
-              }
-              setLocating(true);
-              navigator.geolocation.getCurrentPosition(
-                (position) => {
-                  if (mounted.current) {
-                    setCenter({
-                      latitude: position.coords.latitude,
-                      longitude: position.coords.longitude,
-                    });
-                    setLocating(false);
-                    setError("");
-                  }
-                },
-                () => {
-                  if (mounted.current) {
-                    setLocating(false);
-                    setError(
-                      "Location access is off. You can still search by town or place name.",
-                    );
-                  }
-                },
-                { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
-              );
-            }}
+            onClick={() => setCenter(undefined)}
           >
-            <LocateFixed size={17} />
-            {locating ? "Finding your area…" : "Use my current area"}
+            Use entered area instead
           </button>
-        </div>
-      )}
-      {center && (
-        <p className="fine-print">
-          Your current area is used for this search only.
         </p>
       )}
       {kit === undefined && !error && (
@@ -348,7 +363,7 @@ export function ApplePlacePicker({
       )}
       <a
         className="text-button"
-        href={appleSearchUrl(searchQuery)}
+        href={appleSearchUrl(searchQuery, center)}
         target="_blank"
         rel="noreferrer"
       >
@@ -360,6 +375,7 @@ export function ApplePlacePicker({
       <p className="fine-print">
         Search and map data by Apple Maps. Place selection is optional.
       </p>
+      <NearbyEvents area={area} center={center} />
     </div>
   );
 }
