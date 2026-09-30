@@ -17,12 +17,21 @@ Do not create a replacement or reuse another app's resources.
 | Queue              | `sidequest-me-renders`             | Producer, consumer, and five-minute recovery schedule installed |
 | Container          | `sidequest-me-sidequestrenderer`   | FFmpeg image deployed; one instance maximum                     |
 
-The current application release is `02a27a8`, deployed by
-[GitHub Actions run 36747886124](https://github.com/AaronPilk/side-quest-me/actions/runs/36747886124).
-The original feedback release passed [the complete Checks workflow](https://github.com/AaronPilk/side-quest-me/actions/runs/36744534518).
-The latest [Checks run](https://github.com/AaronPilk/side-quest-me/actions/runs/36747885316)
-also passed the complete suite after the focused media fixes. The live browser loads
-the expected production asset with no console errors.
+The current application release is `9eb8bdf`, deployed by
+[GitHub Actions run 36750945163](https://github.com/AaronPilk/side-quest-me/actions/runs/36750945163).
+It applies the owner's violet branding; see [the brand guide](BRAND.md).
+Deployment lint, typecheck, 278 unit tests and production build passed. Local
+responsive/navigation checks and the real render fixture also passed. The live
+browser shows the new mark and palette without console errors or horizontal
+overflow; the published favicon, app icons, mark and manifest match the committed
+assets byte for byte. No database changes were needed.
+
+The brand release's [complete Checks run](https://github.com/AaronPilk/side-quest-me/actions/runs/36750276217)
+was still installing apt dependencies when the live release was verified; it had
+reported no test result or failure yet. The previous application release `02a27a8`
+passed [the complete suite](https://github.com/AaronPilk/side-quest-me/actions/runs/36747885316)
+after the focused media fixes. The production media evidence below is from that
+release; the brand change alters only the renderer's colors.
 
 The renderer uses **2 vCPU, 6 GiB memory, and 4 GB disk**, capped at one instance.
 No billing plan was changed. The complete 45-second production test passed on its
