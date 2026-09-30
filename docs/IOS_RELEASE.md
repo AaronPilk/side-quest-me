@@ -1,6 +1,6 @@
 # Sidequest iOS release guide
 
-Status checked **September 30, 2026**. The repository now contains a Capacitor iOS app that bundles the React interface and connects to the existing Cloudflare/Supabase backend. The App Store Connect record **SidequestMe** (`6817917086`) exists for bundle `com.aaronpilk.sidequest`, signing team **`5F5C5G25Y6`** is configured, and a **signed archive succeeded**. **Upload is pending; no processed TestFlight build or public release is confirmed.** Physical iPhone verification remains a separate requirement.
+Status checked **September 30, 2026**. The repository now contains a Capacitor iOS app that bundles the React interface and connects to the existing Cloudflare/Supabase backend. The App Store Connect record **Sidequest Me** (`6817917086`) exists for bundle `com.aaronpilk.sidequest`, signing team **`5F5C5G25Y6`** is configured, and a **signed archive succeeded**. **Production build 1.0.0 (1) was uploaded successfully and processed as VALID on September 30, 2026. It is assigned to Sidequest Internal, with Aaron’s tester status confirmed Invited.** Public App Store submission and physical iPhone installation/verification remain separate requirements.
 
 ## Project and build commands
 
@@ -119,7 +119,7 @@ Use the final device-tested build and functioning backend for review. Do not cla
 
 ## Current handoff to TestFlight
 
-The current goal is an internal TestFlight build, not a public App Store launch. The signed archive checkpoint is complete; the final changed source must be rebuilt, archived, uploaded and processed before claiming testers can install it. No upload or beta-processing result is recorded here yet.
+The internal TestFlight build is delivered: the fresh production archive passed release checks, uploaded successfully, and processed as VALID. Build 1.0.0 (1) is assigned to Sidequest Internal and Aaron is invited. Installation on the physical iPhone is the next user step; a public App Store launch has not been submitted.
 
 A manual iPhone Simulator check using a synthetic camera stream completed **48.2 seconds across two takes**, left and reopened the draft, and saved the session as one video successfully. This demonstrates the tested draft/session path; it does not establish the entire physical-device acceptance matrix above. Keep the existing synthetic Simulator evidence distinct from real camera/microphone hardware verification.
 
@@ -129,6 +129,14 @@ The native plugin passed unsigned Simulator compilation, 44 focused place/servic
 
 Ticketmaster nearby listings need `TICKETMASTER_API_KEY`; Eventbrite and other event resources are outbound browsing links, not a claimed live scraped feed. Set private provider configuration on the backend and test deployed responses. Manual-area fallbacks must continue to work when services are absent or permission is denied. No automated language-model quest generator is configured; recommendations use reviewed authored activities and conservative selected-place relevance.
 
-The renderer accepts an optional still PNG/JPEG/WebP overlay up to 5 MB at one of five fixed positions. It strips image metadata and applies the chosen image to the saved session; transient upload files are deleted after composition. New single-video final renders include the approved logo and visible “Side quest app” watermark. Legacy three-clip renders retain their existing layout. Validate the full-screen native editor and image preview on the final build.
+The renderer accepts an optional still PNG/JPEG/WebP overlay up to 5 MB at one of five fixed positions. It strips image metadata and applies the chosen image to the saved session; transient upload files are deleted after composition. New single-video final renders include the approved logo and visible “Side quest app” watermark. Legacy three-clip renders retain their existing layout. The rebuilt iPhone Simulator completed a 14.8-second recording with the three-second timer, native Photos picker, a top-left stock-photo overlay, saved video, successful render and the native share-sheet Save Video action. The exported 0:15 video was then opened and played in the Simulator Photos library, visibly retaining the top-left image plus approved Sidequest logo and “Side quest app” watermark at bottom left. Physical iPhone camera/audio, interruptions and export remain to be tested.
 
-`node scripts/verify-session-renderer.mjs --minute --sponsor` passed locally with actual FFmpeg: two 30-second takes, raster image overlay, sponsor disclosure, exact 60-second final duration, retained image pixels and watermark pixels. A six-second case also passed. The updated container Dockerfile and ignore rules include shared logo geometry; a local Docker container build was unavailable because Docker is not installed, so the deployment container build still needs its normal CI verification.
+`node scripts/verify-session-renderer.mjs --minute --sponsor` passed locally with actual FFmpeg: two 30-second takes, raster image overlay, sponsor disclosure, exact 60-second final duration, retained image pixels and watermark pixels. A six-second case also passed. The updated container Dockerfile and ignore rules include shared logo geometry; a local Docker container build was unavailable because Docker is not installed. Deployment CI subsequently built and deployed the container; authenticated production rendering is tracked separately in the build review.
+
+## TestFlight delivery — September 30, 2026
+
+The fresh production `.local/Sidequest.xcarchive` from commit `80f2d5a` passed the packaged native release guard and exported as an arm64 IPA signed with Cloud Managed Apple Distribution. Its identifiers are `com.aaronpilk.sidequest`, version `1.0.0`, build `1`, team `5F5C5G25Y6`; `get-task-allow` is false and `beta-reports-active` is true. The archive uses the production Worker and configured Supabase project, with `ITSAppUsesNonExemptEncryption=false`.
+
+Apple accepted the upload with no errors, delivery/build ID `7b96b636-a2df-4619-914c-88efba74d300`, and completed processing as `VALID`. The saved testing notes match `docs/TESTFLIGHT_NOTES.md`. App Store Connect confirms **Sidequest Internal · 1 Tester · 1 Build**, with **aaronpilk14@gmail.com — Invited**. Open that Apple invitation on the iPhone and install **Sidequest Me 1.0.0 (1)** through TestFlight. Invitation delivery status does not prove installation or an app sign-in.
+
+This is an internal beta, not an App Store approval or public release. The production app account remains separate from the Apple TestFlight account; the currently allowed app sign-in email is `pilkingtonent@gmail.com`. Custom SMTP/general-public sign-in and the remaining physical-device checks above still need completion.
