@@ -4,9 +4,129 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
+import {
+  checkCloudflareAuth,
+  credentialMetadata,
+  safeProviderErrors,
+} from "./cloudflare-auth-preflight.mjs";
 
 // Explicit local-only fixtures. This script does not call a provider or create resources.
 const root = fileURLToPath(new URL("../", import.meta.url));
+const authFixture = {
+  CLOUDFLARE_API_TOKEN: "opaque-authentication-fixture-never-printed",
+  CLOUDFLARE_ACCOUNT_ID: "a".repeat(32),
+  SIDEQUEST_WORKER: "sidequest-auth-fixture",
+};
+const authLogs = [];
+let authRequests = 0;
+await checkCloudflareAuth({
+  env: authFixture,
+  log: (message) => authLogs.push(message),
+  fetchImpl: async (url, options) => {
+    authRequests++;
+    assert.equal(
+      url,
+      `https://api.cloudflare.com/client/v4/accounts/${authFixture.CLOUDFLARE_ACCOUNT_ID}/workers/scripts`,
+    );
+    assert.equal(options.method, "GET");
+    assert.equal(options.redirect, "error");
+    assert.equal(
+      options.headers.Authorization,
+      `Bearer ${authFixture.CLOUDFLARE_API_TOKEN}`,
+    );
+    return Response.json({
+      success: true,
+      result: [{ id: "unrelated-worker-inventory" }],
+    });
+  },
+});
+assert.equal(authRequests, 1);
+assert.ok(!authLogs.join("\n").includes("unrelated-worker-inventory"));
+assert.ok(!authLogs.join("\n").includes(authFixture.CLOUDFLARE_API_TOKEN));
+for (const [token, kind] of [
+  [authFixture.CLOUDFLARE_ACCOUNT_ID, "account_id"],
+  ["b".repeat(32), "account_or_token_id_hex32"],
+  ["b".repeat(37), "global_api_key_hex37"],
+  ["CLOUDFLARE_API_TOKEN", "literal_secret_name"],
+  ["sb_secret_configuration_fixture_only", "supabase_key"],
+]) {
+  assert.equal(
+    credentialMetadata(token, authFixture.CLOUDFLARE_ACCOUNT_ID).kind,
+    kind,
+  );
+  await assert.rejects(
+    checkCloudflareAuth({
+      env: { ...authFixture, CLOUDFLARE_API_TOKEN: token },
+      log: () => undefined,
+      fetchImpl: async () => {
+        throw new Error("Wrong credential types must never be sent");
+      },
+    }),
+    new RegExp(kind),
+  );
+}
+assert.equal(credentialMetadata("opaque\u200bfixture", "").nonAscii, true);
+await assert.rejects(
+  checkCloudflareAuth({
+    env: { ...authFixture, CLOUDFLARE_API_TOKEN: "opaque\u200bfixture" },
+    log: () => undefined,
+  }),
+  /raw ASCII token/,
+);
+await assert.rejects(
+  checkCloudflareAuth({
+    env: { ...authFixture, CLOUDFLARE_ACCOUNT_ID: "../other-account" },
+    log: () => undefined,
+  }),
+  /CLOUDFLARE_ACCOUNT_ID/,
+);
+const providerFailure = {
+  errors: [
+    {
+      code: 6003,
+      message: "Invalid request headers",
+      error_chain: [
+        { code: 6111, message: "Invalid format for Authorization header" },
+        { code: 9999, message: `Echo: ${authFixture.CLOUDFLARE_API_TOKEN}` },
+        {
+          code: 9999,
+          message: encodeURIComponent(authFixture.CLOUDFLARE_API_TOKEN),
+        },
+      ],
+    },
+  ],
+};
+assert.equal(safeProviderErrors(providerFailure).length, 4);
+assert.ok(
+  !JSON.stringify(safeProviderErrors(providerFailure)).includes(
+    authFixture.CLOUDFLARE_API_TOKEN,
+  ),
+);
+await assert.rejects(
+  checkCloudflareAuth({
+    env: authFixture,
+    log: (message) => authLogs.push(message),
+    fetchImpl: async () => Response.json(providerFailure, { status: 400 }),
+  }),
+  /authorization format/,
+);
+assert.ok(authLogs.some((message) => message.includes('"code":6111')));
+assert.ok(!authLogs.join("\n").includes(authFixture.CLOUDFLARE_API_TOKEN));
+await assert.rejects(
+  checkCloudflareAuth({
+    env: authFixture,
+    log: () => undefined,
+    fetchImpl: async () => {
+      throw new Error(authFixture.CLOUDFLARE_API_TOKEN);
+    },
+  }),
+  (error) =>
+    !error.message.includes(authFixture.CLOUDFLARE_API_TOKEN) &&
+    /could not reach/.test(error.message),
+);
+console.log(
+  "PASS: read-only Cloudflare authentication stays account-scoped and redacts credential values and inventory.",
+);
 const deploymentFixture = {
   CLOUDFLARE_API_TOKEN: "configuration-test-token-never-printed",
   VITE_SUPABASE_URL: "https://configuration-fixture.supabase.co",

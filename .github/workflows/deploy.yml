@@ -29,6 +29,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+      - name: Verify Cloudflare account access
+        run: node scripts/cloudflare-auth-preflight.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          SIDEQUEST_WORKER: ${{ vars.SIDEQUEST_WORKER }}
       - run: npm ci
       - run: npm run lint && npm run typecheck && npm test
       - name: Configure explicit target
