@@ -141,6 +141,7 @@ async function prepare(
     location?: DiscoveryPlace;
     initialOuting?: Outing;
     fixtureTitle?: string;
+    conditional?: boolean;
   } = {},
 ) {
   const calls: ExperienceDiscoveryRequest[] = [];
@@ -169,6 +170,7 @@ async function prepare(
         source: options.source,
         location: options.location,
         title: options.fixtureTitle,
+        conditional: options.conditional,
         ...(options.holdFirst
           ? {
               title:
@@ -634,4 +636,172 @@ test("pending discovery prevents duplicate submits and a delayed result cannot r
     page.getByRole("heading", { name: "Outdated experience", exact: true }),
   ).toHaveCount(0);
   expect(control.calls).toHaveLength(2);
+});
+
+test("a paid outdoor experience requires its full quote and includes travel without changing Outside", async ({
+  page,
+}) => {
+  const outdoorPlan: Outing = {
+    ...venuePlan,
+    setting: "outside",
+    travelCostMinor: 500,
+  };
+  const outdoorTitle = "The supervised outdoor rental challenge";
+  const control = await prepare(page, {
+    initialOuting: outdoorPlan,
+    fixtureTitle: outdoorTitle,
+    conditional: true,
+  });
+  for (let step = 0; step < 7; step++) await continueStep(page);
+  await page
+    .getByRole("button", { name: "Find my quests", exact: true })
+    .click();
+  const card = page.locator(".quest-card");
+  await expect(card).toContainText(outdoorTitle);
+  await expect(card.locator(".meta-row")).toContainText(
+    "Booking price to check",
+  );
+  await expect(card.locator(".meta-row")).not.toContainText("$0");
+  await card.click();
+  const accept = page.getByRole("button", {
+    name: "Accept quest",
+    exact: true,
+  });
+  const cost = page.getByRole("spinbutton", {
+    name: "Total confirmed activity cost (USD)",
+    exact: true,
+  });
+  await expect(cost).toHaveValue("");
+  for (const checkbox of await page.getByRole("checkbox").all())
+    await checkbox.check();
+  await expect(accept).toBeDisabled();
+  await cost.fill("295.01");
+  await expect(accept).toBeDisabled();
+  await expect(page.getByRole("alert")).toContainText(
+    "confirmed cost exceeds your budget",
+  );
+  await cost.fill("295");
+  await expect(page.locator(".meta-row")).toContainText(
+    /\$300(?:\.00)? group estimate/,
+  );
+  await expect(accept).toBeEnabled();
+  await accept.click();
+  await expect(page.getByRole("alert")).toContainText(acceptError);
+  expect(control.calls[0].outing.setting).toBe("outside");
+  expect((await accepted(page))[0].outing).toMatchObject({
+    setting: "outside",
+    confirmedVenueCostMinor: 29500,
+    travelCostMinor: 500,
+  });
+});
+
+test("a saved private outdoor quest collects a fresh quote and preserves it and its place when selected", async ({
+  page,
+}) => {
+  const plan: Outing = {
+    ...venuePlan,
+    setting: "outside",
+    applePlaceId: stop.id,
+    travelCostMinor: 500,
+    confirmedVenueCostMinor: 10000,
+    venuePermission: true,
+    arrangementConfirmed: true,
+  };
+  const candidate = result(plan, { conditional: true }).candidates[0];
+  await prepare(page);
+  await page.evaluate(
+    async ({ candidate, plan }) => {
+      const loaded = (path: string) =>
+        performance
+          .getEntriesByType("resource")
+          .filter((entry) => new URL(entry.name).pathname === path)
+          .reverse()[0]?.name || path;
+      const { api } = await import(loaded("/src/lib/api.ts"));
+      const { ineligibilityIssues, estimateCost } = await import(
+        loaded("/shared/recommend.ts")
+      );
+      api.quest = async () => ({ ...candidate, privatePlan: plan });
+      api.viability = async () => ({
+        viableCount: 0,
+        alternatives: [],
+        blockers: [],
+        recoveries: [],
+        confirmationFields: [],
+      });
+      api.quests = async (outing: Outing) => {
+        const me = await api.me();
+        if (
+          ineligibilityIssues(candidate, outing, me.profile.preferences).length
+        )
+          return [];
+        const cost = estimateCost(candidate, outing);
+        return [
+          {
+            ...candidate,
+            ready: true,
+            estimatedCostMinMinor: cost.minMinor,
+            estimatedCostMaxMinor: cost.maxMinor,
+          },
+        ];
+      };
+      window.history.pushState({}, "", `/create?template=${candidate.id}`);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    },
+    { candidate, plan },
+  );
+  await expect(
+    page.getByRole("heading", { name: "Who’s coming?", exact: true }),
+  ).toBeVisible();
+  for (let step = 0; step < 5; step++)
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Ready to find your quest?",
+      exact: true,
+    }),
+  ).toBeVisible();
+  const cost = page.getByRole("spinbutton", {
+    name: "Total confirmed activity cost (USD)",
+    exact: true,
+  });
+  await expect(cost).toHaveValue("");
+  const permission = page.getByRole("checkbox", {
+    name: "We have permission for the activity and filming.",
+    exact: true,
+  });
+  const arrangements = page.getByRole("checkbox", {
+    name: "We’ve arranged the required people, equipment or performance slot.",
+    exact: true,
+  });
+  await expect(permission).not.toBeChecked();
+  await expect(arrangements).not.toBeChecked();
+  await cost.fill("295");
+  await permission.check();
+  await arrangements.check();
+  await page
+    .getByRole("button", { name: "Check this quest", exact: true })
+    .click();
+  const card = page.locator(".quest-card");
+  await expect(card.locator(".meta-row")).toContainText(
+    /\$300(?:\.00)? group estimate/,
+  );
+  await card.click();
+  await expect(page.locator(".meta-row")).toContainText(
+    /\$300(?:\.00)? group estimate/,
+  );
+  const accept = page.getByRole("button", {
+    name: "Accept quest",
+    exact: true,
+  });
+  await expect(accept).toBeEnabled();
+  await accept.click();
+  await expect(page.getByRole("alert")).toContainText(acceptError);
+  expect((await accepted(page))[0].outing).toMatchObject({
+    setting: "outside",
+    applePlaceId: stop.id,
+    confirmedVenueCostMinor: 29500,
+    travelCostMinor: 500,
+    arrangementConfirmed: true,
+    venuePermission: true,
+  });
 });

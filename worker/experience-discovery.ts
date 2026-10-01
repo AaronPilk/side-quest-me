@@ -173,7 +173,7 @@ export async function generateDiscoveredExperience(
   const proposal = aiQuestDraftProposalSchema.parse(
     await requestAiJson(
       config,
-      `${DISCOVERY_RULES}\nExpand selectedConcept into a complete quest. Match its core experience and location. Set allowedGroups to the exact selected group. Required admission must set cost.venueCostUnknown=true when not confirmed; set venuePermissionRequired or arrangementRequired only if the activity truly needs permission, a booking, equipment or a performance slot. Ordinary attendance need not require special venue permission. Completion questions check genuine participation and honest outcome, never winning. Use short stage labels: Preparation, The challenge, The result. All required paid charges go into the pending venue-cost field: cost.minMinor and cost.maxMinor must both be 0 when venueCostUnknown is true. No more than three practical requirements and four materials; approximately 1000 tokens.`,
+      `${DISCOVERY_RULES}\nExpand selectedConcept into a complete quest. Match its core experience and location. Set allowedGroups to the exact selected group. Required admission must set cost.venueCostUnknown=true when not confirmed; set venuePermissionRequired or arrangementRequired only if the activity truly needs permission, a booking, equipment or a performance slot. Ordinary attendance need not require special venue permission. Completion questions check genuine participation and honest outcome, never winning. Use short stage labels: Preparation, The challenge, The result. All required paid charges, including outdoor rentals and tours, go into the pending confirmed group-cost field regardless of setting: cost.minMinor and cost.maxMinor must both be 0 when venueCostUnknown is true. No more than three practical requirements and four materials; approximately 1000 tokens.`,
       { ...context, selectedConcept },
       schema as Record<string, unknown>,
       "experience_proposal",
@@ -193,7 +193,7 @@ export async function generateDiscoveredExperience(
             minMinor: 0,
             maxMinor: 0,
             scope: "total",
-            note: "Current pricing is unconfirmed. Confirm the complete group charge, including admission, required equipment, taxes and fees, in the venue-cost field before accepting. It must fit your remaining budget; no separate activity purchase is assumed.",
+            note: "Current pricing is unconfirmed. Confirm the complete group charge, including admission, required equipment, taxes and fees, in the confirmed-cost field before accepting. It must fit your remaining budget; no separate activity purchase is assumed.",
           },
         }
       : {}),

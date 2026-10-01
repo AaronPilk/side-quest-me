@@ -1,4 +1,4 @@
-import { mkdtemp, copyFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, copyFile, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -243,6 +243,8 @@ try {
     SIDEQUEST_AREA: "CONFIGURATION TEST ONLY",
   };
   delete configEnv.SIDEQUEST_NATIVE_ORIGIN;
+  delete configEnv.AI_QUEST_PROVIDER;
+  delete configEnv.AI_QUEST_MODEL;
   const configure = (overrides = {}) =>
     spawnSync(
       process.execPath,
@@ -262,6 +264,24 @@ try {
   assert.equal(config.vars.APP_ENV, "staging");
   assert.equal(config.main, "../worker/index.ts");
   assert.equal(config.containers[0].image_build_context, "..");
+  assert.deepEqual(
+    config.ratelimits,
+    [
+      {
+        name: "AI_RATE_LIMITER",
+        namespace_id: "1002",
+        simple: { limit: 3, period: 60 },
+      },
+      {
+        name: "API_RATE_LIMITER",
+        namespace_id: "1001",
+        simple: { limit: 60, period: 60 },
+      },
+    ],
+    "Deployment must retain both the AI cost limit and ordinary API limit",
+  );
+  assert.ok(!Object.hasOwn(config.vars, "AI_QUEST_PROVIDER"));
+  assert.ok(!Object.hasOwn(config.vars, "AI_QUEST_MODEL"));
   assert.equal(
     config.queues.consumers[0].queue,
     config.queues.producers[0].queue,
@@ -280,6 +300,31 @@ try {
   );
   console.log(
     "PASS: JSONC configuration generates an explicitly isolated target; no remote resources created.",
+  );
+  // A prior local artifact is not the source of deployment configuration.
+  // Recreate the stale, API-only artifact found during release verification.
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      ...config,
+      ratelimits: config.ratelimits.filter(
+        (binding) => binding.name === "API_RATE_LIMITER",
+      ),
+    }),
+  );
+  for (const provider of ["openai", "xai", "anthropic"]) {
+    const configured = configure({
+      AI_QUEST_PROVIDER: provider,
+      AI_QUEST_MODEL: "explicit-fixture-model",
+    });
+    assert.equal(configured.status, 0, configured.stderr);
+    const target = JSON.parse(await readFile(configPath, "utf8"));
+    assert.equal(target.vars.AI_QUEST_PROVIDER, provider);
+    assert.equal(target.vars.AI_QUEST_MODEL, "explicit-fixture-model");
+    assert.deepEqual(target.ratelimits, config.ratelimits);
+  }
+  console.log(
+    "PASS: stale targets are regenerated with both rate limiters and explicit AI provider/model inputs.",
   );
   const nativeResult = configure({
     SIDEQUEST_NATIVE_ORIGIN: "capacitor://localhost",

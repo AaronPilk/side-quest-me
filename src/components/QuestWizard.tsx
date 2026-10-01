@@ -631,6 +631,7 @@ export function QuestWizard({
                 outing.travelMinutes > 0 ||
                 outing.travelCostMinor > 0 ||
                 target?.arrangementRequired ||
+                (target?.privateGenerated && target.cost.venueCostUnknown) ||
                 target?.adultOnly ||
                 target?.requiresVolunteer ||
                 target?.venuePermissionRequired ||
@@ -695,43 +696,49 @@ export function QuestWizard({
                   </span>
                 </label>
               )}
+              {(outing.setting === "venue" ||
+                target?.venuePermissionRequired) && (
+                <label className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={outing.venuePermission}
+                    onChange={(e) =>
+                      update({ venuePermission: e.target.checked })
+                    }
+                  />
+                  <span>We have permission for the activity and filming.</span>
+                </label>
+              )}
+              {(outing.setting === "venue" ||
+                (target?.privateGenerated && target.cost.venueCostUnknown)) && (
+                <label>
+                  {outing.setting === "venue"
+                    ? "Confirmed total admission / room cost (USD)"
+                    : "Total confirmed activity cost (USD)"}
+                  <input
+                    type="number"
+                    min="0"
+                    max="10000"
+                    step="0.01"
+                    value={
+                      outing.confirmedVenueCostMinor === null
+                        ? ""
+                        : outing.confirmedVenueCostMinor / 100
+                    }
+                    placeholder="Unknown until confirmed"
+                    onChange={(e) =>
+                      update({
+                        confirmedVenueCostMinor:
+                          e.target.value === ""
+                            ? null
+                            : Math.round(Number(e.target.value) * 100),
+                      })
+                    }
+                  />
+                </label>
+              )}
               {outing.setting === "venue" && (
                 <>
-                  <label className="check-row">
-                    <input
-                      type="checkbox"
-                      checked={outing.venuePermission}
-                      onChange={(e) =>
-                        update({ venuePermission: e.target.checked })
-                      }
-                    />
-                    <span>
-                      We have permission for the activity and filming.
-                    </span>
-                  </label>
-                  <label>
-                    Confirmed total admission / room cost (USD)
-                    <input
-                      type="number"
-                      min="0"
-                      max="10000"
-                      step="0.01"
-                      value={
-                        outing.confirmedVenueCostMinor === null
-                          ? ""
-                          : outing.confirmedVenueCostMinor / 100
-                      }
-                      placeholder="Unknown until confirmed"
-                      onChange={(e) =>
-                        update({
-                          confirmedVenueCostMinor:
-                            e.target.value === ""
-                              ? null
-                              : Math.round(Number(e.target.value) * 100),
-                        })
-                      }
-                    />
-                  </label>
                   <label className="check-row">
                     <input
                       type="checkbox"

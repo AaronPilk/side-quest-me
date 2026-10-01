@@ -203,9 +203,9 @@ export function Planning({
         {quest.minParticipants}–{quest.maxParticipants}
       </span>
       <span>
-        {money(quest.cost.minMinor)}–{money(quest.cost.maxMinor)}{" "}
-        {words(quest.cost.scope)}
-        {quest.cost.venueCostUnknown ? " + venue" : ""}
+        {quest.cost.venueCostUnknown
+          ? "Booking price to check"
+          : `${money(quest.cost.minMinor)}–${money(quest.cost.maxMinor)} ${words(quest.cost.scope)}`}
       </span>
     </div>
   );

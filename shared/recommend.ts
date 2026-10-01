@@ -48,12 +48,19 @@ export function estimateCost(
 ): { minMinor: number; maxMinor: number; known: boolean } {
   const multiplier =
     quest.cost.scope === "per_person" ? outing.participants : 1;
+  // Generated rentals, tours and equipment can carry a pending total charge
+  // outdoors too. Keep the real setting and use the existing confirmed-cost
+  // field for that one group charge, independent of activity cost scope.
+  const needsConfirmedCharge =
+    outing.setting === "venue" ||
+    (quest.privateGenerated === true && quest.cost.venueCostUnknown);
   const venueUnknown =
-    outing.setting === "venue" &&
+    needsConfirmedCharge &&
     quest.cost.venueCostUnknown &&
     outing.confirmedVenueCostMinor === null;
-  const venueMinor =
-    outing.setting === "venue" ? (outing.confirmedVenueCostMinor ?? 0) : 0;
+  const venueMinor = needsConfirmedCharge
+    ? (outing.confirmedVenueCostMinor ?? 0)
+    : 0;
   return {
     minMinor:
       quest.cost.minMinor * multiplier + venueMinor + outing.travelCostMinor,
@@ -131,7 +138,7 @@ export function ineligibilityIssues(
   if (!costs.known)
     issue(
       "venue_cost",
-      "Confirm the complete required venue charge before this quest can fit your budget.",
+      "Confirm the complete required group charge before this quest can fit your budget.",
     );
   if (costs.maxMinor > effectiveBudget(outing))
     issue(
@@ -141,13 +148,13 @@ export function ineligibilityIssues(
   if (quest.cost.currency !== outing.currency)
     issue("currency", "This quest is unavailable in the selected currency.");
   if (
-    outing.setting === "venue" &&
+    (outing.setting === "venue" || quest.privateGenerated) &&
     quest.venuePermissionRequired &&
     !outing.venuePermission
   )
     issue(
       "venue_permission",
-      "Venue and filming permission has not been confirmed.",
+      "Required activity and filming permission has not been confirmed.",
     );
   if (quest.arrangementRequired && !outing.arrangementConfirmed)
     issue(

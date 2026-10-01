@@ -680,68 +680,75 @@ export default function Quest() {
               <Notice>Review your answers to find a plan that fits.</Notice>
             )
           ) : (
-            candidates.map((q) => (
-              <button
-                className="quest-card"
-                key={q.id}
-                disabled={busy}
-                onClick={() => {
-                  if (q.privateGenerated) {
-                    const proposal = experience?.proposals.find(
-                      (value) => value.templateId === q.id,
-                    );
-                    setOuting((current) => ({
-                      ...current,
-                      applePlaceId: proposal?.location?.id || null,
-                      venuePermission: false,
-                      confirmedVenueCostMinor: null,
-                      arrangementConfirmed: false,
-                      adultEligible: false,
-                      adultContext: false,
-                    }));
-                  }
-                  setSelected(q);
-                  window.scrollTo(0, 0);
-                }}
-              >
-                <QuestArt variant={q.category} seed={q.familyId} small />
-                <div className="quest-card-body">
-                  <div className="eyebrow">
-                    {label} ·{" "}
-                    {INTENSITIES.find((i) => i.id === q.intensity)?.label}
+            candidates.map((q) => {
+              const proposal = experience?.proposals.find(
+                (value) => value.templateId === q.id,
+              );
+              const cost = estimateCost(
+                q,
+                proposal
+                  ? { ...outing, confirmedVenueCostMinor: null }
+                  : outing,
+              );
+              return (
+                <button
+                  className="quest-card"
+                  key={q.id}
+                  disabled={busy}
+                  onClick={() => {
+                    if (q.privateGenerated && proposal) {
+                      setOuting((current) => ({
+                        ...current,
+                        applePlaceId: proposal?.location?.id || null,
+                        venuePermission: false,
+                        confirmedVenueCostMinor: null,
+                        arrangementConfirmed: false,
+                        adultEligible: false,
+                        adultContext: false,
+                      }));
+                    }
+                    setSelected(q);
+                    window.scrollTo(0, 0);
+                  }}
+                >
+                  <QuestArt variant={q.category} seed={q.familyId} small />
+                  <div className="quest-card-body">
+                    <div className="eyebrow">
+                      {label} ·{" "}
+                      {INTENSITIES.find((i) => i.id === q.intensity)?.label}
+                    </div>
+                    <h2>{q.title}</h2>
+                    <p>{q.hook}</p>
+                    {q.sponsorDisclosure && (
+                      <p className="support">
+                        Sponsored · {q.sponsorDisclosure}
+                      </p>
+                    )}
+                    <div className="meta-row">
+                      <span>
+                        <Clock3 size={15} />
+                        {q.durationMinutes + outing.travelMinutes} min
+                      </span>
+                      <span>
+                        {cost.known
+                          ? `${money(cost.maxMinor)} group estimate`
+                          : "Booking price to check"}
+                      </span>
+                    </div>
+                    <div className="fit-line">
+                      <Check size={15} />
+                      {q.ready
+                        ? q.whyFits.slice(0, 2).join(" · ")
+                        : "Fits your plan · Confirm booking details before starting"}
+                    </div>
+                    <div className="card-footer">
+                      <span>Meet your quest</span>
+                      <ArrowRight size={18} />
+                    </div>
                   </div>
-                  <h2>{q.title}</h2>
-                  <p>{q.hook}</p>
-                  {q.sponsorDisclosure && (
-                    <p className="support">Sponsored · {q.sponsorDisclosure}</p>
-                  )}
-                  <div className="meta-row">
-                    <span>
-                      <Clock3 size={15} />
-                      {q.durationMinutes + outing.travelMinutes} min
-                    </span>
-                    <span>
-                      {q.cost.venueCostUnknown &&
-                      outing.setting === "venue" &&
-                      (q.privateGenerated ||
-                        outing.confirmedVenueCostMinor === null)
-                        ? "Booking price to check"
-                        : `${money(q.estimatedCostMaxMinor)} group estimate`}
-                    </span>
-                  </div>
-                  <div className="fit-line">
-                    <Check size={15} />
-                    {q.ready
-                      ? q.whyFits.slice(0, 2).join(" · ")
-                      : "Fits your plan · Confirm booking details before starting"}
-                  </div>
-                  <div className="card-footer">
-                    <span>Meet your quest</span>
-                    <ArrowRight size={18} />
-                  </div>
-                </div>
-              </button>
-            ))
+                </button>
+              );
+            })
           )}
           {candidates.length > 0 && !requestedTemplate && (
             <div className="quest-more-ideas">
@@ -825,7 +832,9 @@ function GeneratedQuestChecks({
       )}
       {codes.has("venue_cost") && (
         <label>
-          Total confirmed venue cost (USD)
+          {outing.setting === "venue"
+            ? "Total confirmed venue cost (USD)"
+            : "Total confirmed activity cost (USD)"}
           <input
             type="number"
             inputMode="decimal"
@@ -873,7 +882,11 @@ function GeneratedQuestChecks({
               onChange({ venuePermission: event.target.checked })
             }
           />
-          <span>The venue allows this activity and our filming.</span>
+          <span>
+            {outing.setting === "venue"
+              ? "The venue allows this activity and our filming."
+              : "We have the required permission for this activity and our filming."}
+          </span>
         </label>
       )}
       {codes.has("adults") && (

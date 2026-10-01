@@ -265,4 +265,67 @@ export async function runPrivateExperienceTests(sql) {
       }),
     /series_unavailable/,
   );
+  // Outdoor operator charges must never become a free activity merely because
+  // the experience's actual setting is outside rather than at an indoor venue.
+  const outdoorOwner = await user();
+  const outdoorPlan = {
+    ...outing,
+    setting: "outside",
+    travelCostMinor: 500,
+    budgetMinor: 2000,
+    budgetScope: "per_person",
+    arrangementConfirmed: true,
+    applePlaceId: null,
+  };
+  const outdoor = await rpc("sq_store_private_proposal", outdoorOwner, {
+    ...input,
+    outing: outdoorPlan,
+    location: null,
+    quest: { ...quest, settings: ["outside"], venuePermissionRequired: true },
+  });
+  const outdoorAccept = {
+    template_id: outdoor.quest.id,
+    outing: outdoorPlan,
+    expected_campaign: null,
+  };
+  await assert.rejects(
+    () => rpc("sq_accept_private_run", outdoorOwner, outdoorAccept),
+    /private_requirements_pending/,
+  );
+  await assert.rejects(
+    () =>
+      rpc("sq_accept_private_run", outdoorOwner, {
+        ...outdoorAccept,
+        outing: {
+          ...outdoorPlan,
+          confirmedVenueCostMinor: 9501,
+          venuePermission: true,
+        },
+      }),
+    /invalid_outing/,
+  );
+  await assert.rejects(
+    () =>
+      rpc("sq_accept_private_run", outdoorOwner, {
+        ...outdoorAccept,
+        outing: {
+          ...outdoorPlan,
+          confirmedVenueCostMinor: 9500,
+          venuePermission: false,
+        },
+      }),
+    /private_requirements_pending/,
+  );
+  const outdoorRun = await rpc("sq_accept_private_run", outdoorOwner, {
+    ...outdoorAccept,
+    outing: {
+      ...outdoorPlan,
+      confirmedVenueCostMinor: 9500,
+      venuePermission: true,
+    },
+  });
+  assert.equal(outdoorRun.run.outing.setting, "outside");
+  assert.equal(outdoorRun.run.outing.confirmedVenueCostMinor, 9500);
+  assert.equal(outdoorRun.run.snapshot.reward_policy.points, 0);
+  await rpc("sq_abandon_run", outdoorOwner, { run_id: outdoorRun.run.id });
 }
