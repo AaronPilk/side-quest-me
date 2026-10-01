@@ -1,8 +1,16 @@
-import { activityCatalog, historicalActivityCatalog } from "./activity-recipes";
+import {
+  activityCatalog,
+  historicalActivityCatalog,
+  retiredFullSendActivityCatalog,
+} from "./activity-recipes";
 
 // An explicit allow-list of versions that were publicly published, not a rule
 // that exposes arbitrary unpublished creator drafts or moderated templates.
-const archived = new Set(historicalActivityCatalog.map((quest) => quest.id));
+const archived = new Set(
+  [...historicalActivityCatalog, ...retiredFullSendActivityCatalog].map(
+    (quest) => quest.id,
+  ),
+);
 const currentByKey = new Map(
   activityCatalog.map((quest) => [
     `${quest.familyId}:${quest.variantKey}:${quest.intensity}`,

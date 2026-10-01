@@ -178,9 +178,7 @@ test("mocked Apple search selection persists only its ID through review, accepta
   await page
     .getByRole("textbox", { name: "Area", exact: true })
     .fill("Seattle");
-  await page
-    .getByRole("combobox", { name: "Getting there", exact: true })
-    .selectOption("walk");
+  await page.getByRole("button", { name: "Walking", exact: true }).click();
   await pickMockPlace(page);
   expect(await draft(page)).toMatchObject({
     applePlaceId: mockPlace.id,

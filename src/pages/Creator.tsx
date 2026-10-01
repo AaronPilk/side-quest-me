@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { publicUrl } from "../lib/runtime";
 import { isShareCancellation, sharePublicLink } from "../lib/native-share";
 import {
@@ -64,8 +64,10 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [edit, setEdit] = useState(false);
+  const socialRequest = useRef(0);
   useEffect(() => {
     let active = true;
+    const request = ++socialRequest.current;
     setSocial(undefined);
     setSocialError("");
     setEdit(false);
@@ -74,10 +76,14 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
     socialApi
       .read(id)
       .then((value) => {
-        if (active) setSocial(value);
+        if (active && request === socialRequest.current) {
+          setSocial(value);
+          setSocialError("");
+        }
       })
       .catch((cause) => {
-        if (active) setSocialError((cause as Error).message);
+        if (active && request === socialRequest.current)
+          setSocialError((cause as Error).message);
       });
     return () => {
       active = false;
@@ -115,7 +121,12 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
     setError("");
     setMessage("");
     try {
-      setSocial(await operation());
+      const updated = await operation();
+      // Mutation replies contain fresh social details. An older read must not
+      // replace them or resurrect a load error after the successful save.
+      socialRequest.current += 1;
+      setSocial(updated);
+      setSocialError("");
       setMessage(success);
       me.refresh();
       if (id) publicProfile.refresh();

@@ -324,6 +324,7 @@ test("explicit neutral answers can complete preferences without inventing intere
 });
 
 for (const [width, height] of [
+  [393, 852],
   [390, 844],
   [402, 874],
 ]) {
@@ -346,6 +347,13 @@ for (const [width, height] of [
         .evaluate((element) => getComputedStyle(element, "::before").height),
     ).toBe("59px");
     const actionsInReach = async () => {
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollHeight <= innerHeight + 1,
+        ),
+      ).toBe(true);
+      const footer = (await page.locator(".survey-footer").boundingBox())!;
+      expect(footer.y + footer.height).toBeGreaterThanOrEqual(height - 34 - 16);
       for (const name of ["Continue", "Skip this question"]) {
         await expect
           .poll(async () => {
@@ -560,11 +568,7 @@ test("a clipboard failure offers manual prompt copying without claiming success 
   expect(
     await page.evaluate(() => Reflect.get(window, "__reservedChatGPTClosed")),
   ).toBe(true);
-  await page
-    .locator("summary")
-    .filter({ hasText: "View or manually copy the prompt" })
-    .click();
-  await expect(page.locator(".prompt-details pre")).toHaveText(
+  await expect(page.locator(".prompt-fallback")).toHaveText(
     COPY_PROFILE_PROMPT,
   );
   expect((await savedProfile(page)).preferences).toEqual(DEFAULT_PREFERENCES);
@@ -574,17 +578,21 @@ test("a clipboard failure offers manual prompt copying without claiming success 
   await expect(page.getByText("1 of 11", { exact: true })).toBeVisible();
 });
 
-test("an unsaved summary survives refresh and prevents leaving until saved or explicitly discarded", async ({
+test("summary drafts survive refresh and Continue saves before advancing, retaining text on failure", async ({
   page,
 }) => {
   await start(page, "/preferences?step=summary&returnTo=%2Faccount");
-  await page
-    .locator("summary")
-    .filter({ hasText: "I have a summary to paste" })
-    .click();
   const summary = page.getByRole("textbox", {
-    name: "Review what you’re sharing",
+    name: "Paste your ChatGPT summary",
   });
+  const next = page.getByRole("button", {
+    name: "Continue to preferences",
+    exact: true,
+  });
+  await expect(summary).toBeVisible();
+  await expect(page.getByText("View or manually copy the prompt")).toHaveCount(
+    0,
+  );
   const text = "I like music, but performing in public is unknown.";
   await summary.fill(text);
   await expect(
@@ -593,72 +601,70 @@ test("an unsaved summary survives refresh and prevents leaving until saved or ex
   await expect(
     page.getByRole("button", { name: "Save & leave", exact: true }),
   ).toBeDisabled();
-  await expect(
-    page.getByRole("button", { name: "Continue to preferences", exact: true }),
-  ).toBeDisabled();
+  await expect(next).toBeEnabled();
   expect((await savedProfile(page)).summary).toBe("");
   await page.reload();
   await expect(summary).toHaveValue(text);
   await page
     .getByRole("button", { name: "Discard unsaved edits", exact: true })
     .click();
-  await page
-    .locator("summary")
-    .filter({ hasText: "I have a summary to paste" })
-    .click();
   await expect(summary).toHaveValue("");
-  await expect(
-    page.getByRole("button", { name: "Back", exact: true }),
-  ).toBeEnabled();
   await summary.fill(text);
-  await page.getByRole("button", { name: "Save summary", exact: true }).click();
-  await expect(
-    page.getByText("Summary saved.", { exact: false }),
-  ).toBeVisible();
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "sidequest-demo-v1")
+        throw new Error("Storage is full. Please try again.");
+      return original.call(this, key, value);
+    };
+  });
+  await next.click();
+  await expect(page.getByRole("alert")).toContainText("Storage is full");
+  await expect(summary).toHaveValue(text);
+  await expect(next).toBeEnabled();
+  expect((await savedProfile(page)).summary).toBe("");
   await page.reload();
   await expect(summary).toHaveValue(text);
+  await next.click();
+  await expect(page.getByText("1 of 11", { exact: true })).toBeVisible();
   expect((await savedProfile(page)).summary).toBe(text);
   expect((await savedProfile(page)).preferences).toEqual(DEFAULT_PREFERENCES);
 });
 
-test("opening the ChatGPT summary from a preference question resumes that question after refresh", async ({
+test("preference questions omit repeated ChatGPT controls while keeping the account summary shortcut", async ({
   page,
 }) => {
-  await start(page, "/preferences?returnTo=%2Fprofile");
+  await start(page, "/preferences?step=summary&returnTo=%2Faccount");
   await page
-    .getByRole("button", { name: "Continue setup", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Continue to preferences", exact: true })
-    .click();
-  await skip(page, 7);
-  await page.getByRole("button", { name: "Music", exact: true }).click();
-  await page
-    .getByRole("button", { name: "ChatGPT summary", exact: true })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: "Your ChatGPT head start", exact: true }),
-  ).toBeVisible();
-  expect((await savedProfile(page)).preferences.interests).toEqual(["music"]);
-  await page.reload();
-  await expect(
-    page.getByRole("heading", { name: "Your ChatGPT head start" }),
-  ).toBeVisible();
+    .getByRole("textbox", { name: "Paste your ChatGPT summary" })
+    .fill("I like games.");
   await page
     .getByRole("button", { name: "Continue to preferences", exact: true })
     .click();
-  await expect(page.getByText("8 of 11", { exact: true })).toBeVisible();
+  for (let index = 0; index < 11; index++) {
+    await expect(
+      page.getByText(`${index + 1} of 11`, { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "ChatGPT summary", exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByText("Use my summary as a reference")).toHaveCount(
+      0,
+    );
+    await page
+      .getByRole("button", { name: "Skip this question", exact: true })
+      .click();
+  }
+  await page.getByRole("button", { name: "Looks right", exact: true }).click();
+  await expect(page).toHaveURL(/\/account$/);
+  await page.getByRole("link", { name: /ChatGPT summary/ }).click();
   await expect(
-    page.getByRole("button", { name: "Music", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await page
-    .getByRole("button", { name: "Skip this question", exact: true })
-    .click();
-  expect((await savedProfile(page)).preferences.interests).toEqual(["music"]);
+    page.getByRole("textbox", { name: "Paste your ChatGPT summary" }),
+  ).toHaveValue("I like games.");
 });
 
 for (const [width, height] of [
+  [393, 852],
   [390, 844],
   [402, 874],
 ]) {
@@ -689,6 +695,11 @@ for (const [width, height] of [
           () => document.documentElement.scrollWidth <= innerWidth,
         ),
       ).toBe(true);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollHeight <= innerHeight + 1,
+        ),
+      ).toBe(true);
     };
     await containedAction("Continue setup");
     await page
@@ -696,8 +707,13 @@ for (const [width, height] of [
       .click();
     await containedAction("Continue");
     await containedAction("Skip this step");
+    if (width === 393)
+      await page.screenshot({ path: ".local/beta-account-393.png" });
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await containedAction("Copy prompt and open ChatGPT");
+    await containedAction("Continue to preferences");
+    if (width === 393)
+      await page.screenshot({ path: ".local/beta-summary-393.png" });
     await page
       .getByRole("button", { name: "Continue to preferences", exact: true })
       .click();

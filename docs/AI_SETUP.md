@@ -1,7 +1,9 @@
 # Sidequest AI setup — OpenAI activation, 2026-10-01
 
 Sidequest can use **xAI/Grok, OpenAI or Anthropic/Claude** through a server-only
-provider adapter. The current implementation supports two optional flows:
+provider adapter. The current implementation supports three consented flows:
+
+- **Find my quests**, the normal Create journey, generates a private, playable experience from the outing, confirmed preferences, and optional nearby Apple Maps listings. It checks concrete concepts, expands one plan, and independently reviews it. Conditional booking requirements are shown after the suggestion; unknown prices are never described as free. Accepted generated experiences can be filmed and explicitly published as a story, and their author can grow them into a series. They do not enter the public quest catalog or award XP/points. Repeated requests use a server-side lease and replay the same result rather than paying for duplicate generation.
 
 - **Draft with AI**, linked from Create, turns a short brief and reviewed outing
   into an original quest proposal. The user previews it, chooses **Use editable
@@ -12,9 +14,7 @@ provider adapter. The current implementation supports two optional flows:
   opening hook, camera shots/captions and a loop. The canonical quest mechanics,
   eligibility and rewards remain unchanged.
 
-The imported-summary review remains manual, and normal catalog recommendations
-remain deterministic. These integrations do not search local events or claim to
-verify locations, availability, opening hours, costs or permissions. Model output
+The imported-summary review remains manual. Browsing the published catalog stays deterministic, while normal Create now uses experience discovery when the configured provider is available. The iPhone can retrieve live Apple Maps listings across multiple activity categories; listing presence does not establish opening hours, ticket inventory, current prices, or permission. Live event inventory is not configured. Model output
 requires review; schema and metadata checks do not establish that a model's text
 is accurate or that it has honestly labeled every possible conflict.
 
@@ -270,7 +270,7 @@ after one successful provider call (about 37 seconds). This is evidence that the
 rejection works, not evidence that the desired quality has been achieved. Report:
 `.local/ai-eval/gpt-6-astra/five-friends-full-send.json`.
 
-This change only affects **Draft with AI**. Ordinary Create recommendations still
+Historical build-4 behavior (superseded by build 5): that change only affected **Draft with AI**. Ordinary Create recommendations still
 come from the published catalog. The remaining product work is to connect that
 journey to verified local activities/events and route those facts into generation,
 while keeping availability, booking costs and creative suggestions distinct.
@@ -286,3 +286,15 @@ screen's email sign-in form using keyboard scrolling. There is no visible guest
 path into Create; the new adult-option form still requires an authenticated
 native/physical-device walkthrough. Do not count it as Simulator-verified yet.
 There are no database changes in this follow-up.
+
+## Build 5 normal experience discovery
+
+`POST /api/quests/discover` requires authentication, named-provider consent and an idempotency key. The server uses the configured OpenAI / GPT-6 Astra pipeline for concepts, a complete plan, and an independent quality review. Current outing limits and confirmed exclusions remain authoritative. Nearby listing strings are untrusted data; only a supplied Apple place ID or no named place can be selected. Exact device coordinates and raw imported summary prose are excluded from the model. Listing coordinates are transient client context and stripped from persisted proposal/replay records.
+
+Each proposal is owner-bound and unpublished. The user sees specific booking/price/permission checks before acceptance; the Worker and database recheck them. Private snapshots grant zero XP/points and cannot claim sponsorship. An author may explicitly publish the resulting video/story, then create later series episodes with fresh preflight. Unaccepted proposals expire after two days; a saved owned series can continue its already accepted quest later. Account deletion redacts generated prose and clears discovery caches.
+
+If generation cannot produce an approved plan, the service may return a clearly labeled authored fallback (compatible karting, climbing, escape-room or dining mechanics). It never silently changes intensity, participants or budget. Weak expanded Full Send photo/observation/craft variants are retired from new recommendations; immutable historical versions remain readable for existing stories.
+
+Two bounded live five-friend Full Send tests produced operator-run timed escape-room experiences and passed all independent review checks. The final test took 57.4 seconds and treated the unknown all-in admission charge exactly once. This is a checked example, not a guarantee that every generated idea will meet a user's taste.
+
+Native nearby places work without a web Maps token on iOS 18+. Ticketmaster inventory still requires `TICKETMASTER_API_KEY`; Eventbrite remains an outbound resource. No fabricated live concerts, reservations or availability are supplied. Consumer access remains free. Existing brand licensing/campaign tools remain; paid destination targeting and traffic attribution are not added by this release.

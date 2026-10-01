@@ -63,7 +63,7 @@ class SidequestViewController: CAPBridgeViewController {
         editingStatusSurface.isUserInteractionEnabled = false
         editingStatusSurface.isAccessibilityElement = false
         editingStatusSurface.accessibilityElementsHidden = true
-        editingStatusSurface.backgroundColor = UIColor(red: 243.0 / 255, green: 243.0 / 255, blue: 252.0 / 255, alpha: 1)
+        editingStatusSurface.backgroundColor = UIColor(red: 245.0 / 255, green: 246.0 / 255, blue: 252.0 / 255, alpha: 1)
         editingStatusSurface.isHidden = true
         container.addSubview(editingStatusSurface)
         NSLayoutConstraint.activate([
@@ -78,7 +78,7 @@ class SidequestViewController: CAPBridgeViewController {
         editingStatusSurface.isHidden = !editing
         editingStatusSurface.backgroundColor = dark
             ? UIColor(red: 9.0 / 255, green: 10.0 / 255, blue: 14.0 / 255, alpha: 1)
-            : UIColor(red: 243.0 / 255, green: 243.0 / 255, blue: 252.0 / 255, alpha: 1)
+            : UIColor(red: 245.0 / 255, green: 246.0 / 255, blue: 252.0 / 255, alpha: 1)
         statusBarStyle = dark ? .lightContent : .darkContent
         setNeedsStatusBarAppearanceUpdate()
     }
@@ -118,15 +118,18 @@ public class SidequestPlacesPlugin: CAPPlugin, CAPBridgedPlugin {
     /// handles the universal link; otherwise use the external system browser.
     /// Prompts remain on the clipboard for an explicit user paste and send.
     @objc func openChatGPT(_ call: CAPPluginCall) {
-        let destination = URL(string: "https://chatgpt.com/")!
+        // ChatGPT's published apple-app-site-association matches home with
+        // #native. The bare home URL is not an app link (verified 2026-10-01).
+        let appDestination = URL(string: "https://chatgpt.com/#native")!
+        let browserDestination = URL(string: "https://chatgpt.com/")!
         DispatchQueue.main.async {
-            UIApplication.shared.open(destination, options: [.universalLinksOnly: true]) { openedApp in
+            UIApplication.shared.open(appDestination, options: [.universalLinksOnly: true]) { openedApp in
                 if openedApp {
                     call.resolve(["destination": "app"])
                     return
                 }
                 DispatchQueue.main.async {
-                    UIApplication.shared.open(destination, options: [:]) { openedWeb in
+                    UIApplication.shared.open(browserDestination, options: [:]) { openedWeb in
                         if openedWeb { call.resolve(["destination": "web"]) }
                         else { call.reject("ChatGPT could not open.", "chatgpt_launch_failed") }
                     }

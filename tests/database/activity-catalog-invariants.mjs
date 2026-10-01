@@ -49,13 +49,25 @@ export async function runActivityCatalogTests(sql) {
     await sql(
       "select count(*) from quest_templates where variant_key<>'default' and published and version=2;",
     ),
-    "1080",
+    "720",
   );
   assert.equal(
     await sql(
       "select count(*) from quest_templates where variant_key<>'default' and not published and version=1;",
     ),
     "1080",
+  );
+  assert.equal(
+    await sql(
+      "select count(*) from quest_templates where family_id like 'activity_%' and intensity='full_send' and published;",
+    ),
+    "0",
+  );
+  assert.equal(
+    await sql(
+      "select count(*) from quest_templates where family_id like 'activity_%' and intensity='full_send' and version=2 and not published;",
+    ),
+    "360",
   );
   assert.equal(
     await sql(
@@ -107,6 +119,6 @@ export async function runActivityCatalogTests(sql) {
     /template_version_immutable/,
   );
   console.log(
-    "PASS: 1080 current activity variants, 1113 historical rows unchanged, valid family/key/version uniqueness, content consistency, RLS, immutable keys, and idempotent migration/seed.",
+    "PASS: 720 current activity variants and 360 retired Full Send variants, 1113 historical rows unchanged, valid family/key/version uniqueness, content consistency, RLS, immutable keys, and idempotent migration/seed.",
   );
 }

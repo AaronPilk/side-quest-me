@@ -88,9 +88,7 @@ test("Create is centered and asks one question at a time, preserving answers thr
     page.getByRole("heading", { name: "What’s your budget?", exact: true }),
   ).toBeVisible();
   await budget.fill("30");
-  await page
-    .getByRole("combobox", { name: "Budget is for", exact: true })
-    .selectOption("per_person");
+  await page.getByRole("button", { name: "Each person", exact: true }).click();
   await next(page, "How much time do you have?");
   await expect(
     page
@@ -178,105 +176,46 @@ test("Create is centered and asks one question at a time, preserving answers thr
   expect(errors).toEqual([]);
 });
 
-test("optional venue details keep permission explicit and returning home clears adult nightlife context", async ({
+test("new quest planning omits generic booking requirements and preserves visible transport choices", async ({
   page,
 }) => {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
   await openCreate(page);
   await reviewQuestPlans(page);
   await page.getByRole("button", { name: "Edit setting", exact: true }).click();
   await page.getByRole("button", { name: "At a venue", exact: true }).click();
-  // Editing an away setting includes its optional location step.
-  await reviewQuestPlans(page);
-  await page.getByRole("button", { name: "Edit travel", exact: true }).click();
-  await expect(
-    page.getByRole("heading", {
-      name: "Where should we go?",
-      exact: true,
-    }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page
-    .getByRole("textbox", { name: "Area", exact: true })
+    .getByRole("button", { name: "Choose a town", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "Town or neighborhood", exact: true })
     .fill("Riverside");
-  await expect(
-    page.getByRole("spinbutton", {
-      name: "Round-trip travel (min)",
-      exact: true,
-    }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole("spinbutton", {
-      name: "Travel estimate (USD)",
-      exact: true,
-    }),
-  ).toHaveCount(0);
   await page
-    .getByRole("combobox", { name: "Getting there", exact: true })
-    .selectOption("transit");
-  await reviewQuestPlans(page);
-  await page.locator(".quest-arrangements summary").click();
-  const permission = page.getByRole("checkbox", {
-    name: "We have permission for the activity and filming.",
-    exact: true,
-  });
-  const adultEligibility = page.getByRole("checkbox", {
-    name: "All participants are adults and meet the venue’s legal age requirement.",
-    exact: true,
-  });
-  const nightlife = page.getByRole("checkbox", {
-    name: "Include explicitly agreed adult nightlife contexts.",
-    exact: true,
-  });
-  await expect(permission).not.toBeChecked();
-  await expect(adultEligibility).not.toBeChecked();
-  await expect(nightlife).toBeDisabled();
+    .getByRole("button", { name: "Public transit", exact: true })
+    .click();
   await expect(
-    page.getByRole("spinbutton", {
-      name: "Confirmed total admission / room cost (USD)",
-      exact: true,
-    }),
-  ).toHaveValue("");
-  await permission.check();
-  await adultEligibility.check();
-  await nightlife.check();
-  await page
-    .getByRole("spinbutton", {
-      name: "Confirmed total admission / room cost (USD)",
-      exact: true,
-    })
-    .fill("12");
+    page.getByRole("combobox", { name: "Getting there" }),
+  ).toHaveCount(0);
   await reviewQuestPlans(page);
+  await expect(page.locator(".quest-arrangements")).toHaveCount(0);
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
   await page.reload();
   expect(await draft(page)).toMatchObject({
     setting: "venue",
     area: "Riverside",
-    travelMinutes: 0,
-    travelCostMinor: 0,
     transport: "transit",
-    venuePermission: true,
-    adultEligible: true,
-    adultContext: true,
-    confirmedVenueCostMinor: 1200,
+    venuePermission: false,
+    arrangementConfirmed: false,
+    confirmedVenueCostMinor: null,
   });
   await page.getByRole("button", { name: "Edit setting", exact: true }).click();
   await page.getByRole("button", { name: "At home", exact: true }).click();
   await reviewQuestPlans(page);
-  await expect(
-    page.getByRole("button", { name: "Edit travel", exact: true }),
-  ).toHaveCount(0);
   expect(await draft(page)).toMatchObject({
     setting: "home",
-    travelMinutes: 0,
-    travelCostMinor: 0,
     transport: "none",
     adultContext: false,
   });
-  await page
-    .getByRole("button", { name: "Find my quests", exact: true })
-    .click();
-  await expect(page.locator(".quest-card").first()).toBeVisible();
-  expect(errors).toEqual([]);
 });
 
 test("older arrangement drafts preserve their answers and expose saved travel estimates for explicit removal", async ({
@@ -335,10 +274,31 @@ test("older arrangement drafts preserve their answers and expose saved travel es
   });
 });
 
-test("a Full Send outdoor date for two keeps every answer and finds a compatible quest", async ({
+test("without AI, an unmatched Full Send outdoor date keeps its answers and reports no fit honestly", async ({
   page,
 }) => {
   await openCreate(page);
+  const configuration = await page.evaluate(async () => {
+    const modulePath =
+      performance
+        .getEntriesByType("resource")
+        .filter(
+          (entry) =>
+            new URL(entry.name).pathname === "/src/lib/ai-quest-api.ts",
+        )
+        .reverse()[0]?.name || "/src/lib/ai-quest-api.ts";
+    return (await import(modulePath)).aiQuestApi.config();
+  });
+  expect(configuration).toEqual({
+    configured: false,
+    provider: null,
+    model: null,
+  });
+  const discoveryRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/quests/discover")
+      discoveryRequests.push(request.url());
+  });
   await page.getByRole("button", { name: "Date Night", exact: true }).click();
   await next(page, "How far are we taking this?");
   await page.getByRole("button", { name: "Full Send", exact: true }).click();
@@ -362,29 +322,31 @@ test("a Full Send outdoor date for two keeps every answer and finds a compatible
   await expect(
     page.getByRole("button", { name: "Edit group", exact: true }),
   ).toContainText("Couple · 2 people");
-  await expect(page.locator(".quest-arrangements")).not.toHaveAttribute(
-    "open",
-    "",
-  );
+  await expect(page.locator(".quest-arrangements")).toHaveCount(0);
   await expect(page.locator(".quest-recovery")).toHaveCount(0);
   const before = await draft(page);
   await page
     .getByRole("button", { name: "Find my quests", exact: true })
     .click();
-  await expect(page.locator(".quest-card").first()).toBeVisible();
-  for (const card of await page.locator(".quest-card").all()) {
-    await expect(card.locator(".eyebrow")).toHaveText("Date Night · Full Send");
-    await expect(card).not.toContainText("Chill");
-    await expect(card).not.toContainText("4–6");
-  }
-  expect(await draft(page)).toEqual(before);
-  await page.locator(".quest-card").first().click();
-  await page.getByRole("button", { name: "Accept quest", exact: true }).click();
-  await expect(page).toHaveURL(/\/runs\/[a-f0-9-]+$/);
-  const run = await page.evaluate(
-    () => JSON.parse(localStorage.getItem("sidequest-demo-v1")!).runs[0],
+  await expect(
+    page.getByRole("heading", {
+      name: "No matches for these answers yet",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Quest matching help", exact: true }),
+  ).toContainText(
+    "Your choices are saved. We haven’t found a published quest that meets all of them.",
   );
-  expect(run.outing).toMatchObject({
+  await expect(page.locator(".quest-card")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Try / })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Accept quest", exact: true }),
+  ).toHaveCount(0);
+  expect(discoveryRequests).toEqual([]);
+  expect(await draft(page)).toEqual(before);
+  expect(await draft(page)).toMatchObject({
     category: "date_night",
     intensity: "full_send",
     group: "couple",
@@ -393,10 +355,19 @@ test("a Full Send outdoor date for two keeps every answer and finds a compatible
     durationMinutes: 180,
     setting: "outside",
   });
-  expect(run.quest.intensity).toBe("full_send");
-  expect(run.quest.minParticipants).toBeLessThanOrEqual(2);
-  expect(run.quest.maxParticipants).toBeGreaterThanOrEqual(2);
-  expect(run.quest.settings).toContain("outside");
+  await page
+    .getByRole("button", { name: "Review my answers", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Edit intensity", exact: true }),
+  ).toContainText("Full Send");
+  await expect(
+    page.getByRole("button", { name: "Edit group", exact: true }),
+  ).toContainText("Couple · 2 people");
+  await expect(
+    page.getByRole("button", { name: "Edit setting", exact: true }),
+  ).toContainText("Outside");
+  expect(await draft(page)).toEqual(before);
 });
 
 test("more quest ideas explores distinct matching families without changing the plan", async ({
@@ -436,4 +407,117 @@ test("more quest ideas explores distinct matching families without changing the 
     .locator(".quest-card .eyebrow")
     .allTextContents())
     expect(text).toContain("Chill");
+});
+
+test("ordinary questions fit a 393 by 852 iPhone with bottom actions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+  await openCreate(page);
+  for (const title of [
+    "What’s the plan?",
+    "How far are we taking this?",
+    "Who’s coming?",
+    "What’s your budget?",
+    "How much time do you have?",
+    "Where are we doing this?",
+  ]) {
+    await expect(
+      page.getByRole("heading", { name: title, exact: true }),
+    ).toBeVisible();
+    const measurements = await page.evaluate(() => ({
+      height: window.innerHeight,
+      scroll: document.documentElement.scrollHeight,
+      footer: document
+        .querySelector(".quest-flow-actions")!
+        .getBoundingClientRect().bottom,
+      nav: document.querySelector(".bottom-nav")!.getBoundingClientRect().top,
+    }));
+    expect(measurements.scroll).toBeLessThanOrEqual(measurements.height + 2);
+    expect(measurements.footer).toBeLessThan(measurements.nav);
+    expect(measurements.nav - measurements.footer).toBeLessThan(95);
+    if (title !== "Where are we doing this?")
+      await page.getByRole("button", { name: "Continue", exact: true }).click();
+  }
+});
+
+test("native travel fits above navigation and keeps town and place options accessible", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+  const client = await page.context().newCDPSession(page);
+  await client.send("Emulation.setSafeAreaInsetsOverride", {
+    insets: { top: 59, bottom: 34, left: 0, right: 0 },
+  });
+  await page.addInitScript(
+    (outing) => {
+      sessionStorage.setItem("sq-demo-started", "1");
+      if (!sessionStorage.getItem("sq-outing")) {
+        sessionStorage.setItem("sq-outing", JSON.stringify(outing));
+        sessionStorage.setItem(
+          "sq-quest-flow",
+          JSON.stringify({
+            version: 3,
+            targetId: null,
+            step: "travel",
+            editing: false,
+            confirmed: [],
+            requiredFields: [],
+          }),
+        );
+      }
+    },
+    { ...DEFAULT_OUTING, setting: "venue", area: "", applePlaceId: null },
+  );
+  await page.goto("/create");
+  await page.evaluate(() =>
+    document.documentElement.classList.add("native-app"),
+  );
+  await expect(
+    page.getByRole("heading", { name: "Where should we go?", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Use my current area", exact: true }),
+  ).toBeVisible();
+  const town = page.getByRole("button", { name: "Choose a town", exact: true });
+  await expect(town).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    page.getByRole("textbox", { name: "Town or neighborhood", exact: true }),
+  ).toHaveCount(0);
+  const measurements = await page.evaluate(() => ({
+    height: innerHeight,
+    scroll: document.documentElement.scrollHeight,
+    footer: document
+      .querySelector(".quest-flow-actions")!
+      .getBoundingClientRect().bottom,
+    nav: document.querySelector(".bottom-nav")!.getBoundingClientRect().top,
+  }));
+  expect(measurements.scroll).toBeLessThanOrEqual(measurements.height + 2);
+  expect(measurements.footer).toBeLessThan(measurements.nav);
+  await page.screenshot({ path: ".local/beta-travel-native-393.png" });
+  await page
+    .getByRole("button", { name: "Public transit", exact: true })
+    .click();
+  expect((await draft(page)).transport).toBe("transit");
+  await town.click();
+  await expect(town).toHaveAttribute("aria-expanded", "true");
+  await page
+    .getByRole("textbox", { name: "Town or neighborhood", exact: true })
+    .fill("Riverside");
+  await page.reload();
+  await expect(town).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    page.getByRole("textbox", { name: "Town or neighborhood", exact: true }),
+  ).toHaveValue("Riverside");
+  await expect(
+    page.getByRole("button", { name: "Explore this area", exact: true }),
+  ).toBeVisible();
+  const specific = page.getByRole("button", {
+    name: "Have a specific place?",
+    exact: true,
+  });
+  await expect(specific).toHaveAttribute("aria-expanded", "false");
+  await specific.click();
+  await expect(specific).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator(".apple-place-picker")).toBeVisible();
 });

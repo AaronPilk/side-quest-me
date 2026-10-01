@@ -45,9 +45,9 @@ const prefs = (patch: Partial<Preferences> = {}): Preferences => ({
 
 describe("complete authored catalog", () => {
   it("preserves original families while expanding the authored catalog", () => {
-    expect(catalog).toHaveLength(1113);
+    expect(catalog).toHaveLength(753);
     const original = catalog.slice(0, 30);
-    expect(new Set(catalog.map((q) => q.id)).size).toBe(1113);
+    expect(new Set(catalog.map((q) => q.id)).size).toBe(753);
     const families = [...new Set(original.map((q) => q.familyId))];
     expect(families).toHaveLength(10);
     for (const family of families)

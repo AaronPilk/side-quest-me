@@ -94,6 +94,7 @@ export const aiQuestDraftProposalSchema = z
     award: true,
     cooldownDays: true,
     sponsorDisclosure: true,
+    privateGenerated: true,
   })
   .required({ allowedGroups: true })
   .strict();

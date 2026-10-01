@@ -6,6 +6,17 @@ html.native-app {
 }
 .native-app body {
   min-height: 100dvh;
+  /* Fade the page's color in below the native header, so the status area and
+     header share one continuous surface even when iOS shifts focused inputs. */
+  background:
+    linear-gradient(
+      #f5f6fc 0,
+      #f5f6fc calc(env(safe-area-inset-top) + 52px),
+      transparent calc(env(safe-area-inset-top) + 200px)
+    ),
+    radial-gradient(ellipse at 10% 0%, #e9e3ff 0, transparent 42%),
+    radial-gradient(ellipse at 100% 38%, #e6edff 0, transparent 40%), #f5f6fc;
+  background-attachment: fixed;
 }
 .native-app .app-shell .brandbar {
   height: auto;
@@ -129,7 +140,7 @@ html.native-app {
 /* Input focus must never let content show through the iPhone status strip.
    The camera keeps its own dark status surface. */
 .native-app body:not(:has(.capture-overlay))::before {
-  background: #f3f3fc;
+  background: #f5f6fc;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }

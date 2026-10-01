@@ -1605,6 +1605,15 @@ export function recipeVariants(
 }
 
 /** Current recommendations use new immutable versions of the same 60 families. */
-export const activityCatalog: QuestVariant[] = activityRecipes.flatMap(
+const authoredActivityVersions: QuestVariant[] = activityRecipes.flatMap(
   (recipe) => recipeVariants(recipe, 2),
+);
+
+// These immutable versions remain available for accepted-story playback. Their
+// generic multiplier mechanics do not meet the current Full Send promise.
+export const retiredFullSendActivityCatalog = authoredActivityVersions.filter(
+  (quest) => quest.intensity === "full_send",
+);
+export const activityCatalog: QuestVariant[] = authoredActivityVersions.filter(
+  (quest) => quest.intensity !== "full_send",
 );

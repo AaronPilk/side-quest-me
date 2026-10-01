@@ -226,10 +226,6 @@ test("summary prompt copy failure is recoverable and discarding draft text never
 }) => {
   await start(page, "/profile/import");
   await expect(page).toHaveURL(/\/preferences\?returnTo=%2Faccount$/);
-  await page
-    .locator("summary")
-    .filter({ hasText: "View or manually copy the prompt" })
-    .click();
   await page.evaluate(() => {
     window.open = () =>
       ({
@@ -259,7 +255,7 @@ test("summary prompt copy failure is recoverable and discarding draft text never
   await expect(page.getByRole("alert")).toContainText(
     "Select and copy the prompt below",
   );
-  await expect(page.locator(".prompt-details pre")).not.toBeEmpty();
+  await expect(page.locator(".prompt-fallback")).not.toBeEmpty();
   await page.evaluate(() =>
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -285,42 +281,30 @@ test("summary prompt copy failure is recoverable and discarding draft text never
     ),
   ).toBe("https://chatgpt.com/");
   await page
-    .locator("summary")
-    .filter({ hasText: "I have a summary to paste" })
-    .click();
-  await page
-    .getByRole("textbox", { name: "Review what you’re sharing", exact: true })
+    .getByRole("textbox", { name: "Paste your ChatGPT summary", exact: true })
     .fill("I like games.");
   await expect(
     page.getByRole("button", { name: "Continue to preferences", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await page
     .getByRole("button", { name: "Discard unsaved edits", exact: true })
     .click();
-  await page
-    .locator("summary")
-    .filter({ hasText: "I have a summary to paste" })
-    .click();
   await expect(
     page.getByRole("textbox", {
-      name: "Review what you’re sharing",
+      name: "Paste your ChatGPT summary",
       exact: true,
     }),
   ).toHaveValue("");
   await expect(
     page.getByRole("button", {
-      name: "Save summary",
+      name: "Continue to preferences",
       exact: true,
     }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await page.reload();
-  await page
-    .locator("summary")
-    .filter({ hasText: "I have a summary to paste" })
-    .click();
   await expect(
     page.getByRole("textbox", {
-      name: "Review what you’re sharing",
+      name: "Paste your ChatGPT summary",
       exact: true,
     }),
   ).toHaveValue("");

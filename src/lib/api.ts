@@ -231,7 +231,9 @@ export const api = {
   },
   saveProfile: async (profile: Profile): Promise<void> =>
     api.updateProfile(profile),
-  quest: async (templateId: string): Promise<QuestVariant> => {
+  quest: async (
+    templateId: string,
+  ): Promise<QuestVariant & { privatePlan?: Outing }> => {
     if (!DEMO) return request(`/api/quests/${encodeURIComponent(templateId)}`);
     const quest = [
       ...catalog,

@@ -19,6 +19,10 @@ import { rememberReturnTo } from "../lib/internal-return";
 import { ApplePlacePicker, ApplePlaceCard } from "./ApplePlaces";
 import { QuestFit, useQuestFit } from "./QuestFit";
 import { Button, Chips, Notice, money } from "./ui";
+import { QuestLocationChooser } from "./QuestLocationChooser";
+import type { ApplePlace } from "../lib/apple-maps";
+import type { DiscoveryCenter } from "../lib/nearby-discovery";
+import "./quest-flow-refinements.css";
 
 type Step =
   | "scene"
@@ -152,6 +156,11 @@ export function QuestWizard({
   error,
   needsProfile,
   firstRun = false,
+  resumeQuestId,
+  center,
+  nearbyPlaces = [],
+  onAreaReady,
+  discoveryConsent,
 }: {
   outing: Outing;
   update: (patch: Partial<Outing>) => void;
@@ -165,6 +174,14 @@ export function QuestWizard({
    * onboarding (account choice, optional context, questions) instead of the
    * direct preference editor. */
   firstRun?: boolean;
+  resumeQuestId?: string;
+  center?: DiscoveryCenter;
+  nearbyPlaces?: ApplePlace[];
+  onAreaReady?: (
+    center: DiscoveryCenter | undefined,
+    places: ApplePlace[],
+  ) => void;
+  discoveryConsent?: React.ReactNode;
 }) {
   const [progress, setProgress] = useState(() =>
     restoreProgress(outing, targetId),
@@ -181,7 +198,7 @@ export function QuestWizard({
     outing,
     Object.keys(outingSchema.shape) as (keyof Outing)[],
     targetId,
-    review,
+    review && Boolean(targetId),
   );
   const adultConfirmationNeeded = Boolean(
     target?.adultOnly ||
@@ -305,7 +322,10 @@ export function QuestWizard({
         ]),
   ];
   return (
-    <div className="quest-wizard">
+    <div
+      className={`quest-wizard ${review ? "is-review" : "is-question"}`}
+      data-step={step}
+    >
       <div className="quest-flow-topline">
         <span className="eyebrow">
           {review ? "YOUR PLAN" : "CREATE YOUR QUEST"}
@@ -429,20 +449,20 @@ export function QuestWizard({
                 value={outing.budgetMinor}
                 onChange={(budgetMinor) => update({ budgetMinor })}
               />
-              <label>
-                Budget is for
-                <select
+              <fieldset className="quest-inline-choice">
+                <legend>Budget is for</legend>
+                <Chips
+                  label="Budget is for"
+                  options={[
+                    { id: "total", label: "The whole group" },
+                    { id: "per_person", label: "Each person" },
+                  ]}
                   value={outing.budgetScope}
-                  onChange={(e) =>
-                    update({
-                      budgetScope: e.target.value as Outing["budgetScope"],
-                    })
+                  onChange={(value) =>
+                    update({ budgetScope: value as Outing["budgetScope"] })
                   }
-                >
-                  <option value="total">The whole group</option>
-                  <option value="per_person">Each person</option>
-                </select>
-              </label>
+                />
+              </fieldset>
               <p className="budget-total">
                 {totalBudget ? (
                   <>
@@ -515,45 +535,51 @@ export function QuestWizard({
           )}
           {step === "travel" && (
             <>
-              <label>
-                Getting there
-                <select
-                  value={outing.transport}
-                  onChange={(e) =>
-                    update({ transport: e.target.value as Outing["transport"] })
-                  }
-                >
-                  {[
-                    { id: "none", label: "No transport needed" },
+              <fieldset className="quest-inline-choice">
+                <legend>Getting there</legend>
+                <Chips
+                  label="Getting there"
+                  options={[
+                    { id: "none", label: "Already there" },
                     { id: "walk", label: "Walking" },
                     { id: "bike", label: "Cycling" },
                     { id: "transit", label: "Public transit" },
                     { id: "car", label: "Car" },
-                  ].map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  ]}
+                  value={outing.transport}
+                  onChange={(value) =>
+                    update({ transport: value as Outing["transport"] })
+                  }
+                />
+              </fieldset>
               <div className="quest-location">
-                {outing.setting !== "home" && (
-                  <ApplePlacePicker
-                    area={outing.area}
-                    onAreaChange={(area) => update({ area })}
-                    setting={outing.setting}
-                    placeId={outing.applePlaceId}
-                    onChange={(id) =>
-                      update({
-                        applePlaceId: id,
-                        venuePermission: false,
-                        confirmedVenueCostMinor: null,
-                        arrangementConfirmed: false,
-                        adultEligible: false,
-                        adultContext: false,
-                      })
-                    }
+                {!targetId && onAreaReady ? (
+                  <QuestLocationChooser
+                    outing={outing}
+                    update={update}
+                    center={center}
+                    places={nearbyPlaces}
+                    onAreaReady={onAreaReady}
                   />
+                ) : (
+                  outing.setting !== "home" && (
+                    <ApplePlacePicker
+                      area={outing.area}
+                      onAreaChange={(area) => update({ area })}
+                      setting={outing.setting}
+                      placeId={outing.applePlaceId}
+                      onChange={(id) =>
+                        update({
+                          applePlaceId: id,
+                          venuePermission: false,
+                          confirmedVenueCostMinor: null,
+                          arrangementConfirmed: false,
+                          adultEligible: false,
+                          adultContext: false,
+                        })
+                      }
+                    />
+                  )
                 )}
               </div>
             </>
@@ -579,7 +605,26 @@ export function QuestWizard({
               ))}
             </div>
           )}
-          {review && (
+          {review &&
+            !targetId &&
+            (outing.travelMinutes > 0 || outing.travelCostMinor > 0) && (
+              <div className="quest-saved-travel">
+                <p className="support">
+                  Your saved plan reserves {outing.travelMinutes} minutes and{" "}
+                  {money(outing.travelCostMinor)} for travel.
+                </p>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() =>
+                    update({ travelMinutes: 0, travelCostMinor: 0 })
+                  }
+                >
+                  Clear saved travel estimates
+                </button>
+              </div>
+            )}
+          {review && targetId && (
             <details
               className="quest-arrangements"
               open={Boolean(
@@ -600,9 +645,7 @@ export function QuestWizard({
                 ),
               )}
             >
-              <summary>
-                More options <span>Optional</span>
-              </summary>
+              <summary>Before you start this quest</summary>
               {(outing.travelMinutes > 0 || outing.travelCostMinor > 0) && (
                 <div className="quest-saved-travel">
                   <p className="support">
@@ -733,7 +776,8 @@ export function QuestWizard({
             transport={outing.transport}
           />
         )}
-        {review && matching.fit && matching.fit.viableCount > 0 && (
+        {review && discoveryConsent}
+        {review && targetId && matching.fit && matching.fit.viableCount > 0 && (
           <QuestFit
             fit={matching.fit}
             final
@@ -742,65 +786,72 @@ export function QuestWizard({
             onEdit={() => go(steps[0], false)}
           />
         )}
-        {(validation || error) && <Notice error>{validation || error}</Notice>}
-        <div className="quest-flow-actions">
-          {(index > 0 || progress.editing) && (
-            <Button
-              type="button"
-              secondary
-              disabled={busy}
-              onClick={() =>
-                go(progress.editing ? "review" : steps[index - 1], false)
-              }
-            >
-              <ArrowLeft size={18} />
-              Back
-            </Button>
-          )}
-          <Button type="submit" busy={busy}>
-            {review
-              ? targetId
-                ? "Check this quest"
-                : "Find my quests"
-              : "Continue"}
-            <ArrowRight size={18} />
-          </Button>
-        </div>
-        <p className="fine-print centered">
-          {review
-            ? "Made for your plans. Never a pressure to spend."
-            : "You can change every answer before choosing a quest."}
-        </p>
-      </form>
-      {index === 0 && !progress.editing && (
-        <div className="quest-flow-extras">
-          {needsProfile && (
-            <Link
-              className="profile-nudge"
-              to={`${firstRun ? "/onboarding" : "/preferences"}?returnTo=${encodeURIComponent(location.pathname + location.search + location.hash)}`}
-              onClick={() =>
-                rememberReturnTo(
-                  location.pathname + location.search + location.hash,
-                )
-              }
-            >
-              <Sparkles size={18} />
-              <span>
-                Make it your kind of quest{" "}
-                <small>Add your interests for a closer fit</small>
-              </span>
-              <ChevronRight size={18} />
-            </Link>
-          )}
-          <div className="create-links">
-            <Link to="/originals/new?ai=1" state={{ outing }}>
-              Draft with AI
-            </Link>
-            <Link to="/originals/new">Draft an original quest</Link>
-            <Link to="/discover">Find inspiration</Link>
+        {index === 0 && !progress.editing && (
+          <div className="quest-flow-extras">
+            {needsProfile && (
+              <Link
+                className="profile-nudge"
+                to={`${firstRun ? "/onboarding" : "/preferences"}?returnTo=${encodeURIComponent(location.pathname + location.search + location.hash)}`}
+                onClick={() =>
+                  rememberReturnTo(
+                    location.pathname + location.search + location.hash,
+                  )
+                }
+              >
+                <Sparkles size={18} />
+                <span>
+                  Make it your kind of quest{" "}
+                  <small>Add your interests for a closer fit</small>
+                </span>
+                <ChevronRight size={18} />
+              </Link>
+            )}
+            <div className="create-links">
+              {resumeQuestId && (
+                <Link to={`/runs/${resumeQuestId}`}>Resume your quest</Link>
+              )}
+              <Link to="/originals/new?ai=1" state={{ outing }}>
+                Draft with AI
+              </Link>
+              <Link to="/originals/new">Draft an original quest</Link>
+              <Link to="/discover">Find inspiration</Link>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+        <footer className="quest-flow-footer">
+          {(validation || error) && (
+            <Notice error>{validation || error}</Notice>
+          )}
+          <div className="quest-flow-actions">
+            {(index > 0 || progress.editing) && (
+              <Button
+                type="button"
+                secondary
+                disabled={busy}
+                onClick={() =>
+                  go(progress.editing ? "review" : steps[index - 1], false)
+                }
+              >
+                <ArrowLeft size={18} />
+                Back
+              </Button>
+            )}
+            <Button type="submit" busy={busy}>
+              {review
+                ? targetId
+                  ? "Check this quest"
+                  : "Find my quests"
+                : "Continue"}
+              <ArrowRight size={18} />
+            </Button>
+          </div>
+          <p className="fine-print centered">
+            {review
+              ? "Made for your plans. Never a pressure to spend."
+              : "You can change every answer before choosing a quest."}
+          </p>
+        </footer>
+      </form>
     </div>
   );
 }
@@ -858,7 +909,7 @@ function BudgetPicker({
         <span>{money(max * 100)}</span>
       </div>
       <button
-        className="budget-exact text-button"
+        className="budget-exact button secondary"
         type="button"
         aria-expanded={exact}
         onClick={() => setExact((open) => !open)}

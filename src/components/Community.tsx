@@ -221,12 +221,17 @@ export function TryQuest({
   seriesPartId?: string;
   children?: ReactNode;
 }) {
+  const privateQuest = id.startsWith("private_");
   return (
     <Link
       className="button"
-      to={`/create?template=${encodeURIComponent(id)}${postId ? `&from=${encodeURIComponent(postId)}` : ""}${seriesPartId ? `&seriesPart=${encodeURIComponent(seriesPartId)}` : ""}`}
+      to={
+        privateQuest
+          ? "/create"
+          : `/create?template=${encodeURIComponent(id)}${postId ? `&from=${encodeURIComponent(postId)}` : ""}${seriesPartId ? `&seriesPart=${encodeURIComponent(seriesPartId)}` : ""}`
+      }
     >
-      {children}
+      {privateQuest ? "Find my own quest" : children}
       <ArrowRight size={18} />
     </Link>
   );

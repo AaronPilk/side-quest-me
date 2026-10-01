@@ -526,3 +526,138 @@
   margin-top: 4px;
   line-height: 1.4;
 }
+
+/* Size the journey to the available phone viewport, with actions in one steady
+   bottom position. Content can still grow for the keyboard or larger text. */
+.app-shell:has(.preferences-journey) {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.app-shell:has(.preferences-journey) .brandbar {
+  flex: 0 0 auto;
+}
+.app-shell:has(.preferences-journey) main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 20px calc(12px + env(safe-area-inset-bottom));
+}
+.preferences-journey {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+}
+.preferences-journey > * {
+  flex-shrink: 0;
+}
+.preferences-journey .onboard-top {
+  margin-bottom: 14px;
+  min-height: 44px;
+}
+.preferences-journey .survey-progress {
+  margin-bottom: 14px;
+}
+.preferences-journey > .page-title,
+.preferences-journey .preference-question-panel .page-title {
+  margin-bottom: 16px;
+}
+.preferences-journey .page-title h1,
+.preferences-journey .preference-question-panel h1 {
+  font-size: 1.6rem;
+  line-height: 1.14;
+}
+.preferences-journey .page-title p {
+  font-size: 0.84rem;
+  line-height: 1.4;
+  margin-top: 10px;
+}
+.preferences-journey .survey-footer {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  padding-top: 14px;
+  background: var(--canvas);
+  z-index: 2;
+}
+.preferences-journey .survey-footer > .button {
+  min-height: 48px;
+}
+.native-app .app-shell:has(.preferences-journey) .brandbar {
+  min-height: calc(50px + env(safe-area-inset-top));
+  padding-top: calc(5px + env(safe-area-inset-top));
+  padding-bottom: 8px;
+}
+.native-app .app-shell:has(.preferences-journey) main {
+  padding-top: 8px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
+.preferences-account .account-type-choice {
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.preferences-account .account-type-choice legend {
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+}
+.preferences-account .account-type-choice label {
+  padding: 14px;
+  gap: 12px;
+  border-radius: 24px;
+  font-size: 0.85rem;
+}
+.preferences-account .account-type-choice small {
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+.preferences-account .preference-nickname {
+  margin: 10px 0 16px;
+  font-size: 0.85rem;
+}
+.preferences-account .preference-nickname input {
+  min-height: 48px;
+}
+.preferences-journey .summary-guided {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.summary-guided .chatgpt-prompt-card {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.summary-guided .chatgpt-prompt-card .support {
+  margin: 8px 0 0;
+}
+.summary-guided .summary-paste-panel {
+  margin: 18px 0 12px;
+  padding: 0;
+  border: 0;
+}
+.summary-guided .summary-paste-panel label {
+  margin-top: 0;
+}
+.summary-guided .summary-paste-panel textarea {
+  min-height: 140px;
+  max-height: 200px;
+}
+.summary-guided .summary-actions:empty {
+  display: none;
+}
+.summary-guided .summary-actions > .text-button,
+.summary-guided .summary-paste-panel > .text-button {
+  font-size: 0.72rem;
+  margin: 0;
+  min-height: 44px;
+}
+.summary-guided .chatgpt-prompt-card .notice {
+  margin-block: 10px;
+  padding: 12px;
+  font-size: 0.75rem;
+}
+.preferences-journey .summary-guided .survey-footer {
+  margin-top: auto;
+}

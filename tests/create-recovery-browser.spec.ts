@@ -148,12 +148,8 @@ test("Daytime Bold for a couple with $25 and one hour at home finds a real quest
       exact: true,
     }),
   ).toBeVisible();
-  await expect(page.locator(".quest-arrangements")).not.toHaveAttribute(
-    "open",
-    "",
-  );
-  await page.locator(".quest-arrangements summary").click();
-  await expect(page.getByRole("checkbox").first()).not.toBeChecked();
+  await expect(page.locator(".quest-arrangements")).toHaveCount(0);
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
   await reviewQuestPlans(page);
   const expected = {
     category: "daytime",

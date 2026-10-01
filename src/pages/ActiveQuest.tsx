@@ -306,7 +306,9 @@ function ActiveQuestRun({ id }: { id: string }) {
                 : "Quest complete"}
             </h2>
             <p>
-              {run.rewardDecision?.xp
+              {run.quest.privateGenerated
+                ? "Saved for your story. Private generated quests don’t award XP or points."
+                : run.rewardDecision?.xp
                 ? `+${run.rewardDecision.xp} XP · +${run.rewardDecision.points} points`
                 : run.rewardDecision?.reason === "family_cooldown"
                   ? "Saved for the story. This family is on a 30-day reward cooldown."

@@ -1,0 +1,230 @@
+.quest-wizard {
+  min-height: calc(
+    100dvh - 206px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+  );
+  display: flex;
+  flex-direction: column;
+}
+.quest-wizard > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0;
+}
+.quest-wizard .quest-flow-progress {
+  margin-bottom: 20px;
+}
+.quest-wizard .quest-question {
+  margin-bottom: 20px;
+}
+.quest-wizard .quest-question h1 {
+  font-size: clamp(1.65rem, 6.8vw, 2.3rem);
+  line-height: 1.12;
+}
+.quest-wizard .quest-question p {
+  margin-top: 10px;
+  font-size: 0.94rem;
+  line-height: 1.45;
+}
+.quest-wizard .quest-choice {
+  min-height: 72px;
+  padding: 12px 16px;
+  gap: 12px;
+  border-radius: 32px;
+}
+.quest-wizard .quest-choice small {
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.quest-wizard .quest-choice strong {
+  margin-bottom: 3px;
+}
+.quest-wizard .quest-answer .chip {
+  border-radius: 999px;
+  min-height: 50px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+.quest-wizard .quest-answer .category {
+  min-height: 76px;
+}
+.quest-wizard .quest-answer .category:nth-child(n + 4) {
+  min-height: 52px;
+}
+.quest-wizard .quest-flow-footer {
+  margin-top: auto;
+  padding-top: 20px;
+}
+.quest-wizard .quest-flow-actions {
+  margin-top: 0;
+  flex-wrap: nowrap;
+}
+.quest-wizard .quest-flow-actions .button {
+  min-height: 50px;
+  padding-block: 12px;
+}
+.quest-wizard .quest-flow-footer > .fine-print {
+  margin: 10px 0 0;
+  font-size: 0.68rem;
+}
+.quest-wizard .quest-flow-extras {
+  margin-top: 20px;
+}
+.quest-wizard .quest-flow-extras .profile-nudge {
+  padding: 8px 0;
+  margin: 0 0 12px;
+  font-size: 0.84rem;
+}
+.quest-wizard .quest-flow-extras .profile-nudge small {
+  font-size: 0.72rem;
+}
+.quest-wizard .quest-flow-extras .create-links {
+  gap: 8px 16px;
+  font-size: 0.72rem;
+}
+.quest-wizard .quest-inline-choice {
+  border: 0;
+  padding: 0;
+  margin: 14px 0 0;
+  min-width: 0;
+}
+.quest-wizard .quest-inline-choice legend {
+  margin-bottom: 10px;
+  padding: 0;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+.quest-wizard .quest-inline-choice .chips[aria-label="Getting there"] {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 8px;
+  padding: 2px 2px 6px;
+  scroll-padding-inline: 2px;
+}
+.quest-wizard .quest-inline-choice .chips[aria-label="Getting there"] .chip {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.quest-wizard .quest-location:has(.quest-area-choice) {
+  margin-top: 14px;
+  padding-top: 14px;
+}
+.quest-wizard .budget-exact.button {
+  margin: 14px auto 18px;
+  width: auto;
+  min-height: 44px;
+  padding: 10px 20px;
+  font-size: 0.8rem;
+}
+.quest-wizard .budget-amount output {
+  font-size: 2.5rem;
+}
+.quest-wizard .budget-total {
+  margin-top: 14px;
+  font-size: 0.75rem;
+}
+.quest-area-choice {
+  margin-top: 0;
+}
+.quest-area-choice > .support {
+  font-size: 0.85rem;
+}
+.quest-area-choice .quest-area-ready {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  color: var(--success, #28644b);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.quest-area-choice .quest-area-ready svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.quest-area-choice .specific-place-toggle {
+  font-size: 0.82rem;
+  text-align: left;
+  justify-content: flex-start;
+}
+.quest-area-alternatives {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+  margin-top: 4px;
+}
+.quest-area-alternatives .text-button {
+  width: auto;
+  min-height: 44px;
+  margin: 0;
+  padding-inline: 0;
+  font-size: 0.8rem;
+  text-align: left;
+}
+.quest-area-choice > .fine-print {
+  margin: 6px 0 0;
+  font-size: 0.73rem;
+}
+.quest-area-choice > label {
+  margin-top: 8px;
+}
+.quest-wizard.is-review .quest-flow-footer {
+  margin-top: 20px;
+}
+.quest-discovery-consent {
+  margin: 18px 0 0;
+  border-radius: 24px;
+  padding: 16px;
+  background: var(--action-soft);
+}
+.quest-discovery-consent .check-row {
+  border: 0;
+  padding: 0;
+  gap: 12px;
+  font-size: 0.86rem;
+  align-items: flex-start;
+}
+.quest-discovery-consent .fine-print {
+  margin: 8px 0 0;
+  font-size: 0.73rem;
+}
+.quest-generated-plan {
+  border: 1px solid var(--divider);
+  border-radius: 24px;
+  padding: 18px;
+  margin: 18px 0;
+}
+.quest-generated-plan h3 {
+  margin: 0 0 12px;
+}
+.quest-generated-plan .check-row {
+  font-size: 0.88rem;
+  gap: 12px;
+}
+.quest-generated-plan .check-row input {
+  flex-shrink: 0;
+}
+.quest-generated-plan .support {
+  font-size: 0.84rem;
+}
+@media (max-height: 780px) {
+  .quest-wizard .quest-flow-progress {
+    margin-bottom: 14px;
+  }
+  .quest-wizard .quest-question {
+    margin-bottom: 16px;
+  }
+  .quest-wizard .quest-choice {
+    min-height: 66px;
+    padding-block: 10px;
+  }
+  .quest-wizard .quest-flow-extras {
+    margin-top: 12px;
+  }
+  .quest-wizard .quest-flow-footer {
+    padding-top: 16px;
+  }
+}

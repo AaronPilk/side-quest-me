@@ -24,10 +24,28 @@ export async function runSocialTests(sql) {
     sql(
       `select sq_social_read(${actor ? q(actor) : "null"},${q(target)});`,
     ).then(JSON.parse);
+  const readOnly = (query) => sql(`begin read only;\n${query}\ncommit;`);
+  const readOnlySocial = (actor, target) =>
+    readOnly(
+      `select sq_social_read(${actor ? q(actor) : "null"},${q(target)});`,
+    ).then(JSON.parse);
   const follow = (actor, target, following = true) =>
     sql(`select sq_social_follow(${q(actor)},${q(target)},${following});`).then(
       JSON.parse,
     );
+  assert.deepEqual(
+    await readOnlySocial(first, first),
+    {
+      creatorId: first,
+      username: null,
+      photoUrl: null,
+      followersCount: 0,
+      followingCount: 0,
+      isFollowing: false,
+      isOwn: true,
+    },
+    "A fresh account can read its own social details in a PostgREST read-only transaction",
+  );
   await save(first, input("first_creator"));
   await save(second, input("second_creator"));
   await assert.rejects(
@@ -48,6 +66,9 @@ export async function runSocialTests(sql) {
   assert.equal((await read(first, first)).followingCount, 1);
   assert.equal((await read(first, second)).isFollowing, true);
   assert.equal((await read(null, second)).isFollowing, false);
+  assert.equal((await readOnlySocial(first, first)).followingCount, 1);
+  assert.equal((await readOnlySocial(first, second)).isFollowing, true);
+  assert.equal((await readOnlySocial(null, second)).followersCount, 1);
   await assert.rejects(() => follow(first, first), /self_follow/);
   await follow(first, second, false);
   assert.equal((await read(null, second)).followersCount, 0);
@@ -63,6 +84,7 @@ export async function runSocialTests(sql) {
     "0",
   );
   await assert.rejects(() => read(first, second), /not_found/);
+  await assert.rejects(() => readOnlySocial(first, second), /not_found/);
   await assert.rejects(() => follow(second, first), /not_found/);
   await sql(`delete from community_blocks where owner_id=${q(first)};`);
   assert.equal(
@@ -73,6 +95,11 @@ export async function runSocialTests(sql) {
   const photo1 = `avatars/${first}/${randomUUID()}.png`,
     photo2 = `avatars/${first}/${randomUUID()}.png`;
   await sql(`select sq_social_photo(${q(first)},${q(photo1)});`);
+  assert.equal(
+    await readOnly(`select sq_social_photo_key(${q(second)},${q(first)});`),
+    photo1,
+    "Authenticated photo lookup remains read-only compatible",
+  );
   const dto = await read(null, first);
   assert.match(dto.photoUrl, new RegExp(`/api/social/photo/${first}`));
   assert.ok(!JSON.stringify(dto).includes("avatars/"));
@@ -110,6 +137,11 @@ export async function runSocialTests(sql) {
     `update profiles set account_status='deleting' where id=${q(first)};`,
   );
   await assert.rejects(() => read(null, first), /not_found/);
+  await assert.rejects(
+    () => readOnlySocial(first, second),
+    /account_unavailable/,
+  );
+  await assert.rejects(() => readOnlySocial(second, first), /not_found/);
   assert.equal((await read(null, second)).followersCount, 0);
   assert.equal(
     await sql(

@@ -35,7 +35,10 @@ function app() {
   const a = new Hono<AppBindings>();
   a.onError((e, c) =>
     c.json(
-      { error: e instanceof ApiError ? e.code : "invalid_input" },
+      {
+        error: e instanceof ApiError ? e.code : "invalid_input",
+        message: e instanceof ApiError ? e.message : "Invalid input.",
+      },
       e instanceof ApiError ? e.status : e instanceof z.ZodError ? 422 : 503,
     ),
   );
@@ -68,6 +71,131 @@ it("anonymous social metadata uses the public-safe RPC without inventing a viewe
   expect(state.rpc).toHaveBeenCalledWith("sq_social_read", {
     p_actor: null,
     p_target: actor,
+  });
+});
+it("classifies social read failures as retryable loading failures without exposing database details", async () => {
+  state.rpc.mockResolvedValue({
+    data: null,
+    error: {
+      message:
+        "cannot execute SELECT FOR SHARE in a read-only transaction PRIVATE_DATABASE_CONTEXT",
+    },
+  });
+  for (const path of ["/api/social/me", `/api/social/profile/${actor}`]) {
+    const result = await app().request(
+      path,
+      { headers: { Authorization: "Bearer valid" } },
+      env,
+    );
+    expect(result.status).toBe(503);
+    expect(await result.json()).toEqual({
+      error: "social_read_failed",
+      message: "Profile details could not be loaded. Please try again.",
+    });
+  }
+});
+it("keeps save, follow and photo lookup failures distinct from profile loading", async () => {
+  state.rpc.mockResolvedValue({
+    data: null,
+    error: { message: "database unavailable" },
+  });
+  const cases = [
+    {
+      path: "/api/social/profile",
+      method: "POST",
+      body: {
+        username: "creator_name",
+        displayName: "Creator",
+        avatarKey: "coral",
+        bio: "",
+        openToBrands: false,
+        expectedVersion: 0,
+      },
+      error: "social_failed",
+      message: "Your profile could not be saved. Please try again.",
+    },
+    {
+      path: "/api/social/follow",
+      method: "POST",
+      body: {
+        targetId: "22222222-2222-4222-8222-222222222222",
+        following: true,
+      },
+      error: "social_follow_failed",
+      message: "Your follow preference could not be saved. Please try again.",
+    },
+    {
+      path: `/api/social/photo/${actor}`,
+      method: "GET",
+      error: "social_photo_read_failed",
+      message: "This profile photo could not be loaded. Please try again.",
+    },
+    {
+      path: "/api/social/photo",
+      method: "DELETE",
+      error: "social_photo_failed",
+      message: "Your profile photo could not be saved. Please try again.",
+    },
+  ];
+  for (const { path, method, body, error, message } of cases) {
+    const result = await app().request(
+      path,
+      {
+        method,
+        headers: {
+          Authorization: "Bearer valid",
+          "Content-Type": "application/json",
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      },
+      env,
+    );
+    expect(result.status).toBe(503);
+    expect(await result.json()).toEqual({ error, message });
+  }
+});
+it("retains known unavailable and username-conflict responses", async () => {
+  state.rpc.mockResolvedValue({
+    data: null,
+    error: { message: "account_unavailable" },
+  });
+  const unavailable = await app().request(
+    "/api/social/me",
+    { headers: { Authorization: "Bearer valid" } },
+    env,
+  );
+  expect(unavailable.status).toBe(404);
+  expect(await unavailable.json()).toEqual({
+    error: "not_found",
+    message: "This creator is unavailable.",
+  });
+  state.rpc.mockResolvedValue({
+    data: null,
+    error: { message: "username_taken" },
+  });
+  const conflict = await app().request(
+    "/api/social/profile",
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer valid",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        username: "creator_name",
+        displayName: "Creator",
+        avatarKey: "coral",
+        bio: "",
+        openToBrands: false,
+        expectedVersion: 0,
+      }),
+    },
+    env,
+  );
+  expect(conflict.status).toBe(409);
+  expect(await conflict.json()).toEqual({
+    error: "username_taken",
+    message: "That username is already taken. Try another.",
   });
 });
 it("uploads a bounded raster under the authenticated owner and removes uncommitted objects on DB failure", async () => {

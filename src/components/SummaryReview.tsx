@@ -30,7 +30,7 @@ export default function SummaryReview({
   useEffect(() => {
     onPendingChange?.({ dirty: changed, busy });
   }, [changed, busy, onPendingChange]);
-  async function save(remove = false) {
+  async function save(remove = false): Promise<boolean> {
     setBusy(true);
     setError("");
     setMessage("");
@@ -44,8 +44,10 @@ export default function SummaryReview({
           ? "Summary removed. Your confirmed answers are unchanged."
           : "Summary saved. Confirm what fits in the questions next.",
       );
+      return true;
     } catch (cause) {
       setError((cause as Error).message);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -53,16 +55,11 @@ export default function SummaryReview({
   return (
     <div className="summary-review summary-guided">
       <ChatGPTPrompt />
-      <details className="summary-paste-panel" open={!!summary || undefined}>
-        <summary>
-          {profile.summary
-            ? "Review your saved summary"
-            : "I have a summary to paste"}
-        </summary>
+      <div className="summary-paste-panel">
         <label>
-          Review what you’re sharing
+          Paste your ChatGPT summary
           <textarea
-            rows={5}
+            rows={4}
             maxLength={3000}
             value={summary}
             disabled={busy}
@@ -71,25 +68,28 @@ export default function SummaryReview({
           />
         </label>
         <p className="support">
-          This is a manual review: text alone never becomes a preference. Only
-          the answers you confirm guide your quests.
+          Optional. Only the answers you confirm next guide your quests.
         </p>
         <div className="summary-actions">
-          <Button
-            secondary
-            busy={busy}
-            disabled={!changed}
-            onClick={() => void save()}
-          >
-            Save summary
-          </Button>
-          <button
-            className="text-button danger"
-            disabled={busy || !profile.summary}
-            onClick={() => void save(true)}
-          >
-            Remove saved summary
-          </button>
+          {!onContinue && (
+            <Button
+              secondary
+              busy={busy}
+              disabled={!changed}
+              onClick={() => void save()}
+            >
+              Save summary
+            </Button>
+          )}
+          {profile.summary && (
+            <button
+              className="text-button danger"
+              disabled={busy || !profile.summary}
+              onClick={() => void save(true)}
+            >
+              Remove saved summary
+            </button>
+          )}
         </div>
         {changed && (
           <button
@@ -104,23 +104,20 @@ export default function SummaryReview({
             Discard unsaved edits
           </button>
         )}
-      </details>
+      </div>
       {message && <Notice>{message}</Notice>}
       {error && <Notice error>{error}</Notice>}
       {onContinue && (
         <div className="survey-footer">
-          <Button disabled={busy || changed} onClick={onContinue}>
+          <Button
+            busy={busy}
+            onClick={async () => {
+              if (!changed || (await save())) onContinue();
+            }}
+          >
             Continue to preferences <ArrowRight size={18} />
           </Button>
-          <p className="support">
-            No ChatGPT account? Answer the questions yourself. The summary is
-            optional.
-          </p>
-          {changed && (
-            <p className="support">
-              Save or discard your summary edits before continuing.
-            </p>
-          )}
+          <p className="support">You can continue without a summary.</p>
         </div>
       )}
     </div>

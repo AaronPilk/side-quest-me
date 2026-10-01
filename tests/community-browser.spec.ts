@@ -122,7 +122,16 @@ test("mobile discovery creates a separate personal attempt, keeps the reel priva
     .getByRole("button", { name: "Record or import video", exact: true })
     .click();
   const capture = page.getByRole("dialog", { name: "Record your quest" });
+  // Wait for capture initialization before setting the file input: Playwright
+  // can set a disabled input while the local draft and camera are still loading.
+  await expect(
+    capture.getByRole("button", { name: "Hold to record", exact: true }),
+  ).toBeEnabled();
+  await expect(capture.getByLabel("Import video")).toBeEnabled();
   await capture.getByLabel("Import video").setInputFiles(fixtureVideo);
+  await expect(
+    capture.getByRole("button", { name: "Save video", exact: true }),
+  ).toBeEnabled();
   await capture
     .getByRole("button", { name: "Save video", exact: true })
     .click();

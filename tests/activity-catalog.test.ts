@@ -5,6 +5,7 @@ import {
   activityCatalog,
   activityRecipes,
   historicalActivityCatalog,
+  retiredFullSendActivityCatalog,
 } from "../shared/activity-recipes";
 import { catalog } from "../shared/catalog";
 import {
@@ -12,12 +13,10 @@ import {
   INTENSITIES,
   DEFAULT_OUTING,
   DEFAULT_PREFERENCES,
-  candidateSchema,
   type Outing,
   type Preferences,
 } from "../shared/domain";
 import { ineligibilityReasons, recommend } from "../shared/recommend";
-import { assessViability } from "../shared/viability";
 
 const now = new Date("2026-09-30T12:00:00Z");
 const plan = (patch: Partial<Outing> = {}): Outing => ({
@@ -35,16 +34,16 @@ const rows = (sql: string) =>
     .map((line) => line.replace(/,$/, ""));
 
 describe("authored activity expansion", () => {
-  it("contains 60 recipes, 360 distinct briefs, and 1080 complete intensity variants", () => {
+  it("contains 60 recipes, 360 distinct briefs, and 720 current variants and 360 retired Full Send versions", () => {
     expect(activityRecipes).toHaveLength(60);
     expect(new Set(activityRecipes.map((recipe) => recipe.id)).size).toBe(60);
-    expect(activityCatalog).toHaveLength(1080);
+    expect(activityCatalog).toHaveLength(720);
     expect(new Set(activityCatalog.map((quest) => quest.title)).size).toBe(360);
     for (const recipe of activityRecipes) {
       const variants = activityCatalog.filter(
         (quest) => quest.familyId === `activity_${recipe.id}`,
       );
-      expect(variants).toHaveLength(18);
+      expect(variants).toHaveLength(12);
       expect(new Set(variants.map((quest) => quest.hook)).size).toBe(6);
       for (const quest of variants) {
         expect(quest.arrangementRequired).toBe(false);
@@ -100,7 +99,7 @@ describe("authored activity expansion", () => {
     const old = historicalActivityCatalog.find(
       (quest) => quest.id === "activity_date_memory_map_alpha_full_send_v1",
     )!;
-    const current = activityCatalog.find(
+    const current = retiredFullSendActivityCatalog.find(
       (quest) => quest.id === "activity_date_memory_map_alpha_full_send_v2",
     )!;
     expect(old.title).toBe("The first time you laughed together");
@@ -118,48 +117,37 @@ describe("authored activity expansion", () => {
     expect(old.beats[1].action).not.toContain("first partner leads stop one");
   });
 
-  it("satisfies the reported Full Send, couple, outdoors plan without changing a single choice", () => {
-    for (const budgetMinor of [0, 10000]) {
-      for (const durationMinutes of [60, 180, 300, null]) {
-        const outing = plan({
-          intensity: "full_send",
-          setting: "outside",
-          budgetMinor,
-          durationMinutes,
-        });
-        const before = structuredClone(outing);
-        const choices = recommend(outing, profile(), [], now);
-        expect(choices).toHaveLength(3);
-        expect(outing).toEqual(before);
-        for (const quest of choices) {
-          expect(candidateSchema.safeParse(quest).success).toBe(true);
-          expect(quest.category).toBe("date_night");
-          expect(quest.intensity).toBe("full_send");
-          expect(quest.minParticipants).toBeLessThanOrEqual(2);
-          expect(quest.maxParticipants).toBeGreaterThanOrEqual(2);
-          expect(quest.settings).toContain("outside");
-          expect(quest.arrangementRequired).toBe(false);
-          expect(quest.estimatedCostMaxMinor).toBe(0);
-          expect(quest.selectedRole).toBeNull();
-          expect(quest.whyFits.join(" ")).not.toMatch(
-            /your (?:interest|skills|preference)|rotate roles/i,
-          );
-          expect(ineligibilityReasons(quest, outing, profile())).toEqual([]);
-        }
-        expect(
-          assessViability(
-            outing,
-            profile(),
-            Object.keys(outing) as (keyof Outing)[],
-          ).recoveries,
-        ).toEqual([]);
-      }
-    }
+  it("does not inflate ordinary recipes into Full Send and preserves their accepted versions", () => {
+    expect(retiredFullSendActivityCatalog).toHaveLength(360);
+    expect(
+      activityCatalog.some((quest) => quest.intensity === "full_send"),
+    ).toBe(false);
+    const choices = recommend(
+      plan({
+        intensity: "full_send",
+        setting: "outside",
+        durationMinutes: null,
+        budgetMinor: 10000,
+      }),
+      profile(),
+      [],
+      now,
+    );
+    expect(
+      choices.every((quest) => !quest.familyId.startsWith("activity_")),
+    ).toBe(true);
+    expect(
+      retiredFullSendActivityCatalog.some((quest) =>
+        /sound|color/i.test(quest.title),
+      ),
+    ).toBe(true);
   });
 
   it("covers every scene and intensity outdoors for a couple at zero cost within an hour", () => {
     for (const { id: category } of CATEGORIES) {
-      for (const { id: intensity } of INTENSITIES) {
+      for (const { id: intensity } of INTENSITIES.filter(
+        ({ id }) => id !== "full_send",
+      )) {
         for (const participants of [2, 4, 6, 8]) {
           const outing = plan({
             category,
@@ -183,7 +171,9 @@ describe("authored activity expansion", () => {
       }
     }
     for (const category of ["daytime", "late_night", "demon"] as const) {
-      for (const { id: intensity } of INTENSITIES) {
+      for (const { id: intensity } of INTENSITIES.filter(
+        ({ id }) => id !== "full_send",
+      )) {
         const choices = recommend(
           plan({ category, intensity, group: "solo", participants: 1 }),
           profile(),
@@ -215,7 +205,7 @@ describe("authored activity expansion", () => {
     expect(recommend(freeVenue, profile(), [], now)).toEqual([]);
     const outing = plan({
       category: "demon",
-      intensity: "full_send",
+      intensity: "bold",
       setting: "outside",
     });
     const prefs = profile({
@@ -237,7 +227,7 @@ describe("authored activity expansion", () => {
     const performance = activityCatalog.find(
       (quest) =>
         quest.familyId === "activity_demon_object_debate" &&
-        quest.intensity === "full_send",
+        quest.intensity === "bold",
     )!;
     expect(ineligibilityReasons(performance, outing, prefs)).toContain(
       "This quest conflicts with a boundary in your profile.",
@@ -245,7 +235,7 @@ describe("authored activity expansion", () => {
   });
 
   it("uses confirmed interests and skills to change actual matches with truthful explanations", () => {
-    const outing = plan({ category: "late_night", intensity: "full_send" });
+    const outing = plan({ category: "late_night", intensity: "bold" });
     const music = recommend(outing, profile({ interests: ["music"] }), [], now);
     const games = recommend(outing, profile({ skills: ["games"] }), [], now);
     expect(music[0].interests).toContain("music");
@@ -256,7 +246,7 @@ describe("authored activity expansion", () => {
   });
 
   it("rotates task briefs deterministically while retaining one cooldown family", () => {
-    const outing = plan({ intensity: "full_send", setting: "outside" });
+    const outing = plan({ intensity: "bold", setting: "outside" });
     const family = activityCatalog.filter(
       (quest) => quest.familyId === "activity_date_photo_duet",
     );

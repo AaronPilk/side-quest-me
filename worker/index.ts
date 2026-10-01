@@ -19,6 +19,11 @@ import { nearbyQuerySchema } from "../shared/events";
 import { searchNearbyEvents } from "./events";
 import { publishedQuests } from "./catalog";
 import { registerAiQuestPublic, registerAiQuestPrivate } from "./ai-quest";
+import {
+  registerExperienceDiscovery,
+  privateExperience,
+  validatePrivateAcceptance,
+} from "./experience-discovery";
 import { recommend, ineligibilityReasons } from "../shared/recommend";
 import {
   ApiError,
@@ -173,6 +178,15 @@ app.post("/api/events/nearby", async (c) => {
 });
 registerAiQuestPublic(app);
 app.get("/api/quests/:templateId", async (c) => {
+  if (c.req.param("templateId").startsWith("private_")) {
+    await authenticate(c);
+    const owned = await privateExperience(c, c.req.param("templateId"));
+    return c.json({
+      ...owned.quest,
+      privatePlan: owned.proposal.outing,
+      privateLocation: owned.proposal.location,
+    });
+  }
   const db = serviceDb(c.env);
   let query = db
     .from("quest_templates")
@@ -197,7 +211,7 @@ app.use("/api/*", async (c, next) => {
     COMMUNITY_PRIVATE_ROUTE,
     SOCIAL_PRIVATE_ROUTE,
     SERIES_PRIVATE_ROUTE,
-    /^\/api\/(me|wallet|quests|quests\/recommend|quests\/viability|quests\/ai-assist|quests\/ai-draft|quest-runs|quest-runs\/active|rewards|redemptions|operator)$/,
+    /^\/api\/(me|wallet|quests|quests\/recommend|quests\/viability|quests\/discover|quests\/ai-assist|quests\/ai-draft|quest-runs|quest-runs\/active|rewards|redemptions|operator)$/,
     /^\/api\/quest-runs\/[^/]+(?:\/(abandon|uploads|clips|compose|complete|renders|share|share-links|media))?$/,
     /^\/api\/media\/[^/]+(?:\/(upload|finalize|playback))?$/,
     /^\/api\/render-jobs\/[^/]+$/,
@@ -260,6 +274,7 @@ registerCommunityPrivate(app);
 registerSocialPrivate(app);
 registerSeriesPrivate(app);
 registerAiQuestPrivate(app);
+registerExperienceDiscovery(app);
 async function me(c: AppContext) {
   const db = c.get("serviceDb");
   const init = await db.rpc("sq_upsert_profile", {
@@ -355,13 +370,17 @@ app.post("/api/quests/viability", async (c) => {
   );
   const [current, published] = await Promise.all([
     me(c),
-    publishedQuests(c.get("userDb"), {
-      templateId,
-      ...(confirmed.includes("category") ? { category: outing.category } : {}),
-      ...(confirmed.includes("intensity")
-        ? { intensity: outing.intensity }
-        : {}),
-    }),
+    templateId?.startsWith("private_")
+      ? privateExperience(c, templateId).then(({ quest }) => [quest])
+      : publishedQuests(c.get("userDb"), {
+          templateId,
+          ...(confirmed.includes("category")
+            ? { category: outing.category }
+            : {}),
+          ...(confirmed.includes("intensity")
+            ? { intensity: outing.intensity }
+            : {}),
+        }),
   ]);
   return c.json(
     assessViability(outing, current.profile.preferences, confirmed, published),
@@ -380,6 +399,26 @@ app.post("/api/quests/recommend", async (c) => {
       .strict(),
   );
   const profile = (await me(c)).profile;
+  if (templateId?.startsWith("private_")) {
+    const { quest } = await privateExperience(c, templateId);
+    return c.json(
+      recommend(
+        outing,
+        profile.preferences,
+        [],
+        new Date(),
+        [quest],
+        offset,
+        placeContext,
+      ).map((candidate) => ({
+        ...candidate,
+        rewardEligibility: {
+          eligible: false,
+          reason: "private_generated" as const,
+        },
+      })),
+    );
+  }
   const published = await publishedQuests(c.get("userDb"), {
     templateId,
     category: outing.category,
@@ -457,6 +496,35 @@ app.post("/api/quest-runs", async (c) => {
       .strict(),
   );
   const current = await me(c);
+  if (input.templateId.startsWith("private_")) {
+    if (input.inspiredByPostId || input.expectedCampaign)
+      throw new ApiError(
+        "invalid_private_proposal",
+        "A private experience cannot claim sponsorship or another person’s public post.",
+        409,
+      );
+    const quest = await validatePrivateAcceptance(
+      c,
+      input.templateId,
+      input.outing,
+      current.profile.preferences || DEFAULT_PREFERENCES,
+      input.seriesPartId,
+    );
+    const result = await rpc(c, "sq_accept_private_run", {
+      series_part_id: input.seriesPartId,
+      template_id: input.templateId,
+      outing: {
+        ...input.outing,
+        role:
+          current.profile.preferences.role &&
+          quest.roles.includes(current.profile.preferences.role)
+            ? current.profile.preferences.role
+            : null,
+      },
+      expected_campaign: null,
+    });
+    return c.json(await runDto(c, result.run));
+  }
   const { data: t, error } = await c
     .get("userDb")
     .from("quest_templates")

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { catalog } from "../shared/catalog";
+import { retiredFullSendActivityCatalog } from "../shared/activity-recipes";
 import {
   DEFAULT_OUTING,
   DEFAULT_PREFERENCES,
@@ -38,7 +39,8 @@ const outing = {
   travelMinutes: 15,
   travelCostMinor: 500,
 };
-const fitting = catalog.find(
+// Frozen historical prose is a transport/validation fixture, not a current recommendation or live quality approval.
+const fitting = [...catalog, ...retiredFullSendActivityCatalog].find(
   (quest) => !ineligibilityReasons(quest, outing, DEFAULT_PREFERENCES).length,
 )!;
 const {

@@ -23,7 +23,8 @@ export const INTENSITIES = [
   {
     id: "full_send",
     label: "Full Send",
-    description: "Go all in on the challenge. Build up to a memorable reveal.",
+    description:
+      "Big commitment. Real competition or a serious first-time adventure.",
   },
 ] as const;
 export const categorySchema = z.enum([
@@ -380,7 +381,11 @@ export const beatSchema = z
   .strict();
 export const questVariantSchema = z
   .object({
-    id: z.string().regex(/^[a-z_]+_v\d+$/),
+    id: z
+      .string()
+      .regex(
+        /^(?:[a-z_]+_v\d+|private_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/,
+      ),
     familyId: z.string().regex(/^[a-z_]+$/),
     variantKey: z
       .string()
@@ -393,6 +398,7 @@ export const questVariantSchema = z
     title: boundedText(100),
     hook: boundedText(260),
     sponsorDisclosure: boundedText(120).optional(),
+    privateGenerated: z.literal(true).optional(),
     durationMinutes: z.number().int().min(15).max(720),
     minParticipants: z.number().int().min(1),
     maxParticipants: z.number().int().max(12),
@@ -448,9 +454,27 @@ export const questVariantSchema = z
         path: ["cost"],
         message: "Invalid cost bounds",
       });
+    if (quest.id.startsWith("private_") && !quest.privateGenerated)
+      ctx.addIssue({
+        code: "custom",
+        path: ["privateGenerated"],
+        message: "Private IDs require private-generated metadata.",
+      });
     if (
-      quest.award.xp !== AWARDS[quest.intensity].xp ||
-      quest.award.points !== AWARDS[quest.intensity].points
+      quest.privateGenerated &&
+      (!quest.id.startsWith("private_") ||
+        !quest.familyId.startsWith("private_"))
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["privateGenerated"],
+        message: "Private quests need server-issued identity",
+      });
+    if (
+      quest.award.xp !==
+        (quest.privateGenerated ? 0 : AWARDS[quest.intensity].xp) ||
+      quest.award.points !==
+        (quest.privateGenerated ? 0 : AWARDS[quest.intensity].points)
     )
       ctx.addIssue({
         code: "custom",
@@ -468,12 +492,12 @@ export const candidateSchema = questVariantSchema.safeExtend({
   estimatedCostMinMinor: z.number().int().nonnegative(),
   estimatedCostMaxMinor: z.number().int().nonnegative(),
   whyFits: z.array(z.string().max(150)).min(1).max(5),
-  ready: z.literal(true),
+  ready: z.boolean(),
   selectedRole: roleSchema.nullable(),
   rewardEligibility: z
     .object({
       eligible: z.boolean(),
-      reason: z.enum(["eligible", "family_cooldown"]),
+      reason: z.enum(["eligible", "family_cooldown", "private_generated"]),
     })
     .strict(),
 });
@@ -484,11 +508,11 @@ export type Candidate = QuestVariant & {
   estimatedCostMinMinor: number;
   estimatedCostMaxMinor: number;
   whyFits: string[];
-  ready: true;
+  ready: boolean;
   selectedRole: Role | null;
   rewardEligibility: {
     eligible: boolean;
-    reason: "eligible" | "family_cooldown";
+    reason: "eligible" | "family_cooldown" | "private_generated";
   };
 };
 

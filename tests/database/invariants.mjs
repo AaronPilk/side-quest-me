@@ -8,6 +8,8 @@ import { runSocialTests } from "./social-invariants.mjs";
 import { runSeriesTests } from "./series-invariants.mjs";
 import { runHostedHelperTests } from "./hosted-helper-invariants.mjs";
 import { runActivityCatalogTests } from "./activity-catalog-invariants.mjs";
+import { runPrivateExperienceTests } from "./private-experience-invariants.mjs";
+import { runPrivateExperiencePrivacyTests } from "./private-experience-privacy-invariants.mjs";
 export async function runDatabaseTests(sql) {
   await runAccountTypeTests(sql);
   await runActivityCatalogTests(sql);
@@ -41,8 +43,8 @@ export async function runDatabaseTests(sql) {
       "select jsonb_agg(jsonb_build_object('id',id,'family',family_id,'intensity',intensity,'category',category) order by id) from quest_templates where published;",
     ),
   );
-  assert.equal(templates.length, 1113);
-  assert.equal(await scalar('select count(*) from campaigns;'), '0');
+  assert.equal(templates.length, 753);
+  assert.equal(await scalar("select count(*) from campaigns;"), "0");
   const distinct = [...new Map(templates.map((t) => [t.family, t])).values()];
   console.log(
     "Checking profile unknowns, summary-only updates, and role migration compatibility…",
@@ -59,7 +61,10 @@ export async function runDatabaseTests(sql) {
   // Exercise an actual upgrade with a run accepted by the old function. The
   // disposable runner already applied all migrations; reinstall only that
   // prior function/column constraint before replaying the compatible migration.
-  const currentAcceptDefinition = await sql("select pg_get_functiondef('public.sq_accept_run(uuid,jsonb,text,text)'::regprocedure);", null);
+  const currentAcceptDefinition = await sql(
+    "select pg_get_functiondef('public.sq_accept_run(uuid,jsonb,text,text)'::regprocedure);",
+    null,
+  );
   const coreMigration = await readFile(
     new URL(
       "../../supabase/migrations/20260927151042_sidequest_core.sql",
@@ -204,7 +209,7 @@ export async function runDatabaseTests(sql) {
     "Summary-only update remains owner-scoped by RLS",
   );
   await sql(currentAcceptDefinition, null);
-  const accept = (actor, t, key, area = '') =>
+  const accept = (actor, t, key, area = "") =>
     rpc(
       "sq_accept_run",
       actor,
@@ -221,7 +226,7 @@ export async function runDatabaseTests(sql) {
       },
       key,
     );
-  const prepare = async (actor, t, { review = false, area = '' } = {}) => {
+  const prepare = async (actor, t, { review = false, area = "" } = {}) => {
     const { run } = await accept(actor, t, undefined, area);
     const clips = [];
     for (let slot = 1; slot <= 3; slot++) {
@@ -623,73 +628,240 @@ export async function runDatabaseTests(sql) {
     approved: true,
     funding_reference: "test-fixture",
   });
-  console.log('Checking approved campaign matching, frozen disclosure, and paused/expired RLS…');
+  console.log(
+    "Checking approved campaign matching, frozen disclosure, and paused/expired RLS…",
+  );
   const campaignInput = {
-    sponsor_id: sponsor.id, title: 'TEST ONLY placement', disclosure: 'Sponsored by TEST ONLY merchant',
-    area: 'test', categories: [distinct[0].category], family_ids: [distinct[0].family],
-    funded: true, state: 'active', starts_at: new Date(Date.now() - 60_000).toISOString(),
-    ends_at: new Date(Date.now() + 3_600_000).toISOString(), funding_reference: 'test-funded-agreement', notes: 'PRIVATE FUNDING NOTE',
+    sponsor_id: sponsor.id,
+    title: "TEST ONLY placement",
+    disclosure: "Sponsored by TEST ONLY merchant",
+    area: "test",
+    categories: [distinct[0].category],
+    family_ids: [distinct[0].family],
+    funded: true,
+    state: "active",
+    starts_at: new Date(Date.now() - 60_000).toISOString(),
+    ends_at: new Date(Date.now() + 3_600_000).toISOString(),
+    funding_reference: "test-funded-agreement",
+    notes: "PRIVATE FUNDING NOTE",
   };
-  await deny(() => rpc('sq_upsert_campaign', a, campaignInput), /forbidden/);
-  await deny(() => rpc('sq_upsert_campaign', operator, { ...campaignInput, funded: false }), /funding_required/);
-  await deny(() => rpc('sq_upsert_campaign', operator, { ...campaignInput, family_ids: ['unreviewed_family'] }), /invalid_campaign_scope/);
-  const expiredCampaign = await rpc('sq_upsert_campaign', operator, { ...campaignInput, starts_at: new Date(Date.now() - 120_000).toISOString(), ends_at: new Date(Date.now() - 60_000).toISOString() });
+  await deny(() => rpc("sq_upsert_campaign", a, campaignInput), /forbidden/);
+  await deny(
+    () =>
+      rpc("sq_upsert_campaign", operator, { ...campaignInput, funded: false }),
+    /funding_required/,
+  );
+  await deny(
+    () =>
+      rpc("sq_upsert_campaign", operator, {
+        ...campaignInput,
+        family_ids: ["unreviewed_family"],
+      }),
+    /invalid_campaign_scope/,
+  );
+  const expiredCampaign = await rpc("sq_upsert_campaign", operator, {
+    ...campaignInput,
+    starts_at: new Date(Date.now() - 120_000).toISOString(),
+    ends_at: new Date(Date.now() - 60_000).toISOString(),
+  });
   const campaignOwner = await user();
-  const expiredMatch = await accept(campaignOwner, distinct[0], undefined, 'test');
+  const expiredMatch = await accept(
+    campaignOwner,
+    distinct[0],
+    undefined,
+    "test",
+  );
   assert.equal(expiredMatch.run.snapshot.sponsorDisclosure, undefined);
-  await rpc('sq_abandon_run', campaignOwner, { run_id: expiredMatch.run.id });
-  const campaign = await rpc('sq_upsert_campaign', operator, campaignInput);
+  await rpc("sq_abandon_run", campaignOwner, { run_id: expiredMatch.run.id });
+  const campaign = await rpc("sq_upsert_campaign", operator, campaignInput);
   const reviewedAcceptance = {
     template_id: distinct[0].id,
-    outing: { role: 'mastermind', participants: 3, budgetMinor: 5000, budgetScope: 'total', currency: 'USD', area: 'test' },
+    outing: {
+      role: "mastermind",
+      participants: 3,
+      budgetMinor: 5000,
+      budgetScope: "total",
+      currency: "USD",
+      area: "test",
+    },
   };
-  await deny(() => rpc('sq_accept_run', campaignOwner, { ...reviewedAcceptance, expected_campaign: null }), /campaign_changed/);
-  await deny(() => rpc('sq_accept_run', campaignOwner, { ...reviewedAcceptance, expected_campaign: { id: campaign.id, version: campaign.version + 1 } }), /campaign_changed/);
-  assert.equal(await scalar(`select count(*) from quest_runs where owner_id=${quote(campaignOwner)} and status in ('accepted','in_progress');`), '0');
-  const reviewedAccepted = await rpc('sq_accept_run', campaignOwner, { ...reviewedAcceptance, expected_campaign: { id: campaign.id, version: campaign.version } });
+  await deny(
+    () =>
+      rpc("sq_accept_run", campaignOwner, {
+        ...reviewedAcceptance,
+        expected_campaign: null,
+      }),
+    /campaign_changed/,
+  );
+  await deny(
+    () =>
+      rpc("sq_accept_run", campaignOwner, {
+        ...reviewedAcceptance,
+        expected_campaign: { id: campaign.id, version: campaign.version + 1 },
+      }),
+    /campaign_changed/,
+  );
+  assert.equal(
+    await scalar(
+      `select count(*) from quest_runs where owner_id=${quote(campaignOwner)} and status in ('accepted','in_progress');`,
+    ),
+    "0",
+  );
+  const reviewedAccepted = await rpc("sq_accept_run", campaignOwner, {
+    ...reviewedAcceptance,
+    expected_campaign: { id: campaign.id, version: campaign.version },
+  });
   assert.equal(reviewedAccepted.run.snapshot.sponsor.campaign_id, campaign.id);
-  await rpc('sq_abandon_run', campaignOwner, { run_id: reviewedAccepted.run.id });
-  assert.equal(await scalar(`select count(*) from campaigns where id=${quote(campaign.id)};`, 'anon'), '1');
-  assert.equal(await scalar(`select count(*) from campaigns where id=${quote(expiredCampaign.id)};`, 'anon'), '0');
-  await deny(() => scalar('select * from private.campaign_operations;', 'authenticated'), /permission denied/);
-  const wrongArea = await accept(campaignOwner, distinct[0], undefined, 'elsewhere');
+  await rpc("sq_abandon_run", campaignOwner, {
+    run_id: reviewedAccepted.run.id,
+  });
+  assert.equal(
+    await scalar(
+      `select count(*) from campaigns where id=${quote(campaign.id)};`,
+      "anon",
+    ),
+    "1",
+  );
+  assert.equal(
+    await scalar(
+      `select count(*) from campaigns where id=${quote(expiredCampaign.id)};`,
+      "anon",
+    ),
+    "0",
+  );
+  await deny(
+    () => scalar("select * from private.campaign_operations;", "authenticated"),
+    /permission denied/,
+  );
+  const wrongArea = await accept(
+    campaignOwner,
+    distinct[0],
+    undefined,
+    "elsewhere",
+  );
   assert.equal(wrongArea.run.snapshot.sponsorDisclosure, undefined);
-  await rpc('sq_abandon_run', campaignOwner, { run_id: wrongArea.run.id });
-  const wrongFamily = await accept(campaignOwner, distinct[1], undefined, 'test');
+  await rpc("sq_abandon_run", campaignOwner, { run_id: wrongArea.run.id });
+  const wrongFamily = await accept(
+    campaignOwner,
+    distinct[1],
+    undefined,
+    "test",
+  );
   assert.equal(wrongFamily.run.snapshot.sponsorDisclosure, undefined);
-  await rpc('sq_abandon_run', campaignOwner, { run_id: wrongFamily.run.id });
-  const sponsored = await prepare(campaignOwner, distinct[0], { area: 'test' });
-  assert.equal(sponsored.run.snapshot.sponsorDisclosure, campaignInput.disclosure);
+  await rpc("sq_abandon_run", campaignOwner, { run_id: wrongFamily.run.id });
+  const sponsored = await prepare(campaignOwner, distinct[0], { area: "test" });
+  assert.equal(
+    sponsored.run.snapshot.sponsorDisclosure,
+    campaignInput.disclosure,
+  );
   assert.equal(sponsored.run.snapshot.sponsor.sponsor_name, sponsor.name);
-  assert.equal(sponsored.run.snapshot.sponsor.campaign_version, campaign.version);
+  assert.equal(
+    sponsored.run.snapshot.sponsor.campaign_version,
+    campaign.version,
+  );
   const frozenHash = sponsored.run.snapshot_hash;
-  await rpc('sq_pause_campaign', operator, { campaign_id: campaign.id });
-  assert.equal(await scalar(`select count(*) from campaigns where id=${quote(campaign.id)};`, 'anon'), '0');
+  await rpc("sq_pause_campaign", operator, { campaign_id: campaign.id });
+  assert.equal(
+    await scalar(
+      `select count(*) from campaigns where id=${quote(campaign.id)};`,
+      "anon",
+    ),
+    "0",
+  );
   const staleCampaignOwner = await user();
-  await deny(() => rpc('sq_accept_run', staleCampaignOwner, { ...reviewedAcceptance, expected_campaign: { id: campaign.id, version: campaign.version } }), /campaign_changed/);
-  const reviewedNoCampaign = await rpc('sq_accept_run', staleCampaignOwner, { ...reviewedAcceptance, expected_campaign: null });
+  await deny(
+    () =>
+      rpc("sq_accept_run", staleCampaignOwner, {
+        ...reviewedAcceptance,
+        expected_campaign: { id: campaign.id, version: campaign.version },
+      }),
+    /campaign_changed/,
+  );
+  const reviewedNoCampaign = await rpc("sq_accept_run", staleCampaignOwner, {
+    ...reviewedAcceptance,
+    expected_campaign: null,
+  });
   assert.equal(reviewedNoCampaign.run.snapshot.sponsorDisclosure, undefined);
-  await rpc('sq_abandon_run', staleCampaignOwner, { run_id: reviewedNoCampaign.run.id });
-  const sponsoredSubmission = await rpc('sq_submit_run', campaignOwner, { ...sponsored.input, needs_review: true });
+  await rpc("sq_abandon_run", staleCampaignOwner, {
+    run_id: reviewedNoCampaign.run.id,
+  });
+  const sponsoredSubmission = await rpc("sq_submit_run", campaignOwner, {
+    ...sponsored.input,
+    needs_review: true,
+  });
   assert.equal(sponsoredSubmission.run.snapshot_hash, frozenHash);
-  assert.equal(sponsoredSubmission.render_job.manifest.sponsorDisclosure, campaignInput.disclosure);
-  assert.equal(sponsoredSubmission.run.snapshot.sponsorDisclosure, campaignInput.disclosure);
+  assert.equal(
+    sponsoredSubmission.render_job.manifest.sponsorDisclosure,
+    campaignInput.disclosure,
+  );
+  assert.equal(
+    sponsoredSubmission.run.snapshot.sponsorDisclosure,
+    campaignInput.disclosure,
+  );
   assert.equal(sponsoredSubmission.wallet.points, 0);
-  const afterPause = await accept(campaignOwner, distinct[0], undefined, 'test');
+  const afterPause = await accept(
+    campaignOwner,
+    distinct[0],
+    undefined,
+    "test",
+  );
   assert.equal(afterPause.run.snapshot.sponsorDisclosure, undefined);
-  await rpc('sq_abandon_run', campaignOwner, { run_id: afterPause.run.id });
-  await rpc('sq_upsert_campaign', operator, { ...campaignInput, id: campaign.id });
-  await rpc('sq_upsert_sponsor', operator, { id: sponsor.id, name: sponsor.name, area: 'test', approved: false, funding_reference: 'test-fixture' });
-  assert.equal(await scalar(`select count(*) from campaigns where id=${quote(campaign.id)};`, 'anon'), '0');
-  const noApprovedSponsor = await accept(campaignOwner, distinct[0], undefined, 'test');
+  await rpc("sq_abandon_run", campaignOwner, { run_id: afterPause.run.id });
+  await rpc("sq_upsert_campaign", operator, {
+    ...campaignInput,
+    id: campaign.id,
+  });
+  await rpc("sq_upsert_sponsor", operator, {
+    id: sponsor.id,
+    name: sponsor.name,
+    area: "test",
+    approved: false,
+    funding_reference: "test-fixture",
+  });
+  assert.equal(
+    await scalar(
+      `select count(*) from campaigns where id=${quote(campaign.id)};`,
+      "anon",
+    ),
+    "0",
+  );
+  const noApprovedSponsor = await accept(
+    campaignOwner,
+    distinct[0],
+    undefined,
+    "test",
+  );
   assert.equal(noApprovedSponsor.run.snapshot.sponsorDisclosure, undefined);
-  await rpc('sq_abandon_run', campaignOwner, { run_id: noApprovedSponsor.run.id });
-  await deny(() => rpc('sq_upsert_campaign', operator, { ...campaignInput, id: campaign.id }), /funding_required/);
-  await rpc('sq_upsert_sponsor', operator, { id: sponsor.id, name: sponsor.name, area: 'test', approved: true, funding_reference: 'test-fixture' });
-  await rpc('sq_pause_campaign', operator, { campaign_id: campaign.id });
-  const campaignState = JSON.parse(await sql(`select sq_operator_state(${quote(operator)});`));
-  assert.equal(campaignState.campaigns.find(c => c.id === campaign.id).state, 'paused');
-  assert.equal(JSON.stringify(campaignState.campaigns).includes('PRIVATE FUNDING NOTE'), false);
+  await rpc("sq_abandon_run", campaignOwner, {
+    run_id: noApprovedSponsor.run.id,
+  });
+  await deny(
+    () =>
+      rpc("sq_upsert_campaign", operator, {
+        ...campaignInput,
+        id: campaign.id,
+      }),
+    /funding_required/,
+  );
+  await rpc("sq_upsert_sponsor", operator, {
+    id: sponsor.id,
+    name: sponsor.name,
+    area: "test",
+    approved: true,
+    funding_reference: "test-fixture",
+  });
+  await rpc("sq_pause_campaign", operator, { campaign_id: campaign.id });
+  const campaignState = JSON.parse(
+    await sql(`select sq_operator_state(${quote(operator)});`),
+  );
+  assert.equal(
+    campaignState.campaigns.find((c) => c.id === campaign.id).state,
+    "paused",
+  );
+  assert.equal(
+    JSON.stringify(campaignState.campaigns).includes("PRIVATE FUNDING NOTE"),
+    false,
+  );
   await sql(
     `insert into private.role_memberships(user_id,role,merchant_id) values(${quote(merchant)},'merchant',${quote(sponsor.id)});`,
   );
@@ -880,7 +1052,9 @@ export async function runDatabaseTests(sql) {
     "Checking deletion cancels work and closes unresolved review without award…",
   );
   const deleting = await user();
-  await sql(`update profiles set account_type='brand' where id=${quote(deleting)};`);
+  await sql(
+    `update profiles set account_type='brand' where id=${quote(deleting)};`,
+  );
   const pending = await done(deleting, distinct[0], true);
   const running = JSON.parse(
     await sql(
@@ -889,7 +1063,13 @@ export async function runDatabaseTests(sql) {
   );
   const deletion = await rpc("sq_delete_account", deleting, {});
   assert.equal(deletion.status, "deleting");
-  assert.equal(await scalar(`select account_type is null from profiles where id=${quote(deleting)};`), "t", "Account deletion clears account intent");
+  assert.equal(
+    await scalar(
+      `select account_type is null from profiles where id=${quote(deleting)};`,
+    ),
+    "t",
+    "Account deletion clears account intent",
+  );
   await deny(
     () =>
       sql(
@@ -1090,7 +1270,9 @@ export async function runDatabaseTests(sql) {
   await runSocialTests(sql);
   await runSeriesTests(sql);
   await runRecordingSessionTests(sql);
+  await runPrivateExperienceTests(sql);
+  await runPrivateExperiencePrivacyTests(sql);
   console.log(
-    "PASS: 1113 seeds, real RLS/privileges, transactions, concurrent acceptance/awards/stock/spending/consumption, idempotency, evidence, fenced render, share revoke, deletion, ledger reconciliation.",
+    "PASS: 753 current seeds, real RLS/privileges, transactions, concurrent acceptance/awards/stock/spending/consumption, idempotency, evidence, fenced render, share revoke, deletion, ledger reconciliation.",
   );
 }

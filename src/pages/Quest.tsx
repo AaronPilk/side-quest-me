@@ -1,4 +1,16 @@
 import type { PlaceContext } from "../../shared/place-matching";
+import { discoverExperience } from "../lib/experience-api";
+import { aiQuestApi } from "../lib/ai-quest-api";
+import {
+  discoverNearbyPlaces,
+  type DiscoveryCenter,
+} from "../lib/nearby-discovery";
+import type { ApplePlace } from "../lib/apple-maps";
+import type {
+  DiscoveryProposal,
+  ExperienceDiscoveryResult,
+} from "../../shared/experience-discovery";
+import { estimateCost, ineligibilityIssues } from "../../shared/recommend";
 import { selectedPlaceContext } from "../lib/place-context";
 import { useState, useEffect, useRef } from "react";
 import { QuestWizard, editQuestPlans } from "../components/QuestWizard";
@@ -72,6 +84,11 @@ export default function Quest() {
       return DEFAULT_OUTING;
     }
   });
+  const aiConfig = useResource(aiQuestApi.config);
+  const [center, setCenter] = useState<DiscoveryCenter>();
+  const [nearbyPlaces, setNearbyPlaces] = useState<ApplePlace[]>([]);
+  const [experience, setExperience] = useState<ExperienceDiscoveryResult>();
+  const [locationNotice, setLocationNotice] = useState("");
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
   const [selected, setSelected] = useState<Candidate>();
   const [fit, setFit] = useState<QuestViability>();
@@ -80,6 +97,7 @@ export default function Quest() {
   const [busy, setBusy] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const discoveryGeneration = useRef(0);
+  const discoveryKey = useRef(crypto.randomUUID());
   const discoveryPlace = useRef<PlaceContext | null>(null);
   const resultsVisible = candidates !== null && !selected;
   const resultsHeading = useRef<HTMLHeadingElement>(null);
@@ -94,6 +112,16 @@ export default function Quest() {
     if (target.data) {
       setOuting((current) => ({
         ...current,
+        ...(target.data!.privateGenerated && target.data!.privatePlan
+          ? {
+              ...target.data!.privatePlan,
+              confirmedVenueCostMinor: null,
+              venuePermission: false,
+              arrangementConfirmed: false,
+              adultEligible: false,
+              adultContext: false,
+            }
+          : {}),
         category: target.data!.category,
         intensity: target.data!.intensity,
       }));
@@ -120,6 +148,7 @@ export default function Quest() {
   }, [resultsVisible]);
   function update(patch: Partial<Outing>) {
     discoveryGeneration.current++;
+    discoveryKey.current = crypto.randomUUID();
     setOuting((current) => ({
       ...current,
       ...patch,
@@ -140,6 +169,15 @@ export default function Quest() {
           }
         : {}),
     }));
+    if (
+      patch.category ||
+      patch.intensity ||
+      patch.setting ||
+      patch.area !== undefined
+    )
+      setNearbyPlaces([]);
+    if (patch.setting === "home") setCenter(undefined);
+    setExperience(undefined);
     setCandidates(null);
     setError("");
   }
@@ -149,6 +187,57 @@ export default function Quest() {
     setError("");
     try {
       outingSchema.parse(outing);
+      if (
+        !requestedTemplate &&
+        aiConfig.data?.configured &&
+        aiConfig.data.provider
+      ) {
+        let places = nearbyPlaces;
+        setLocationNotice("");
+        if (
+          outing.setting !== "home" &&
+          (outing.applePlaceId ||
+            (!places.length && (center || outing.area.trim())))
+        ) {
+          try {
+            places = await discoverNearbyPlaces(outing, center);
+          } catch (cause) {
+            setLocationNotice((cause as Error).message);
+            places = [];
+          }
+        }
+        if (generation !== discoveryGeneration.current) return;
+        const result = await discoverExperience(
+          {
+            outing,
+            provider: aiConfig.data.provider,
+            consent: true,
+            nearbyPlaces: places
+              .flatMap((place) =>
+                place.id && place.name && place.coordinate
+                  ? [
+                      {
+                        id: place.id,
+                        name: place.name.slice(0, 160),
+                        address: (place.formattedAddress || "").slice(0, 300),
+                        category: place.pointOfInterestCategory,
+                        ...place.coordinate,
+                      },
+                    ]
+                  : [],
+              )
+              .slice(0, 12),
+          },
+          discoveryKey.current,
+        );
+        if (generation !== discoveryGeneration.current) return;
+        setExperience(result);
+        setCandidates(result.candidates);
+        setFit(undefined);
+        setAlternatives([]);
+        setHasMore(false);
+        return;
+      }
       const placeContext = await selectedPlaceContext(outing.applePlaceId);
       if (generation !== discoveryGeneration.current) return;
       const choices = await api.quests(
@@ -176,9 +265,10 @@ export default function Quest() {
       setCandidates(choices);
       setHasMore(!requestedTemplate && choices.length === 3);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Check your outing details.");
+      if (generation === discoveryGeneration.current)
+        setError(e instanceof Error ? e.message : "Check your outing details.");
     } finally {
-      setBusy(false);
+      if (generation === discoveryGeneration.current) setBusy(false);
     }
   }
   async function moreIdeas() {
@@ -262,9 +352,19 @@ export default function Quest() {
       </section>
     );
   if (selected) {
-    const reason = DEMO
-      ? eligibility(runs.data || [], selected.familyId)
-      : selected.rewardEligibility.reason;
+    const selectedCost = estimateCost(selected, outing);
+    const proposal = experience?.proposals.find(
+      (value) => value.templateId === selected.id,
+    );
+    const pending =
+      selected.privateGenerated && me.data
+        ? ineligibilityIssues(selected, outing, me.data.profile.preferences)
+        : [];
+    const reason = selected.privateGenerated
+      ? "private_generated"
+      : DEMO
+        ? eligibility(runs.data || [], selected.familyId)
+        : selected.rewardEligibility.reason;
     return (
       <>
         <button className="back" onClick={() => setSelected(undefined)}>
@@ -289,14 +389,19 @@ export default function Quest() {
             <Users size={16} />
             {selected.minParticipants}–{selected.maxParticipants} people
           </span>
-          <span>{money(selected.estimatedCostMaxMinor)} group estimate</span>
+          <span>
+            {selectedCost.known
+              ? `${money(selectedCost.maxMinor)} group estimate`
+              : "Booking price to check"}
+          </span>
         </div>
-        {outing.applePlaceId && outing.setting !== "home" && (
-          <ApplePlaceCard
-            placeId={outing.applePlaceId}
-            transport={outing.transport}
-          />
-        )}
+        {(proposal?.location?.id || outing.applePlaceId) &&
+          outing.setting !== "home" && (
+            <ApplePlaceCard
+              placeId={proposal?.location?.id || outing.applePlaceId!}
+              transport={outing.transport}
+            />
+          )}
         <section className="section">
           <h2>Your challenge</h2>
           <ol className="beats-preview">
@@ -315,7 +420,17 @@ export default function Quest() {
             ))}
           </ol>
         </section>
-        <AiQuestAssist key={selected.id} quest={selected} outing={outing} />
+        {!selected.privateGenerated && (
+          <AiQuestAssist key={selected.id} quest={selected} outing={outing} />
+        )}
+        {proposal && (
+          <GeneratedQuestChecks
+            proposal={proposal}
+            outing={outing}
+            onChange={(patch) => setOuting((value) => ({ ...value, ...patch }))}
+            pending={pending}
+          />
+        )}
         <section className="section">
           <h2>Before you say yes</h2>
           <ul className="clean-list">
@@ -342,7 +457,9 @@ export default function Quest() {
                 ? "This family has a 30-day award cooldown across all levels."
                 : reason === "daily_cap"
                   ? `Your daily award limit resets ${localReset()}.`
-                  : "Save your video and confirm your attempt. A real flop counts, too."}
+                  : reason === "private_generated"
+                    ? "This is your private generated quest. Film it and save your story; it does not award redeemable points or XP."
+                    : "Save your video and confirm your attempt. A real flop counts, too."}
             </p>
           </div>
         </div>
@@ -357,7 +474,13 @@ export default function Quest() {
             Continue your active quest <ArrowRight size={18} />
           </Link>
         ) : (
-          <Button onClick={accept} busy={busy}>
+          <Button
+            onClick={accept}
+            busy={busy}
+            disabled={
+              pending.length > 0 || !outingSchema.safeParse(outing).success
+            }
+          >
             Accept quest <ArrowRight size={18} />
           </Button>
         )}
@@ -396,7 +519,7 @@ export default function Quest() {
           Show other quests
         </button>
       )}
-      {active && (
+      {active && candidates !== null && (
         <Link className="active-card" to={`/runs/${active.id}`}>
           <span className="icon-box">
             <Flag />
@@ -449,6 +572,44 @@ export default function Quest() {
             outing={outing}
             update={update}
             onFind={discover}
+            center={center}
+            nearbyPlaces={nearbyPlaces}
+            onAreaReady={(nextCenter, places) => {
+              setCenter(nextCenter);
+              setNearbyPlaces(places);
+            }}
+            discoveryConsent={
+              !requestedTemplate &&
+              aiConfig.data?.configured && (
+                <div className="quest-discovery-consent">
+                  <strong>
+                    Personalized with{" "}
+                    {aiConfig.data.provider === "openai"
+                      ? "OpenAI"
+                      : aiConfig.data.provider === "anthropic"
+                        ? "Claude"
+                        : "Grok"}
+                  </strong>
+                  <p className="fine-print">
+                    Find my quests sends your confirmed preferences, this plan
+                    and nearby Apple Maps listings to{" "}
+                    {aiConfig.data.provider === "openai"
+                      ? "OpenAI"
+                      : aiConfig.data.provider === "anthropic"
+                        ? "Anthropic"
+                        : "xAI"}{" "}
+                    to create an experience. Your imported summary and exact
+                    device location aren’t sent. Check opening hours, prices and
+                    availability before you go.
+                  </p>
+                  {busy && (
+                    <p role="status" className="support">
+                      Building your experience and checking the fit…
+                    </p>
+                  )}
+                </div>
+              )
+            }
             targetId={requestedTemplate}
             target={target.data}
             busy={busy}
@@ -457,6 +618,7 @@ export default function Quest() {
               me.data &&
               !preferenceProgress(me.data.profile.preferences).complete,
             )}
+            resumeQuestId={active?.id}
             firstRun={Boolean(
               me.data &&
               me.data.profile.accountType === null &&
@@ -481,7 +643,7 @@ export default function Quest() {
             <h1 ref={resultsHeading} tabIndex={-1}>
               {candidates.length
                 ? "This could be a good story."
-                : "Nothing quite fits. Yet."}
+                : "Let’s find a different route."}
             </h1>
             <span className="support">
               {candidates.length}{" "}
@@ -489,6 +651,13 @@ export default function Quest() {
             </span>
           </div>
           {error && <Notice error>{error}</Notice>}
+          {locationNotice && <Notice>{locationNotice}</Notice>}
+          {experience?.source === "curated_fallback" && (
+            <Notice>
+              AI couldn’t finish a strong idea this time. Here’s a ready-to-plan
+              experience selected for your outing.
+            </Notice>
+          )}
           {me.data && (
             <PreferenceReminder
               profile={me.data.profile}
@@ -517,6 +686,20 @@ export default function Quest() {
                 key={q.id}
                 disabled={busy}
                 onClick={() => {
+                  if (q.privateGenerated) {
+                    const proposal = experience?.proposals.find(
+                      (value) => value.templateId === q.id,
+                    );
+                    setOuting((current) => ({
+                      ...current,
+                      applePlaceId: proposal?.location?.id || null,
+                      venuePermission: false,
+                      confirmedVenueCostMinor: null,
+                      arrangementConfirmed: false,
+                      adultEligible: false,
+                      adultContext: false,
+                    }));
+                  }
                   setSelected(q);
                   window.scrollTo(0, 0);
                 }}
@@ -537,11 +720,20 @@ export default function Quest() {
                       <Clock3 size={15} />
                       {q.durationMinutes + outing.travelMinutes} min
                     </span>
-                    <span>{money(q.estimatedCostMaxMinor)} group estimate</span>
+                    <span>
+                      {q.cost.venueCostUnknown &&
+                      outing.setting === "venue" &&
+                      (q.privateGenerated ||
+                        outing.confirmedVenueCostMinor === null)
+                        ? "Booking price to check"
+                        : `${money(q.estimatedCostMaxMinor)} group estimate`}
+                    </span>
                   </div>
                   <div className="fit-line">
                     <Check size={15} />
-                    {q.whyFits.slice(0, 2).join(" · ")}
+                    {q.ready
+                      ? q.whyFits.slice(0, 2).join(" · ")
+                      : "Fits your plan · Confirm booking details before starting"}
                   </div>
                   <div className="card-footer">
                     <span>Meet your quest</span>
@@ -553,7 +745,18 @@ export default function Quest() {
           )}
           {candidates.length > 0 && !requestedTemplate && (
             <div className="quest-more-ideas">
-              {hasMore ? (
+              {experience ? (
+                <Button
+                  secondary
+                  busy={busy}
+                  onClick={() => {
+                    discoveryKey.current = crypto.randomUUID();
+                    return discover();
+                  }}
+                >
+                  Find another experience
+                </Button>
+              ) : hasMore ? (
                 <Button secondary busy={busy} onClick={moreIdeas}>
                   More quest ideas
                 </Button>
@@ -589,5 +792,114 @@ export default function Quest() {
       )}
       {!runs.data && !runs.error && <Loading />}
     </>
+  );
+}
+
+function GeneratedQuestChecks({
+  proposal,
+  outing,
+  onChange,
+  pending,
+}: {
+  proposal: DiscoveryProposal;
+  outing: Outing;
+  onChange: (patch: Partial<Outing>) => void;
+  pending: ReturnType<typeof ineligibilityIssues>;
+}) {
+  const codes = new Set(
+    [...proposal.requirements, ...pending].map(
+      (requirement) => requirement.code,
+    ),
+  );
+  return (
+    <section
+      className="quest-generated-plan"
+      aria-label="Check your quest details"
+    >
+      <h3>Make this plan yours</h3>
+      {proposal.location && (
+        <p className="support">
+          Suggested stop: <strong>{proposal.location.name}</strong> · Apple Maps
+          listing. Availability and prices still need checking.
+        </p>
+      )}
+      {codes.has("venue_cost") && (
+        <label>
+          Total confirmed venue cost (USD)
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            max="10000"
+            step="0.01"
+            value={
+              outing.confirmedVenueCostMinor === null
+                ? ""
+                : outing.confirmedVenueCostMinor / 100
+            }
+            placeholder="Check the full group price"
+            onChange={(event) =>
+              onChange({
+                confirmedVenueCostMinor:
+                  event.target.value === ""
+                    ? null
+                    : Math.round(Number(event.target.value) * 100),
+              })
+            }
+          />
+        </label>
+      )}
+      {codes.has("arrangements") && (
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={outing.arrangementConfirmed}
+            onChange={(event) =>
+              onChange({ arrangementConfirmed: event.target.checked })
+            }
+          />
+          <span>
+            We’ve checked the booking, equipment and participants this quest
+            needs.
+          </span>
+        </label>
+      )}
+      {codes.has("venue_permission") && (
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={outing.venuePermission}
+            onChange={(event) =>
+              onChange({ venuePermission: event.target.checked })
+            }
+          />
+          <span>The venue allows this activity and our filming.</span>
+        </label>
+      )}
+      {codes.has("adults") && (
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={outing.adultEligible}
+            onChange={(event) =>
+              onChange({ adultEligible: event.target.checked })
+            }
+          />
+          <span>
+            Everyone taking part meets this activity’s age requirement.
+          </span>
+        </label>
+      )}
+      {pending.some((issue) => issue.code === "budget") && (
+        <Notice error>
+          The confirmed cost exceeds your budget. Edit your plan or choose
+          another quest.
+        </Notice>
+      )}
+      <p className="fine-print">
+        Your idea is private. You can read the plan now and start after these
+        specific details are confirmed.
+      </p>
+    </section>
   );
 }

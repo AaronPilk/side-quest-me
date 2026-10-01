@@ -1,0 +1,268 @@
+import assert from "node:assert/strict";
+import { randomUUID, createHash } from "node:crypto";
+export async function runPrivateExperienceTests(sql) {
+  console.log(
+    "Checking private discovery leases, owner binding, preflight and zero rewards…",
+  );
+  const quote = (value) => `'${String(value).replaceAll("'", "''")}'`;
+  const json = (value) => `${quote(JSON.stringify(value))}::jsonb`;
+  const hash = (value) =>
+    createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  const rpc = (
+    name,
+    actor,
+    input,
+    key = randomUUID(),
+    fingerprint = hash(input),
+  ) =>
+    sql(
+      `select public.${name}(${quote(actor)},${json(input)},${quote(key)},${quote(fingerprint)});`,
+    ).then(JSON.parse);
+  const user = async () => {
+    const id = randomUUID();
+    await sql(`insert into auth.users(id) values(${quote(id)});`, null);
+    await sql(`select sq_upsert_profile(${quote(id)},'{}');`);
+    return id;
+  };
+  const owner = await user(),
+    other = await user(),
+    key = randomUUID();
+  assert.deepEqual(
+    await rpc("sq_reserve_experience_discovery", owner, {}, key, "one"),
+    { acquired: true },
+  );
+  assert.deepEqual(
+    await rpc("sq_reserve_experience_discovery", owner, {}, key, "one"),
+    { acquired: false },
+  );
+  await assert.rejects(
+    () => rpc("sq_reserve_experience_discovery", owner, {}, key, "changed"),
+    /idempotency_conflict/,
+  );
+  const response = {
+    candidates: [],
+    proposals: [
+      {
+        location: {
+          id: "I1234",
+          latitude: 27,
+          longitude: -82,
+          name: "Listed venue",
+        },
+      },
+    ],
+  };
+  await rpc("sq_finish_experience_discovery", owner, { response }, key, "one");
+  const replay = await rpc(
+    "sq_reserve_experience_discovery",
+    owner,
+    {},
+    key,
+    "one",
+  );
+  assert.equal(replay.response.proposals[0].location.name, "Listed venue");
+  assert.equal(replay.response.proposals[0].location.latitude, undefined);
+  const q = JSON.parse(
+    await sql(
+      "select content from public.quest_templates where published and intensity='full_send' order by id limit 1;",
+    ),
+  );
+  const quest = {
+    ...q,
+    privateGenerated: true,
+    award: { xp: 0, points: 0 },
+    arrangementRequired: true,
+    venuePermissionRequired: true,
+    adultOnly: false,
+    requiresVolunteer: false,
+    supportsAdultContext: false,
+    durationMinutes: 90,
+    cost: {
+      minMinor: 0,
+      maxMinor: 0,
+      scope: "total",
+      currency: "USD",
+      venueCostUnknown: true,
+      note: "Confirm total admission",
+    },
+  };
+  const outing = {
+    category: q.category,
+    intensity: "full_send",
+    group: "friends",
+    participants: 5,
+    setting: "venue",
+    budgetMinor: 30000,
+    budgetScope: "total",
+    currency: "USD",
+    durationMinutes: null,
+    travelMinutes: 0,
+    travelCostMinor: 0,
+    venuePermission: false,
+    arrangementConfirmed: false,
+    adultEligible: false,
+    adultContext: false,
+    confirmedVenueCostMinor: null,
+    applePlaceId: "I1234",
+    area: "",
+  };
+  const input = {
+    quest,
+    mechanic: "competition",
+    outing,
+    location: {
+      id: "I1234",
+      name: "Listed venue",
+      latitude: 27,
+      longitude: -82,
+    },
+    provider: "openai",
+    model: "test-model",
+  };
+  const storeKey = randomUUID(),
+    stored = await rpc("sq_store_private_proposal", owner, input, storeKey);
+  assert.match(stored.quest.id, /^private_[0-9a-f-]+$/);
+  assert.equal(stored.proposal.location.latitude, undefined);
+  assert.deepEqual(stored.quest.award, { xp: 0, points: 0 });
+  assert.deepEqual(
+    await rpc("sq_store_private_proposal", owner, input, storeKey),
+    stored,
+  );
+  assert.equal(
+    await sql(
+      `select published from quest_templates where id=${quote(stored.quest.id)};`,
+    ),
+    "f",
+  );
+  await assert.rejects(
+    () =>
+      sql(
+        `update quest_templates set published=true where id=${quote(stored.quest.id)};`,
+      ),
+    /private_template_cannot_publish/,
+  );
+  await assert.rejects(
+    () =>
+      rpc("sq_store_private_proposal", owner, {
+        ...input,
+        quest: { ...quest, award: { xp: 100, points: 100 } },
+      }),
+    /invalid_private_proposal/,
+  );
+  await assert.rejects(
+    () =>
+      sql(
+        `select public.sq_store_private_proposal(${quote(owner)},${json(input)},'test-key','hash');`,
+        "authenticated",
+      ),
+    /permission denied/,
+  );
+  const accept = {
+    template_id: stored.quest.id,
+    outing,
+    expected_campaign: null,
+  };
+  await assert.rejects(
+    () => rpc("sq_accept_private_run", other, accept),
+    /not_found/,
+  );
+  await assert.rejects(
+    () => rpc("sq_accept_private_run", owner, accept),
+    /private_requirements_pending/,
+  );
+  const confirmed = {
+    ...outing,
+    venuePermission: true,
+    arrangementConfirmed: true,
+    confirmedVenueCostMinor: 15000,
+  };
+  await assert.rejects(
+    () =>
+      rpc("sq_accept_private_run", owner, {
+        ...accept,
+        outing: { ...confirmed, applePlaceId: "IDIFFERENT" },
+      }),
+    /private_plan_changed/,
+  );
+  await assert.rejects(
+    () =>
+      rpc("sq_accept_private_run", owner, {
+        ...accept,
+        outing: { ...confirmed, confirmedVenueCostMinor: 40000 },
+      }),
+    /invalid_outing/,
+  );
+  const run = await rpc("sq_accept_private_run", owner, {
+    ...accept,
+    outing: confirmed,
+  });
+  assert.equal(run.eligibility.reason, "private_generated");
+  assert.equal(run.run.snapshot.reward_policy.xp, 0);
+  assert.equal(run.run.snapshot.reward_policy.points, 0);
+  assert.equal(run.run.snapshot.template.privateGenerated, true);
+  assert.equal(run.run.snapshot.template.id, stored.quest.id);
+  await sql(
+    `update quest_runs set status='in_progress',evidence_manifest='{}',evidence_hash=private.content_hash('{}'::jsonb) where id=${quote(run.run.id)};`,
+  );
+  await sql(
+    `select private.finalize_run(${quote(owner)},${quote(run.run.id)});`,
+  );
+  assert.equal(
+    await sql(
+      `select count(*) from reward_ledger where run_id=${quote(run.run.id)};`,
+    ),
+    "0",
+  );
+  assert.equal(
+    await sql(
+      `select count(*) from quest_runs where id=${quote(run.run.id)} and status='finalized';`,
+    ),
+    "1",
+  );
+  await sql(
+    `insert into creator_profiles(user_id,display_name,avatar_key) values(${quote(owner)},'Private adventurer','mint');`,
+  );
+  const seriesInput = {
+    runId: run.run.id,
+    title: "Our private adventures",
+    premise: "Continue this experience later.",
+    cover: "night",
+    kind: "ongoing",
+  };
+  const series = JSON.parse(
+    await sql(
+      `select sq_series_mutate(${quote(owner)},'start_from_run',${json(seriesInput)},${quote(randomUUID())},${quote(hash(seriesInput))});`,
+    ),
+  );
+  assert.equal(series.parts[0].available, true);
+  assert.equal(series.parts[0].quest.privateGenerated, true);
+  await sql(
+    `update private_quest_proposals set expires_at=now()-interval '1 day' where id=${quote(stored.proposal.id)};`,
+  );
+  const repeated = await rpc("sq_accept_private_run", owner, {
+    ...accept,
+    outing: confirmed,
+    series_part_id: series.parts[0].id,
+  });
+  assert.equal(repeated.run.snapshot.series.id, series.id);
+  assert.equal(repeated.run.snapshot.reward_policy.points, 0);
+  await rpc("sq_abandon_run", owner, { run_id: repeated.run.id });
+  await assert.rejects(
+    () =>
+      rpc("sq_accept_private_run", other, {
+        ...accept,
+        outing: confirmed,
+        series_part_id: series.parts[0].id,
+      }),
+    /not_found/,
+  );
+  await assert.rejects(
+    () =>
+      rpc("sq_accept_private_run", owner, {
+        ...accept,
+        outing: confirmed,
+        series_part_id: randomUUID(),
+      }),
+    /series_unavailable/,
+  );
+}

@@ -146,21 +146,14 @@ test("summary editing and immediate removal persist after refresh without changi
     /\/preferences\?(?:step=summary&)?returnTo=%2Faccount$/,
   );
   await expect(
-    page.getByText("This is a manual review:", { exact: false }),
+    page.getByText("Only the answers you confirm next", { exact: false }),
   ).toBeVisible();
   const summary = page.getByRole("textbox", {
-    name: "Review what you’re sharing",
+    name: "Paste your ChatGPT summary",
   });
   const text =
     "I like games, but not public performance. Maybe music. I watch pranks without wanting to do them.";
   await summary.fill(text);
-  await expect(
-    page.getByRole("button", { name: "Continue to preferences", exact: true }),
-  ).toBeDisabled();
-  await page.getByRole("button", { name: "Save summary", exact: true }).click();
-  await expect(
-    page.getByText("Summary saved.", { exact: false }),
-  ).toBeVisible();
   await page.reload();
   await expect(summary).toHaveValue(text);
   const initial = (await storedProfile(page)).preferences;
@@ -171,11 +164,8 @@ test("summary editing and immediate removal persist after refresh without changi
     .getByRole("button", { name: "Continue to preferences", exact: true })
     .click();
   await skip(page, 7);
-  await page
-    .locator("summary")
-    .filter({ hasText: "Use my summary as a reference" })
-    .click();
-  await expect(page.locator(".question-summary-reference")).toContainText(text);
+  await expect(page.locator(".question-summary-reference")).toHaveCount(0);
+  expect((await storedProfile(page)).summary).toBe(text);
   await page.getByRole("button", { name: "Games", exact: true }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
@@ -190,9 +180,7 @@ test("summary editing and immediate removal persist after refresh without changi
   expect(confirmed.sources.skills).toBe("summary_review");
   expect(confirmed.sources.role).toBe("survey");
   expect(confirmed.premises).toBeNull();
-  await page
-    .getByRole("button", { name: "ChatGPT summary", exact: true })
-    .click();
+  await page.goto("/preferences?step=summary&returnTo=%2Faccount");
   await expect(
     page.getByRole("heading", { name: "Your ChatGPT head start", exact: true }),
   ).toBeVisible();
@@ -219,17 +207,13 @@ test("summary editing and immediate removal persist after refresh without changi
     }),
   ).toBeVisible();
   await page.reload();
-  await page
-    .locator("summary")
-    .filter({ hasText: "I have a summary to paste" })
-    .click();
   await expect(summary).toHaveValue("");
   expect((await storedProfile(page)).preferences).toEqual(confirmed);
   await page
     .getByRole("button", { name: "Continue to preferences", exact: true })
     .click();
-  await expect(page.getByText("9 of 11", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByText("1 of 11", { exact: true })).toBeVisible();
+  await skip(page, 7);
   await expect(
     page.getByRole("button", { name: "Games", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");

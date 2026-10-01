@@ -19,7 +19,14 @@ import {
 
 export const SOCIAL_PRIVATE_ROUTE =
   /^\/api\/social\/(?:me|profile|follow|photo)$/;
-function socialError(message: string): never {
+type SocialOperation =
+  | "sq_social_read"
+  | "sq_social_photo_key"
+  | "sq_social_save"
+  | "sq_social_follow"
+  | "sq_social_photo";
+
+function socialError(message: string, operation: SocialOperation): never {
   if (message.includes("username_taken"))
     throw new ApiError(
       "username_taken",
@@ -41,18 +48,37 @@ function socialError(message: string): never {
     throw new ApiError("not_found", "This creator is unavailable.", 404);
   if (message.includes("self_follow"))
     throw new ApiError("self_follow", "You cannot follow your own profile.");
-  throw new ApiError(
-    "social_failed",
-    "Your profile could not be updated. Check your details and try again.",
-  );
+  const failure = {
+    sq_social_read: [
+      "social_read_failed",
+      "Profile details could not be loaded. Please try again.",
+    ],
+    sq_social_photo_key: [
+      "social_photo_read_failed",
+      "This profile photo could not be loaded. Please try again.",
+    ],
+    sq_social_save: [
+      "social_failed",
+      "Your profile could not be saved. Please try again.",
+    ],
+    sq_social_follow: [
+      "social_follow_failed",
+      "Your follow preference could not be saved. Please try again.",
+    ],
+    sq_social_photo: [
+      "social_photo_failed",
+      "Your profile photo could not be saved. Please try again.",
+    ],
+  }[operation];
+  throw new ApiError(failure[0], failure[1], 503);
 }
 async function call(
   c: AppContext,
-  name: string,
+  name: SocialOperation,
   args: Record<string, unknown>,
 ) {
   const { data, error } = await c.get("serviceDb").rpc(name, args);
-  if (error) socialError(error.message);
+  if (error) socialError(error.message, name);
   return data;
 }
 async function optionalIdentity(c: AppContext) {

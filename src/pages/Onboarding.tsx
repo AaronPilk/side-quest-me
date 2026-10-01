@@ -5,7 +5,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router-dom";
-import { ArrowRight, ArrowLeft, Check, FileText } from "lucide-react";
+import { ArrowRight, ArrowLeft, Check } from "lucide-react";
 import {
   DEFAULT_PREFERENCES,
   normalizePreferences,
@@ -457,23 +457,6 @@ export default function Onboarding() {
       if (mounted.current) setBusy(false);
     }
   }
-  async function openSummary() {
-    if (!profile || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await api.updateProfile({ preferences: profile.preferences });
-      if (!mounted.current) return;
-      recordSaved({ preferences: profile.preferences });
-      setSummaryReturn(step);
-      setStep(-1);
-      window.scrollTo(0, 0);
-    } catch (cause) {
-      if (mounted.current) setError((cause as Error).message);
-    } finally {
-      if (mounted.current) setBusy(false);
-    }
-  }
   async function finish() {
     await saveAndLeave();
   }
@@ -525,7 +508,7 @@ export default function Onboarding() {
   });
   return (
     <div
-      className={`onboarding preferences-journey ${preferencesOnly ? "preferences-direct" : ""} ${step === -1 ? "onboarding-import" : ""}`}
+      className={`onboarding preferences-journey ${preferencesOnly ? "preferences-direct" : ""} ${step === -1 ? "onboarding-import" : ""} ${step === -2 ? "preferences-account" : ""}`}
     >
       <div className="onboard-top">
         <button
@@ -626,24 +609,22 @@ export default function Onboarding() {
                 <span>Confirm interests, participation and boundaries.</span>
               </li>
             </ol>
-            <Button onClick={() => setStep(-2)}>
-              {profile.accountType || chips.length
-                ? "Continue setup"
-                : "Start setup"}
-              <ArrowRight size={18} />
-            </Button>
-            <button className="text-button" onClick={() => setShowSkip(true)}>
-              Finish later
-            </button>
-            <p className="support">
-              Without preferences, we use today’s outing. Your answers help us
-              make a more personal match.
-            </p>
+            <div className="survey-footer">
+              <Button onClick={() => setStep(-2)}>
+                {profile.accountType || chips.length
+                  ? "Continue setup"
+                  : "Start setup"}
+                <ArrowRight size={18} />
+              </Button>
+              <button className="text-button" onClick={() => setShowSkip(true)}>
+                Finish later
+              </button>
+            </div>
           </>
         ) : step === -2 ? (
           <>
             <PageTitle title="Make Sidequest yours.">
-              Are you here for your own adventures, or on behalf of a brand?
+              Choose your account and a name to use here.
             </PageTitle>
             <AccountTypeChoice
               value={profile.accountType}
@@ -666,25 +647,23 @@ export default function Onboarding() {
                 }
               />
             </label>
-            <Button
-              busy={busy}
-              disabled={!profile.accountType}
-              onClick={() => void saveAccountChoice()}
-            >
-              {reviewingAnswer ? "Return to review" : "Continue"}{" "}
-              <ArrowRight size={18} />
-            </Button>
-            <button
-              className="text-button"
-              disabled={busy}
-              onClick={() => void saveAccountChoice(true)}
-            >
-              Skip this step
-            </button>
-            <p className="support">
-              Account type sets up the right experience. Brand approval stays
-              separate. You can change it later.
-            </p>
+            <div className="survey-footer">
+              <Button
+                busy={busy}
+                disabled={!profile.accountType}
+                onClick={() => void saveAccountChoice()}
+              >
+                {reviewingAnswer ? "Return to review" : "Continue"}{" "}
+                <ArrowRight size={18} />
+              </Button>
+              <button
+                className="text-button"
+                disabled={busy}
+                onClick={() => void saveAccountChoice(true)}
+              >
+                Skip this step
+              </button>
+            </div>
           </>
         ) : step === -1 ? (
           <>
@@ -714,16 +693,6 @@ export default function Onboarding() {
           </>
         ) : step < total ? (
           <>
-            <div className="preference-tools">
-              <span>Account & quest preferences</span>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void openSummary()}
-              >
-                <FileText size={16} /> ChatGPT summary
-              </button>
-            </div>
             <div
               className="survey-progress"
               role="progressbar"
@@ -752,16 +721,6 @@ export default function Onboarding() {
                 {q.description ||
                   "Choose only what you can confirm. Leave it unanswered if you’re unsure."}
               </PageTitle>
-              {profile.summary && (
-                <details className="question-summary-reference">
-                  <summary>Use my summary as a reference</summary>
-                  <p>{profile.summary}</p>
-                  <small>
-                    Confirm only what is true. Guesses and watching an activity
-                    do not mean you would participate.
-                  </small>
-                </details>
-              )}
               {profile.preferences.legacyUnconfirmed.includes(q.key) && (
                 <Notice>
                   Your old profile may have filled this answer by default.

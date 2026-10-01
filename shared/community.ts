@@ -65,7 +65,10 @@ export const communityInputs = {
     .object({
       id: id.optional(),
       expectedVersion: version,
-      quest: questVariantSchema,
+      quest: questVariantSchema.refine(
+        (quest) => !quest.privateGenerated && !quest.id.startsWith("private_"),
+        "Private generated experiences cannot be submitted as public templates.",
+      ),
     })
     .strict(),
   draft_submit: z.object({ id, expectedVersion: version }).strict(),

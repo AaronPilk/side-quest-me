@@ -67,6 +67,7 @@ export function DiscoverPostCard({
   const [caption, setCaption] = useState(post.caption);
   const [brandOptIn, setBrandOptIn] = useState(post.brandOptIn);
   const own = viewer?.userId === post.creator.id;
+  const privateQuest = post.quest.id.startsWith("private_");
   const openForInquiries =
     post.state === "published" && post.brandOptIn && post.creator.openToBrands;
   return (
@@ -185,10 +186,52 @@ export function DiscoverPostCard({
           <Link to={`/discover?template=${encodeURIComponent(post.quest.id)}`}>
             <Layers2 size={17} /> Other attempts · {post.attemptCount}
           </Link>
-          <Link to={`/quests/${post.quest.id}`}>
-            <BookOpen size={17} /> Read the quest
-          </Link>
+          {!privateQuest && (
+            <Link to={`/quests/${post.quest.id}`}>
+              <BookOpen size={17} /> Read the quest
+            </Link>
+          )}
         </div>
+        {privateQuest && post.state === "published" && (
+          <details className="community-panel">
+            <summary>
+              <BookOpen size={17} /> Read the shared quest
+            </summary>
+            <p className="support">
+              These instructions were shared with this story. Find your own
+              quest to make a plan for your group.
+            </p>
+            <ol>
+              {post.quest.beats.map((beat, index) => (
+                <li key={index}>
+                  <strong>{beat.label}</strong>
+                  <p>{beat.action}</p>
+                </li>
+              ))}
+            </ol>
+            {post.quest.materials.length > 0 && (
+              <>
+                <h3>What you need</h3>
+                <ul>
+                  {post.quest.materials.map((item, index) => (
+                    <li key={index}>{item}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {post.quest.requirements.length > 0 && (
+              <>
+                <h3>Before you start</h3>
+                <ul>
+                  {post.quest.requirements.map((item, index) => (
+                    <li key={index}>{item}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <p>{post.quest.fallback}</p>
+          </details>
+        )}
         {detail && own && (
           <details className="community-panel">
             <summary>Edit this public post</summary>

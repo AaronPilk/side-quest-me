@@ -55,8 +55,8 @@ function navigateWebWindow(popup: ExternalWindow | null): "web" {
 }
 
 async function launchNativeChatGPT(): Promise<"app" | "web"> {
-  // The native bridge owns its fixed HTTPS destination, tries an iOS universal
-  // link, then opens the system browser. No prompt or profile enters the URL.
+  // The native bridge tries the declared #native home app link, then opens
+  // the plain home URL in the browser. No prompt or profile enters either URL.
   const result = await nativeLauncher.openChatGPT();
   if (result?.destination !== "app" && result?.destination !== "web")
     throw new Error("ChatGPT could not open.");
