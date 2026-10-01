@@ -24,14 +24,22 @@ export default function Settings() {
   return (
     <div className="settings-page">
       <PageTitle title="Settings">
-        Your account, preferences, and workspaces.
+        App controls, privacy, and your workspaces.
       </PageTitle>
       <nav className="settings-list" aria-label="Settings">
-        <Link to="/account">
+        <Link to="/account/security">
           <Settings2 />
           <span>
             <strong>Account settings</strong>
-            <small>Preferences, privacy, and your imported summary</small>
+            <small>Sign-in, privacy, sign-out and account deletion</small>
+          </span>
+          <ChevronRight />
+        </Link>
+        <Link to="/account">
+          <Settings2 />
+          <span>
+            <strong>Account & quest preferences</strong>
+            <small>Your account type, ChatGPT summary and personal fit</small>
           </span>
           <ChevronRight />
         </Link>
@@ -67,6 +75,16 @@ export default function Settings() {
                   ? "Approvals, reports, and manual verification"
                   : "Opens if your account is an operator"}
               </small>
+            </span>
+            <ChevronRight />
+          </Link>
+        )}
+        {me.data?.roles.includes("operator") && (
+          <Link to="/operator">
+            <ShieldCheck />
+            <span>
+              <strong>Operator tools</strong>
+              <small>Quest reviews and funded offers</small>
             </span>
             <ChevronRight />
           </Link>

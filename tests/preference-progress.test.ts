@@ -137,8 +137,19 @@ describe("preference reminder", () => {
     expect(markup).toContain("returnTo=%2Fprofile");
   });
 
-  it("hides for brand accounts and for fully answered personal profiles", () => {
-    expect(renderReminder({ accountType: "brand" })).toBe("");
+  it("reminds both account types while unknown and hides when either has fully confirmed preferences", () => {
+    expect(renderReminder({ accountType: "brand" })).toContain(
+      "Continue preferences",
+    );
+    expect(renderReminder({ accountType: "brand" })).toContain(
+      "0 of 11 answered",
+    );
+    expect(
+      renderReminder({
+        accountType: "brand",
+        preferences: completePreferences,
+      }),
+    ).toBe("");
     expect(renderReminder({ preferences: completePreferences })).toBe("");
     expect(renderReminder({ accountType: null })).toContain(
       "Continue preferences",

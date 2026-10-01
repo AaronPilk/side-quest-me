@@ -1,7 +1,7 @@
 const RETURN_KEY = "sq-return-to";
 const INTERNAL_ORIGIN = "https://sidequest.invalid";
 const RETURN_PATH =
-  /^\/(?:create|discover|activity|journal|rewards|profile(?:\/import)?|account|studio|operator|business|admin|settings(?:\/demo-tools)?|series(?:\/[A-Za-z0-9_-]+(?:\/edit)?)?|(?:posts|creators|quests|runs|offers|originals)\/[A-Za-z0-9_-]+)?$/;
+  /^\/(?:create|discover|activity|journal|rewards|profile(?:\/import)?|account(?:\/security)?|preferences|studio|operator|business|admin|settings(?:\/demo-tools)?|series(?:\/[A-Za-z0-9_-]+(?:\/edit)?)?|(?:posts|creators|quests|runs|offers|originals)\/[A-Za-z0-9_-]+)?$/;
 
 /** Only return to a known app route, never a network URL or an encoded path escape. */
 export function validateReturnTo(value: unknown): string | null {

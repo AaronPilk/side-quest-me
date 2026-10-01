@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import sharp from "sharp";
+import { DEFAULT_PREFERENCES } from "../shared/domain";
 const creator = "11111111-1111-4111-8111-111111111111";
 const viewer = "22222222-2222-4222-8222-222222222222";
 async function start(page: Page, route = "/profile") {
@@ -219,6 +220,28 @@ test("signing out of a public owner profile clears private content before refetc
   );
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/me") {
+      if (!route.request().headers().authorization)
+        return route.fulfill({
+          status: 401,
+          json: { error: "Sign in to continue." },
+        });
+      return route.fulfill({
+        json: {
+          profile: {
+            accountType: "personal",
+            displayName: "Private owner",
+            timezone: "UTC",
+            locale: "en",
+            summary: "",
+            preferences: DEFAULT_PREFERENCES,
+            onboardingCompleted: true,
+          },
+          wallet: { xp: 0, points: 0, version: 0 },
+          roles: [],
+        },
+      });
+    }
     if (path === "/api/community/me") {
       if (signedOut) privateReadsAfterSignOut += 1;
       return route.fulfill({

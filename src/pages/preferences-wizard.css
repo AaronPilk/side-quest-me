@@ -227,7 +227,7 @@
   margin-bottom: 14px;
 }
 .preferences-direct .survey-progress {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 .preferences-direct .preference-question-panel .page-title {
   margin-bottom: 12px;
@@ -269,4 +269,260 @@
 }
 .preferences-direct .survey-footer > .text-button {
   margin-top: 0;
+}
+@media (min-width: 361px) {
+  .preferences-direct .survey-footer:has(> .text-button) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px 12px;
+  }
+  .preferences-direct .survey-footer > .support {
+    grid-column: 1 / -1;
+  }
+  .preferences-direct .survey-footer > .text-button {
+    width: auto;
+    min-height: 44px;
+    padding-inline: 6px;
+  }
+}
+
+/* The account, ChatGPT and quest questions share one focused phone journey. */
+.preferences-hub .page-title h1 {
+  font-size: 1.8rem;
+  line-height: 1.12;
+}
+.preferences-hub .settings-list {
+  margin: 20px 0;
+}
+.preferences-hub .settings-list > a {
+  min-height: 78px;
+}
+.preference-intro-steps {
+  display: grid;
+  gap: 20px;
+  padding: 0;
+  margin: 24px 0 30px;
+  list-style: none;
+  counter-reset: setup;
+}
+.preference-intro-steps li {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  column-gap: 12px;
+  counter-increment: setup;
+}
+.preference-intro-steps li::before {
+  content: counter(setup);
+  grid-row: span 2;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--action-ink);
+  font-weight: 700;
+}
+.preference-intro-steps span {
+  grid-column: 2;
+  color: var(--secondary);
+  font-size: 0.83rem;
+  margin-top: 4px;
+}
+.preference-nickname {
+  margin: 20px 0;
+}
+.preference-nickname .support {
+  display: block;
+  font-size: 0.72rem;
+  margin: 3px 0 8px;
+}
+.preference-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  margin: -5px 0 4px;
+  font-size: 0.66rem;
+  color: var(--secondary);
+}
+.preference-tools button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 70%);
+  color: var(--action-ink);
+  font-size: 0.7rem;
+}
+.preference-tools button svg {
+  flex-shrink: 0;
+}
+.chatgpt-prompt-card {
+  padding: 20px;
+  border: 1px solid rgb(255 255 255 / 95%);
+  border-radius: 26px;
+  background: rgb(255 255 255 / 65%);
+  box-shadow: var(--shadow-card);
+}
+.chatgpt-prompt-card .eyebrow {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+}
+.chatgpt-prompt-card h2 {
+  font-size: 1.12rem;
+  margin: 10px 0;
+  line-height: 1.2;
+}
+.chatgpt-prompt-card p {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 10px 0 16px;
+}
+.chatgpt-prompt-card .button {
+  width: 100%;
+  font-size: 0.8rem;
+  gap: 8px;
+  padding: 13px 12px;
+}
+.chatgpt-prompt-card .button svg {
+  flex-shrink: 0;
+}
+.chatgpt-prompt-card p.support {
+  font-size: 0.69rem;
+  margin-bottom: 5px;
+}
+.chatgpt-prompt-card .prompt-details {
+  margin: 8px 0 0;
+  border: 0;
+  padding: 0;
+}
+.chatgpt-prompt-card summary {
+  min-height: 44px;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+}
+.chatgpt-prompt-card pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.72rem;
+  max-height: 260px;
+  overflow-y: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.summary-paste-panel {
+  margin: 18px 0;
+  border-block: 1px solid var(--line);
+  padding-block: 5px;
+}
+.summary-paste-panel > summary {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.summary-paste-panel > summary::before {
+  content: "+";
+  margin-right: 10px;
+  color: var(--action-ink);
+}
+.summary-paste-panel[open] > summary::before {
+  content: "−";
+}
+.summary-paste-panel label {
+  font-size: 0.78rem;
+  margin-top: 10px;
+}
+.summary-paste-panel textarea {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  min-height: 150px;
+  max-height: 260px;
+  border-radius: 22px;
+}
+.summary-paste-panel .support {
+  font-size: 0.72rem;
+}
+.summary-guided .summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.summary-guided .summary-actions > * {
+  flex: 1 1 130px;
+  font-size: 0.75rem;
+}
+.summary-guided .summary-actions > .text-button {
+  min-height: 44px;
+  margin: 0;
+}
+.summary-guided .survey-footer {
+  margin-top: 15px;
+}
+.question-summary-reference {
+  margin: 0 0 10px;
+  font-size: 0.7rem;
+  color: var(--secondary);
+}
+.question-summary-reference summary {
+  cursor: pointer;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  color: var(--action-ink);
+}
+.question-summary-reference summary::before {
+  content: "+";
+  margin-right: 7px;
+}
+.question-summary-reference[open] summary::before {
+  content: "−";
+}
+.question-summary-reference p {
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow: auto;
+  background: rgb(255 255 255 / 60%);
+  padding: 12px;
+  border-radius: 16px;
+}
+.preference-skip-card {
+  padding: 24px;
+  border-radius: 26px;
+  background: rgb(255 255 255 / 75%);
+  border: 1px solid var(--line);
+}
+.preference-skip-card h2 {
+  font-size: 1.4rem;
+}
+.preference-skip-card p {
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+.preference-skip-card .button {
+  width: 100%;
+}
+.preference-skip-card .support {
+  font-size: 0.73rem;
+}
+.profile-preferences-shortcut > span {
+  min-width: 0;
+  text-align: left;
+}
+.profile-preferences-shortcut small {
+  display: block;
+  color: var(--secondary);
+  font-size: 0.65rem;
+  font-weight: 400;
+  margin-top: 4px;
+  line-height: 1.4;
 }

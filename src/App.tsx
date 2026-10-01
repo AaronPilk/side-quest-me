@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   Route,
+  Navigate,
   Routes,
   Link,
   useNavigate,
@@ -33,6 +34,7 @@ import {
 } from "./lib/internal-return";
 import { Button, Loading, Notice } from "./components/ui";
 import { AdventureCarousel } from "./components/AdventureCarousel";
+import { OnboardingGate } from "./components/OnboardingGate";
 import { BrandAccountGate } from "./components/BrandAccountGate";
 import Quest from "./pages/Quest";
 import Profile from "./pages/Profile";
@@ -43,7 +45,7 @@ import PublicQuest from "./pages/PublicQuest";
 
 const ActiveQuest = lazy(() => import("./pages/ActiveQuest"));
 const Operator = lazy(() => import("./pages/Operator"));
-const ImportProfile = lazy(() => import("./pages/ImportProfile"));
+const AccountSecurity = lazy(() => import("./pages/AccountSecurity"));
 const Discover = lazy(() => import("./pages/Discover"));
 const Activity = lazy(() => import("./pages/Activity"));
 const Creator = lazy(() => import("./pages/Creator"));
@@ -171,6 +173,7 @@ export default function App() {
   const navigationVisible =
     ((signedIn && !welcome) || publicPage) &&
     !location.pathname.startsWith("/onboarding") &&
+    location.pathname !== "/preferences" &&
     !isReel;
   const isDiscover = location.pathname === "/discover";
   const isSeriesBrowse = /^\/series(?:\/[0-9a-f-]{36})?$/i.test(
@@ -253,79 +256,102 @@ export default function App() {
           />
         ) : (
           <Suspense fallback={<Loading />}>
-            <Routes key={identity ?? "guest"}>
-              <Route path="/" element={<Quest />} />
-              <Route path="/create" element={<Quest />} />
-              <Route
-                path="/discover"
-                element={<Discover signedIn={signedIn} />}
-              />
-              <Route
-                path="/posts/:id"
-                element={<Discover signedIn={signedIn} />}
-              />
-              <Route
-                path="/creators/:id"
-                element={<Creator signedIn={signedIn} />}
-              />
-              <Route path="/quests/:templateId" element={<PublicQuest />} />
-              <Route path="/activity" element={<Activity />} />
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route path="/journal" element={<Journal />} />
-              <Route path="/rewards" element={<Rewards />} />
-              <Route
-                path="/profile"
-                element={<Creator signedIn={signedIn} />}
-              />
-              <Route path="/account" element={<Profile />} />
-              <Route path="/studio" element={<CommunityStudio />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/settings/demo-tools" element={<DemoTools />} />
-              <Route
-                path="/business"
-                element={
-                  <BrandAccountGate>
-                    <BusinessWorkspace />
-                  </BrandAccountGate>
-                }
-              />
-              <Route path="/admin" element={<CommunityAdmin />} />
-              <Route path="/originals/new" element={<OriginalQuest />} />
-              <Route path="/originals/:id" element={<OriginalQuest />} />
-              {[
-                "/series",
-                "/series/new",
-                "/series/:id",
-                "/series/:id/edit",
-              ].map((path) => (
+            <OnboardingGate
+              key={identity ?? "guest"}
+              signedIn={signedIn}
+              identity={identity}
+              demo={DEMO}
+            >
+              <Routes key={identity ?? "guest"}>
+                <Route path="/" element={<Quest />} />
+                <Route path="/create" element={<Quest />} />
                 <Route
-                  key={path}
-                  path={path}
+                  path="/discover"
+                  element={<Discover signedIn={signedIn} />}
+                />
+                <Route
+                  path="/posts/:id"
+                  element={<Discover signedIn={signedIn} />}
+                />
+                <Route
+                  path="/creators/:id"
+                  element={<Creator signedIn={signedIn} />}
+                />
+                <Route path="/quests/:templateId" element={<PublicQuest />} />
+                <Route path="/activity" element={<Activity />} />
+                <Route
+                  path="/onboarding"
+                  element={<Onboarding key="onboarding" />}
+                />
+                <Route
+                  path="/preferences"
+                  element={<Onboarding key="preferences" />}
+                />
+                <Route path="/journal" element={<Journal />} />
+                <Route path="/rewards" element={<Rewards />} />
+                <Route
+                  path="/profile"
+                  element={<Creator signedIn={signedIn} />}
+                />
+                <Route path="/account" element={<Profile />} />
+                <Route path="/account/security" element={<AccountSecurity />} />
+                <Route path="/studio" element={<CommunityStudio />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/settings/demo-tools" element={<DemoTools />} />
+                <Route
+                  path="/business"
                   element={
-                    <Series
-                      key={`${signedIn}:${location.pathname}`}
-                      signedIn={signedIn}
+                    <BrandAccountGate>
+                      <BusinessWorkspace />
+                    </BrandAccountGate>
+                  }
+                />
+                <Route path="/admin" element={<CommunityAdmin />} />
+                <Route path="/originals/new" element={<OriginalQuest />} />
+                <Route path="/originals/:id" element={<OriginalQuest />} />
+                {[
+                  "/series",
+                  "/series/new",
+                  "/series/:id",
+                  "/series/:id/edit",
+                ].map((path) => (
+                  <Route
+                    key={path}
+                    path={path}
+                    element={
+                      <Series
+                        key={`${signedIn}:${location.pathname}`}
+                        signedIn={signedIn}
+                      />
+                    }
+                  />
+                ))}
+                <Route path="/offers/:id" element={<LicenseOffer />} />
+                <Route
+                  path="/profile/import"
+                  element={
+                    <Navigate
+                      to="/preferences?step=summary&returnTo=%2Faccount"
+                      replace
                     />
                   }
                 />
-              ))}
-              <Route path="/offers/:id" element={<LicenseOffer />} />
-              <Route path="/profile/import" element={<ImportProfile />} />
-              <Route path="/runs/:id" element={<ActiveQuest />} />
-              <Route path="/operator" element={<Operator />} />
-              <Route path="/auth/callback" element={<Quest />} />
-              <Route
-                path="*"
-                element={
-                  <div className="empty">
-                    <h1>That page wandered off.</h1>
-                    <Link to="/" className="button">
-                      Find a quest
-                    </Link>
-                  </div>
-                }
-              />
-            </Routes>
+                <Route path="/runs/:id" element={<ActiveQuest />} />
+                <Route path="/operator" element={<Operator />} />
+                <Route path="/auth/callback" element={<Quest />} />
+                <Route
+                  path="*"
+                  element={
+                    <div className="empty">
+                      <h1>That page wandered off.</h1>
+                      <Link to="/" className="button">
+                        Find a quest
+                      </Link>
+                    </div>
+                  }
+                />
+              </Routes>
+            </OnboardingGate>
           </Suspense>
         )}
       </main>

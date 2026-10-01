@@ -1,7 +1,27 @@
 import { expect, test, type Page } from "@playwright/test";
 import { DEFAULT_PREFERENCES } from "../shared/domain";
 import { catalog } from "../shared/catalog";
-import { INTEREST_OPTIONS, SURVEY_QUESTIONS } from "../shared/profile";
+import {
+  INTEREST_OPTIONS,
+  SURVEY_QUESTIONS,
+  type SurveyQuestion,
+} from "../shared/profile";
+
+const questions: SurveyQuestion[] = SURVEY_QUESTIONS.flatMap((question) =>
+  question.key === "skills"
+    ? [
+        {
+          id: "interests",
+          key: "interests",
+          title: "What would you like to explore?",
+          type: "multi",
+          optional: true,
+          options: INTEREST_OPTIONS,
+        },
+        { ...question, title: "Which skills would you enjoy using?" },
+      ]
+    : [question],
+);
 
 async function start(page: Page, path: string) {
   await page.addInitScript(() =>
@@ -16,12 +36,28 @@ async function start(page: Page, path: string) {
 
 async function savedProfile(page: Page) {
   return page.evaluate(
-    () => JSON.parse(localStorage.getItem("sidequest-demo-v1")!).me.profile,
+    () =>
+      JSON.parse(localStorage.getItem("sidequest-demo-v1") || "null")?.me
+        .profile,
   );
+}
+
+async function beginQuestions(page: Page) {
+  await page
+    .getByRole("button", { name: "Continue to preferences", exact: true })
+    .click();
+}
+
+async function skipQuestions(page: Page, count: number) {
+  for (let index = 0; index < count; index++)
+    await page
+      .getByRole("button", { name: "Skip this question", exact: true })
+      .click();
 }
 
 async function mockAccount(page: Page) {
   const profile = {
+    accountType: "personal",
     displayName: "Audit account",
     timezone: "UTC",
     locale: "en",
@@ -70,13 +106,16 @@ test("review chips edit the right answer, unknown answers are directly editable,
   page,
 }) => {
   await start(page, "/onboarding");
-  await page.getByRole("button", { name: "Skip for now", exact: true }).click();
-  for (let index = 0; index < 10; index++) {
-    if (index === 4)
+  await beginQuestions(page);
+  for (let index = 0; index < questions.length; index++) {
+    if (index === 4) {
       await page
         .getByRole("button", { name: "Camera person", exact: true })
         .click();
-    if (index === 9)
+      await expect(page.getByText("6 of 11", { exact: true })).toBeVisible();
+      continue;
+    }
+    if (index === 10)
       await page.getByRole("button", { name: "Alcohol", exact: true }).click();
     await page.getByRole("button", { name: "Continue", exact: true }).click();
   }
@@ -87,19 +126,20 @@ test("review chips edit the right answer, unknown answers are directly editable,
     page.getByRole("heading", { name: "What's your role?", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Mastermind", exact: true }).click();
-  await page.reload();
-  await expect(
-    page.getByRole("button", { name: "Mastermind", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await page
-    .getByRole("button", { name: "Return to review", exact: true })
-    .click();
   await expect(
     page.getByRole("heading", {
       name: "Your kind of side quest.",
       exact: true,
     }),
   ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("button", {
+      name: "Prefers the mastermind role",
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect((await savedProfile(page)).preferences.role).toBe("mastermind");
   await page.locator("summary").filter({ hasText: "Edit any answer" }).click();
   await page
     .getByRole("button", {
@@ -107,7 +147,6 @@ test("review chips edit the right answer, unknown answers are directly editable,
     })
     .click();
   await page.getByRole("button", { name: "Start now", exact: true }).click();
-  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Likes to start now", exact: true }),
   ).toBeVisible();
@@ -130,16 +169,13 @@ test("review chips edit the right answer, unknown answers are directly editable,
   });
 });
 
-test("every survey question can be reviewed directly without changing unknown answers, and cancelling discards draft changes", async ({
+test("every survey question can be reviewed directly without changing unknown answers, and leaving discards unsaved changes", async ({
   page,
 }) => {
   await start(page, "/onboarding");
-  await page.getByRole("button", { name: "Skip for now", exact: true }).click();
-  for (let index = 0; index < 10; index++)
-    await page
-      .getByRole("button", { name: "Skip this question", exact: true })
-      .click();
-  for (const question of SURVEY_QUESTIONS) {
+  await beginQuestions(page);
+  await skipQuestions(page, questions.length);
+  for (const question of questions) {
     await page
       .locator("summary")
       .filter({ hasText: "Edit any answer" })
@@ -155,35 +191,58 @@ test("every survey question can be reviewed directly without changing unknown an
       page.getByRole("heading", { name: question.title, exact: true }),
     ).toBeVisible();
     await page
-      .getByRole("button", { name: "Reset answer to unknown", exact: true })
-      .click();
-    await page
       .getByRole("button", { name: "Return to review", exact: true })
       .click();
   }
   await expect(page.locator(".review-chips .chip")).toHaveCount(0);
-  await page.getByRole("button", { name: "Edit answers", exact: true }).click();
+  await page.getByRole("button", { name: "Looks right", exact: true }).click();
+  await expect(page).toHaveURL(/\/create$/);
+  await page.goto("/preferences?returnTo=%2Fcreate");
+  await page
+    .getByRole("button", { name: "Continue setup", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await beginQuestions(page);
   await page.getByRole("button", { name: "Select all", exact: true }).click();
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  // The answer is still pending: Back through summary and account leaves this
+  // completed user's editor without confirming the categories.
+  for (let index = 0; index < 3; index++)
+    await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page).toHaveURL(/\/create$/);
   expect(await savedProfile(page)).toMatchObject({
     accountType: "personal",
-    onboardingCompleted: false,
+    onboardingCompleted: true,
     preferences: DEFAULT_PREFERENCES,
   });
   expect(
-    await page.evaluate(() => sessionStorage.getItem("sq-profile-draft")),
+    await page.evaluate(() =>
+      sessionStorage.getItem("sq-preference-wizard-draft"),
+    ),
   ).toBeNull();
 });
 
-test("summary prompt copy failure is recoverable and discarding draft text and preferences does not save either", async ({
+test("summary prompt copy failure is recoverable and discarding draft text never creates preferences", async ({
   page,
 }) => {
   await start(page, "/profile/import");
+  await expect(page).toHaveURL(/\/preferences\?returnTo=%2Faccount$/);
   await page
     .locator("summary")
-    .filter({ hasText: "Get a summary from ChatGPT" })
+    .filter({ hasText: "View or manually copy the prompt" })
     .click();
+  await page.evaluate(() => {
+    window.open = () =>
+      ({
+        opener: null,
+        closed: false,
+        close() {},
+        location: {
+          replace(url: string) {
+            sessionStorage.setItem("test-chatgpt-destination", url);
+          },
+        },
+      }) as unknown as Window;
+  });
   await page.evaluate(() =>
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -194,7 +253,9 @@ test("summary prompt copy failure is recoverable and discarding draft text and p
       },
     }),
   );
-  await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Copy prompt and open ChatGPT", exact: true })
+    .click();
   await expect(page.getByRole("alert")).toContainText(
     "Select and copy the prompt below",
   );
@@ -208,27 +269,37 @@ test("summary prompt copy failure is recoverable and discarding draft text and p
       },
     }),
   );
-  await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Prompt copied", exact: true }),
-  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Copy prompt and open ChatGPT", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Prompt copied. Paste it into ChatGPT",
+  );
   await expect(page.getByRole("alert")).toHaveCount(0);
   expect(
     await page.evaluate(() => sessionStorage.getItem("test-copied-prompt")),
   ).toContain("summary");
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("test-chatgpt-destination"),
+    ),
+  ).toBe("https://chatgpt.com/");
+  await page
+    .locator("summary")
+    .filter({ hasText: "I have a summary to paste" })
+    .click();
   await page
     .getByRole("textbox", { name: "Review what you’re sharing", exact: true })
     .fill("I like games.");
-  await page
-    .locator("summary")
-    .filter({ hasText: "Interests & useful skills" })
-    .click();
-  await page
-    .getByRole("group", { name: "Interests to explore", exact: true })
-    .getByRole("button", { name: "Games", exact: true })
-    .click();
+  await expect(
+    page.getByRole("button", { name: "Continue to preferences", exact: true }),
+  ).toBeDisabled();
   await page
     .getByRole("button", { name: "Discard unsaved edits", exact: true })
+    .click();
+  await page
+    .locator("summary")
+    .filter({ hasText: "I have a summary to paste" })
     .click();
   await expect(
     page.getByRole("textbox", {
@@ -238,11 +309,15 @@ test("summary prompt copy failure is recoverable and discarding draft text and p
   ).toHaveValue("");
   await expect(
     page.getByRole("button", {
-      name: "Save confirmed preferences",
+      name: "Save summary",
       exact: true,
     }),
   ).toBeDisabled();
   await page.reload();
+  await page
+    .locator("summary")
+    .filter({ hasText: "I have a summary to paste" })
+    .click();
   await expect(
     page.getByRole("textbox", {
       name: "Review what you’re sharing",
@@ -252,22 +327,36 @@ test("summary prompt copy failure is recoverable and discarding draft text and p
   expect(
     await page.evaluate(() => localStorage.getItem("sidequest-demo-v1")),
   ).toBeNull();
+  await beginQuestions(page);
+  await skipQuestions(page, 7);
+  await expect(
+    page.getByRole("heading", { name: "What would you like to explore?" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Games", exact: true }),
+  ).toHaveAttribute("aria-pressed", "false");
+  expect(
+    (await savedProfile(page))?.preferences ?? DEFAULT_PREFERENCES,
+  ).toEqual(DEFAULT_PREFERENCES);
 });
 
 test("private nickname saves with immediate feedback, survives refresh, and reports save failure without losing the draft", async ({
   page,
 }) => {
   await start(page, "/account");
+  await page.getByRole("link", { name: /^Account details/ }).click();
+  await page.getByRole("radio", { name: /^Personal account/ }).check();
   const name = page.getByRole("textbox", {
-    name: "What should we call you?",
-    exact: true,
+    name: /^What should we call you\?/,
   });
   await name.fill("Avery private");
-  await name.press("Enter");
-  await expect(page.locator("form").getByRole("status")).toHaveText(
-    "Profile saved.",
-  );
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Your ChatGPT head start" }),
+  ).toBeVisible();
+  expect((await savedProfile(page)).displayName).toBe("Avery private");
   await page.reload();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(name).toHaveValue("Avery private");
   await name.fill("Keep my draft");
   await page.evaluate(() => {
@@ -278,20 +367,22 @@ test("private nickname saves with immediate feedback, survives refresh, and repo
       return original.call(this, key, value);
     };
   });
-  await page.getByRole("button", { name: "Save name", exact: true }).click();
-  await expect(page.locator("form").getByRole("alert")).toContainText(
-    "Save unavailable",
-  );
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Save unavailable");
   await expect(name).toHaveValue("Keep my draft");
+  expect((await savedProfile(page)).displayName).toBe("Avery private");
   await page.reload();
-  await expect(name).toHaveValue("Avery private");
+  await expect(name).toHaveValue("Keep my draft");
+  expect((await savedProfile(page)).displayName).toBe("Avery private");
+  await page.goto("/account/security");
   page.once("dialog", (dialog) => dialog.dismiss());
   await page
     .getByRole("button", { name: "Reset entire local demo", exact: true })
     .click();
-  await expect(name).toHaveValue("Avery private");
+  expect((await savedProfile(page)).displayName).toBe("Avery private");
   await page
-    .getByRole("link", { name: "Edit your public profile", exact: true })
+    .getByRole("navigation", { name: "Primary" })
+    .getByRole("link", { name: "Profile", exact: true })
     .click();
   await expect(page).toHaveURL(/\/profile$/);
 });
@@ -300,8 +391,12 @@ for (const path of ["/account", "/profile/import", "/onboarding"]) {
   test(`${path} can retry a failed initial profile load`, async ({ page }) => {
     await mockAccount(page);
     let failed = true;
+    let reads = 0;
     await page.route("**/api/me", async (route) => {
-      if (failed)
+      // Completed accounts pass the first-run gate; fail the page's own read.
+      // The onboarding route is itself allowed before that check.
+      reads++;
+      if (failed && (path === "/onboarding" || reads > 1))
         return route.fulfill({
           status: 503,
           json: { error: "Profile is temporarily unavailable." },
@@ -312,8 +407,20 @@ for (const path of ["/account", "/profile/import", "/onboarding"]) {
     await expect(page.getByRole("alert")).toContainText(
       "Profile is temporarily unavailable",
     );
+    if (path === "/account")
+      await expect(
+        page.getByRole("link", { name: "Account settings", exact: true }),
+      ).toHaveAttribute("href", "/account/security");
+    failed = false;
+    await page
+      .getByRole("button", { name: "Retry profile", exact: true })
+      .click();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     if (path === "/account") {
-      // Leaving or deleting the account never waits for a profile read.
+      // Leaving or deleting the account never depends on a profile read.
+      failed = true;
+      await page.goto("/account/security");
       await expect(
         page.getByRole("button", { name: "Sign out", exact: true }),
       ).toBeVisible();
@@ -321,12 +428,6 @@ for (const path of ["/account", "/profile/import", "/onboarding"]) {
         page.getByRole("button", { name: "Delete my account", exact: true }),
       ).toBeVisible();
     }
-    failed = false;
-    await page
-      .getByRole("button", { name: "Retry profile", exact: true })
-      .click();
-    await expect(page.getByRole("alert")).toHaveCount(0);
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   });
 }
 
@@ -334,12 +435,12 @@ test("sign out failure stays on account with feedback and a successful retry cle
   page,
 }) => {
   await mockAccount(page);
-  await page.goto("/account");
+  await page.goto("/account/security");
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText(
     "Sign out failed. Please try again.",
   );
-  await expect(page).toHaveURL(/\/account$/);
+  await expect(page).toHaveURL(/\/account\/security$/);
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Sign out", exact: true }),
@@ -457,8 +558,8 @@ test("all survey choice controls toggle honestly and reset leaves each answer un
   page,
 }) => {
   await start(page, "/onboarding");
-  await page.getByRole("button", { name: "Skip for now", exact: true }).click();
-  for (const question of SURVEY_QUESTIONS) {
+  await beginQuestions(page);
+  for (const [index, question] of questions.entries()) {
     const group = page.getByRole("group", {
       name:
         question.key === "skills"
@@ -472,25 +573,17 @@ test("all survey choice controls toggle honestly and reset leaves each answer un
         exact: true,
       });
       await control.click();
+      if (question.type === "single") {
+        await expect(
+          page.getByText(`${index + 2} of 11`, { exact: true }),
+        ).toBeVisible();
+        // Single-choice answers confirm immediately. Returning exposes the
+        // selected value and permits an explicit deselect/reset.
+        await page.getByRole("button", { name: "Back", exact: true }).click();
+      }
       await expect(control).toHaveAttribute("aria-pressed", "true");
       await control.click();
       await expect(control).toHaveAttribute("aria-pressed", "false");
-    }
-    if (question.key === "skills") {
-      const interests = page.getByRole("group", {
-        name: "Interests to explore",
-        exact: true,
-      });
-      for (const option of INTEREST_OPTIONS) {
-        const control = interests.getByRole("button", {
-          name: option.label,
-          exact: true,
-        });
-        await control.click();
-        await expect(control).toHaveAttribute("aria-pressed", "true");
-        await control.click();
-        await expect(control).toHaveAttribute("aria-pressed", "false");
-      }
     }
     if (question.key === "categories") {
       await page
@@ -508,6 +601,18 @@ test("all survey choice controls toggle honestly and reset leaves each answer un
         JSON.parse(sessionStorage.getItem("sq-profile-draft")!),
       );
       expect(draft.profile.preferences.exclusions).toEqual([]);
+    } else if (question.key !== "categories") {
+      // Reset requires an explicit answer. Prove it removes the value that
+      // otherwise would have been confirmed, rather than resetting a no-op.
+      await group
+        .getByRole("button", { name: question.options[0].label, exact: true })
+        .click();
+      if (question.type === "single") {
+        await expect(
+          page.getByText(`${index + 2} of 11`, { exact: true }),
+        ).toBeVisible();
+        await page.getByRole("button", { name: "Back", exact: true }).click();
+      }
     }
     await page
       .getByRole("button", { name: "Reset answer to unknown", exact: true })
@@ -537,11 +642,11 @@ test("corrupt survey drafts recover to the saved account instead of crashing", a
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
     page.getByRole("heading", {
-      name: "Bring your ChatGPT context",
+      name: "Your ChatGPT head start",
       exact: true,
     }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Skip for now", exact: true }).click();
+  await beginQuestions(page);
   await expect(
     page.getByRole("heading", { name: SURVEY_QUESTIONS[0].title, exact: true }),
   ).toBeVisible();
@@ -553,7 +658,8 @@ test("settings links and all demo identities remain reachable, and a blocked cre
 }) => {
   await start(page, "/settings");
   for (const [name, path] of [
-    ["Account settings", "/account"],
+    ["Account settings", "/account/security"],
+    ["Account & quest preferences", "/account"],
     ["Private journal", "/journal"],
     ["Demo tools", "/settings/demo-tools"],
   ]) {

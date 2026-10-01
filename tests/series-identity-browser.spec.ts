@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { catalog } from "../shared/catalog";
+import { DEFAULT_PREFERENCES } from "../shared/domain";
 import type { SeriesDetail, SeriesPart, SeriesSummary } from "../shared/series";
 
 const ownerId = "11111111-1111-4111-8111-111111111111";
@@ -106,6 +107,28 @@ async function seriesFixture(page: Page, signedIn = false) {
       route.request().headers().authorization?.replace("Bearer test-", "") ||
       null;
     requests.push({ path, actor });
+    if (path === "/api/me") {
+      if (!actor)
+        return route.fulfill({
+          status: 401,
+          json: { error: "Sign in to continue." },
+        });
+      return route.fulfill({
+        json: {
+          profile: {
+            accountType: "personal",
+            displayName: "Series creator",
+            timezone: "UTC",
+            locale: "en",
+            summary: "",
+            preferences: DEFAULT_PREFERENCES,
+            onboardingCompleted: true,
+          },
+          wallet: { xp: 0, points: 0, version: 0 },
+          roles: [],
+        },
+      });
+    }
     if (path === "/api/community/me") {
       if (!actor)
         return route.fulfill({
@@ -190,7 +213,9 @@ test("anonymous visitors can browse the public Series library without owner tabs
   ).toBe(true);
   expect(
     fixture.requests.some((request) =>
-      ["/api/series/mine", "/api/community/me"].includes(request.path),
+      ["/api/me", "/api/series/mine", "/api/community/me"].includes(
+        request.path,
+      ),
     ),
   ).toBe(false);
   // A series grows out of a quest, so the library offers no authoring entry

@@ -65,7 +65,14 @@ Apple's UGC rules cover filtering, reporting, blocking, and reachable contact in
 
 ## Account deletion audit
 
-Deletion is implemented; it should not be rebuilt as a mere sign-out. The path is **Settings → Account settings → Delete my account** (`/account`). `DELETE /api/me` invokes `sq_delete_account`, removes public availability, revokes share links and roles, cancels pending work, clears profile text, and queues private media cleanup. The scheduled Worker retries storage cleanup, calls `sq_finalize_account_deletion`, deletes the Supabase Auth user, and marks the account deleted. Sign-out clears local capture drafts. Minimal accounting/licensing records intentionally remain.
+Account & quest preferences now use the `/account` hub and the guided
+`/preferences` journey; the optional summary shortcut is
+`/preferences?step=summary&returnTo=%2Faccount`. `/profile/import` redirects there.
+Sign-in/privacy/security controls are separate at `/account/security` and remain
+reachable from Settings even when setup/profile loading fails. See
+`PREFERENCES_FLOW_REVIEW_2026-10-01.md` for the current setup flow.
+
+Deletion is implemented; it should not be rebuilt as a mere sign-out. The path is **Settings → Account settings → Delete my account** (`/account/security`). `DELETE /api/me` invokes `sq_delete_account`, removes public availability, revokes share links and roles, cancels pending work, clears profile text, and queues private media cleanup. The scheduled Worker retries storage cleanup, calls `sq_finalize_account_deletion`, deletes the Supabase Auth user, and marks the account deleted. Sign-out clears local capture drafts. Minimal accounting/licensing records intentionally remain.
 
 On a disposable production test account, verify the entire chain, including storage deletion, revoked public links, the removed Auth user, and retry behavior when cleanup temporarily fails. Explain the retained records and actual deletion timing in the privacy policy and user feedback; do not promise immediate physical deletion. Apple requires an in-app deletion initiation path and expects retained data to be explained. [Apple account deletion guidance](https://developer.apple.com/support/offering-account-deletion-in-your-app/)
 

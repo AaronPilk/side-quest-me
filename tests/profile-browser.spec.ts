@@ -1,96 +1,39 @@
 import { test, expect, type Page } from "@playwright/test";
-import { DEFAULT_PREFERENCES } from "../shared/domain";
+import { DEFAULT_PREFERENCES, type Preferences } from "../shared/domain";
 
 async function startSurvey(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "Find my first quest" }).click();
   await page.getByRole("radio", { name: /^Personal account/ }).check();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Skip for now" }).click();
+  await page
+    .getByRole("button", { name: "Continue to preferences", exact: true })
+    .click();
 }
 async function storedProfile(page: Page) {
   return page.evaluate(
     () => JSON.parse(localStorage.getItem("sidequest-demo-v1")!).me.profile,
   );
 }
-
-test("skipping all ten questions leaves unknown answers and never invents role rotation", async ({
-  page,
-}) => {
-  await startSurvey(page);
-  for (let step = 0; step < 10; step++) {
-    await expect(
-      page.getByText(`${step + 1} of 10`, { exact: true }),
-    ).toBeVisible();
-    await page
-      .getByRole("button", { name: "Skip this question", exact: true })
-      .click();
-  }
-  await expect(
-    page.getByText("Happy to rotate roles", { exact: true }),
-  ).toHaveCount(0);
-  await expect(page.locator(".review-chips .chip")).toHaveCount(0);
-  await page.getByRole("button", { name: "Looks right" }).click();
-  await expect(page).toHaveURL(/\/create$/);
-  await page.reload();
-  expect((await storedProfile(page)).preferences).toEqual(DEFAULT_PREFERENCES);
-  await page.goto("/account");
-  await expect(
-    page.getByText("Happy to rotate roles", { exact: true }),
-  ).toHaveCount(0);
-});
-
-test("moving past an answered question preserves it; explicit reset persists unknown", async ({
-  page,
-}) => {
-  await startSurvey(page);
-  for (let step = 0; step < 4; step++)
-    await page
-      .getByRole("button", { name: "Skip this question", exact: true })
-      .click();
-  const rotate = page.getByRole("button", {
-    name: "Rotate me around",
-    exact: true,
-  });
-  await rotate.click();
-  await page
-    .getByRole("button", { name: "Skip this question", exact: true })
-    .click();
-  await page.reload();
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(rotate).toHaveAttribute("aria-pressed", "true");
-  await page
-    .getByRole("button", { name: "Reset answer to unknown", exact: true })
-    .click();
-  await expect(rotate).toHaveAttribute("aria-pressed", "false");
-  for (let step = 4; step < 10; step++)
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(
-    page.getByText("Happy to rotate roles", { exact: true }),
-  ).toHaveCount(0);
-  await page.getByRole("button", { name: "Looks right" }).click();
-  await expect(page).toHaveURL(/\/create$/);
-  await page.reload();
-  expect((await storedProfile(page)).preferences.role).toBeNull();
-});
-
-test("manual summary review, immediate removal and error feedback preserve separate confirmed answers after refresh", async ({
-  page,
-}, testInfo) => {
+async function seed(
+  page: Page,
+  preferences: Preferences = DEFAULT_PREFERENCES,
+  summary = "",
+) {
   await page.addInitScript(
-    (preferences) => {
-      if (localStorage.getItem("sidequest-demo-v1")) return;
+    ({ preferences, summary }) => {
       sessionStorage.setItem("sq-demo-started", "1");
+      if (localStorage.getItem("sidequest-demo-v1")) return;
       localStorage.setItem(
         "sidequest-demo-v1",
         JSON.stringify({
           me: {
             profile: {
+              accountType: "personal",
               displayName: "Profile test",
               timezone: "UTC",
               locale: "en",
-              summary:
-                "I watch prank videos. My willingness to perform is unknown. Product-design requests are not my preferences.",
+              summary,
               onboardingCompleted: true,
               preferences,
             },
@@ -101,14 +44,107 @@ test("manual summary review, immediate removal and error feedback preserve separ
         }),
       );
     },
+    { preferences, summary },
+  );
+}
+async function skip(page: Page, count: number) {
+  for (let index = 0; index < count; index++)
+    await page
+      .getByRole("button", { name: "Skip this question", exact: true })
+      .click();
+}
+async function beginPreferences(page: Page) {
+  await page.getByRole("button", { name: /^(Start|Continue) setup$/ }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Continue to preferences", exact: true })
+    .click();
+}
+
+test("skipping all eleven questions leaves unknown answers and never invents role rotation", async ({
+  page,
+}) => {
+  await startSurvey(page);
+  for (let step = 0; step < 11; step++) {
+    await expect(
+      page.getByText(`${step + 1} of 11`, { exact: true }),
+    ).toBeVisible();
+    await skip(page, 1);
+  }
+  await expect(
+    page.getByText("Happy to rotate roles", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator(".review-chips .chip")).toHaveCount(0);
+  await page.getByRole("button", { name: "Looks right", exact: true }).click();
+  await expect(page).toHaveURL(/\/create$/);
+  await page.reload();
+  expect((await storedProfile(page)).preferences).toEqual(DEFAULT_PREFERENCES);
+  await expect(
+    page.getByRole("link", {
+      name: "Make it your kind of quest",
+      exact: false,
+    }),
+  ).toBeVisible();
+  await page.goto("/account");
+  await expect(
+    page.getByText("Happy to rotate roles", { exact: true }),
+  ).toHaveCount(0);
+});
+
+test("an answered role auto saves and survives skipping it; explicit reset persists unknown", async ({
+  page,
+}) => {
+  await startSurvey(page);
+  await skip(page, 4);
+  const rotate = page.getByRole("button", {
+    name: "Rotate me around",
+    exact: true,
+  });
+  await rotate.click();
+  await expect(page.getByText("6 of 11", { exact: true })).toBeVisible();
+  expect((await storedProfile(page)).preferences.role).toBe("rotate");
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await skip(page, 1);
+  await page.reload();
+  expect((await storedProfile(page)).preferences.role).toBe("rotate");
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(rotate).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByRole("button", { name: "Reset answer to unknown", exact: true })
+    .click();
+  await expect(rotate).toHaveAttribute("aria-pressed", "false");
+  await skip(page, 7);
+  await expect(
+    page.getByText("Happy to rotate roles", { exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Looks right", exact: true }).click();
+  await expect(page).toHaveURL(/\/create$/);
+  await page.reload();
+  expect((await storedProfile(page)).preferences.role).toBeNull();
+});
+
+test("summary editing and immediate removal persist after refresh without changing confirmed answers", async ({
+  page,
+}, testInfo) => {
+  await seed(
+    page,
     {
       ...DEFAULT_PREFERENCES,
       role: "camera_person",
+      skills: ["music"],
       exclusions: ["alcohol"],
-      sources: { role: "survey", exclusions: "survey" },
+      sources: {
+        role: "survey",
+        skills: "summary_review",
+        exclusions: "survey",
+      },
     },
+    "I watch prank videos. My willingness to perform is unknown. Product-design requests are not my preferences.",
   );
   await page.goto("/profile/import");
+  await expect(page).toHaveURL(
+    /\/preferences\?(?:step=summary&)?returnTo=%2Faccount$/,
+  );
   await expect(
     page.getByText("This is a manual review:", { exact: false }),
   ).toBeVisible();
@@ -118,32 +154,48 @@ test("manual summary review, immediate removal and error feedback preserve separ
   const text =
     "I like games, but not public performance. Maybe music. I watch pranks without wanting to do them.";
   await summary.fill(text);
+  await expect(
+    page.getByRole("button", { name: "Continue to preferences", exact: true }),
+  ).toBeDisabled();
   await page.getByRole("button", { name: "Save summary", exact: true }).click();
   await expect(
     page.getByText("Summary saved.", { exact: false }),
   ).toBeVisible();
   await page.reload();
   await expect(summary).toHaveValue(text);
-  expect((await storedProfile(page)).preferences.interests).toBeNull();
-  expect((await storedProfile(page)).preferences.premises).toBeNull();
+  const initial = (await storedProfile(page)).preferences;
+  expect(initial.interests).toBeNull();
+  expect(initial.premises).toBeNull();
+  // Only a deliberate answer on the guided question becomes a preference.
+  await page
+    .getByRole("button", { name: "Continue to preferences", exact: true })
+    .click();
+  await skip(page, 7);
   await page
     .locator("summary")
-    .filter({ hasText: "Interests & useful skills" })
+    .filter({ hasText: "Use my summary as a reference" })
     .click();
-  await page
-    .getByRole("group", { name: "Interests to explore", exact: true })
-    .getByRole("button", { name: "Games", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Save confirmed preferences", exact: true })
-    .click();
+  await expect(page.locator(".question-summary-reference")).toContainText(text);
+  await page.getByRole("button", { name: "Games", exact: true }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
-    page.getByText("Confirmed preferences saved.", { exact: false }),
+    page.getByRole("heading", {
+      name: "Which skills would you enjoy using?",
+      exact: true,
+    }),
   ).toBeVisible();
   const confirmed = (await storedProfile(page)).preferences;
   expect(confirmed.interests).toEqual(["games"]);
-  expect(confirmed.sources.interests).toBe("summary_review");
+  expect(confirmed.sources.interests).toBe("survey");
+  expect(confirmed.sources.skills).toBe("summary_review");
   expect(confirmed.sources.role).toBe("survey");
+  expect(confirmed.premises).toBeNull();
+  await page
+    .getByRole("button", { name: "ChatGPT summary", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Your ChatGPT head start", exact: true }),
+  ).toBeVisible();
   await page.evaluate(() => {
     const original = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key, value) {
@@ -167,20 +219,29 @@ test("manual summary review, immediate removal and error feedback preserve separ
     }),
   ).toBeVisible();
   await page.reload();
+  await page
+    .locator("summary")
+    .filter({ hasText: "I have a summary to paste" })
+    .click();
   await expect(summary).toHaveValue("");
   expect((await storedProfile(page)).preferences).toEqual(confirmed);
+  await page
+    .getByRole("button", { name: "Continue to preferences", exact: true })
+    .click();
+  await expect(page.getByText("9 of 11", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Games", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await skip(page, 1);
+  expect((await storedProfile(page)).preferences).toEqual(confirmed);
   await page.screenshot({
-    path: testInfo.outputPath("profile-review-mobile.png"),
-    fullPage: true,
-  });
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.screenshot({
-    path: testInfo.outputPath("profile-review-desktop.png"),
+    path: testInfo.outputPath("summary-reference-after-removal-iphone.png"),
     fullPage: true,
   });
 });
 
-test("a first-run account reaches the account choice from Create before any preference question", async ({
+test("first-run Create enters account choice, and finishing later preserves the exact quest destination", async ({
   page,
 }) => {
   await page.addInitScript(() =>
@@ -192,46 +253,42 @@ test("a first-run account reaches the account choice from Create before any pref
   await page
     .getByRole("link", { name: "Make it your kind of quest", exact: false })
     .click();
-  await expect(page.getByText("Your account", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Make Sidequest yours." }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
-  await page
-    .getByRole("link", { name: "Make it your kind of quest", exact: false })
-    .click();
   await page.getByRole("radio", { name: /^Personal account/ }).check();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
-    page.getByText("Optional context", { exact: true }),
+    page.getByRole("heading", { name: "Your ChatGPT head start" }),
   ).toBeVisible();
-  expect((await storedProfile(page)).accountType).toBe("personal");
-  await page.getByRole("button", { name: "Skip for now" }).click();
-  await expect(page.getByText("1 of 10", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
-  // With a stated account type the same nudge opens the direct editor.
+  await page.getByRole("button", { name: "Finish later", exact: true }).click();
   await page
-    .getByRole("link", { name: "Make it your kind of quest", exact: false })
+    .getByRole("button", { name: "Keep personalizing", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Continue to preferences", exact: true })
     .click();
   await expect(page.getByText("1 of 11", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Finish later", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Save and explore for now", exact: true })
+    .click();
+  await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
+  expect((await storedProfile(page)).onboardingCompleted).toBe(true);
+  expect((await storedProfile(page)).preferences).toEqual(DEFAULT_PREFERENCES);
+  await page
+    .getByRole("link", { name: "Make it your kind of quest", exact: false })
+    .click();
+  await expect(page).toHaveURL(/\/preferences\?returnTo=/);
+  await expect(
+    page.getByRole("heading", { name: "Account & quest preferences" }),
+  ).toBeVisible();
 });
 
-test("guided preferences return to the exact selected quest after Back, saving, completion and refresh", async ({
+test("guided preferences return to the selected quest after Back, saves, completion and refresh", async ({
   page,
 }) => {
-  await page.addInitScript(() =>
-    sessionStorage.setItem("sq-demo-started", "1"),
-  );
-  // State the account type first: the direct editor is for accounts that
-  // already made that choice; first-run accounts start with it.
-  await page.goto("/onboarding");
-  await page.getByRole("radio", { name: /^Personal account/ }).check();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(
-    page.getByText("Optional context", { exact: true }),
-  ).toBeVisible();
+  await seed(page);
   const target =
     "/create?template=date_pit_crew_chill_v1&from=55555555-5555-4555-8555-555555555555";
   await page.goto(target);
@@ -240,15 +297,15 @@ test("guided preferences return to the exact selected quest after Back, saving, 
     outing: sessionStorage.getItem("sq-outing"),
     flow: sessionStorage.getItem("sq-quest-flow"),
   }));
-  const enterProfile = () =>
+  const enter = () =>
     page
       .getByRole("link", { name: "Make it your kind of quest", exact: false })
       .click();
-  await enterProfile();
+  await enter();
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
-  await enterProfile();
-  await expect(page.getByText("1 of 11", { exact: true })).toBeVisible();
+  await enter();
+  await beginPreferences(page);
   await page
     .getByRole("button", {
       name: "No preference for this question",
@@ -257,18 +314,12 @@ test("guided preferences return to the exact selected quest after Back, saving, 
     .click();
   await page.getByRole("button", { name: "Save & leave", exact: true }).click();
   await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
-  await enterProfile();
+  await enter();
+  await beginPreferences(page);
   await expect(page.getByText("2 of 11", { exact: true })).toBeVisible();
   await page.reload();
-  for (let step = 1; step < 11; step++) {
-    await expect(
-      page.getByText(`${step + 1} of 11`, { exact: true }),
-    ).toBeVisible();
-    await page
-      .getByRole("button", { name: "Skip this question", exact: true })
-      .click();
-  }
-  await page.getByRole("button", { name: "Looks right" }).click();
+  await skip(page, 10);
+  await page.getByRole("button", { name: "Looks right", exact: true }).click();
   await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
   await page.reload();
   await expect(
@@ -286,56 +337,71 @@ test("guided preferences return to the exact selected quest after Back, saving, 
   expect(
     await page.evaluate(() => sessionStorage.getItem("sq-return-to")),
   ).toBeNull();
+  expect((await storedProfile(page)).preferences.categories).toEqual([]);
 });
 
-test("sequential typing preserves spaces in boundaries, humor examples and other skills through save and refresh", async ({
+test("sequential typing retains spaces in optional skills, humor and boundary details through saving and refresh", async ({
   page,
 }) => {
-  await page.addInitScript(() =>
-    sessionStorage.setItem("sq-demo-started", "1"),
-  );
-  await page.goto("/profile/import");
-  await page
-    .locator("summary")
-    .filter({ hasText: "Interests & useful skills" })
-    .click();
-  await page.locator("summary").filter({ hasText: "Firm boundaries" }).click();
+  await seed(page);
+  await page.goto("/onboarding?preferences=1");
+  await skip(page, 11);
   const phrases = [
-    ["Another skill (optional)", "  live sound mixing  ", "live sound mixing"],
+    [
+      "Another skill (optional)",
+      "  live sound mixing  ",
+      "live sound mixing",
+      "otherSkill",
+      "Which skills would you enjoy using?",
+    ],
     [
       "Creators or examples (optional)",
       "  dry comedy sketches  ",
       "dry comedy sketches",
+      "humorExamples",
+      "What kind of funny works for you?",
     ],
     [
       "Another boundary (optional; needs review before recommendations)",
       "  no loud music  ",
       "no loud music",
+      "otherExclusion",
+      "What should we leave out?",
     ],
   ];
-  for (const [label, raw, saved] of phrases) {
+  for (const [label, raw, saved, key, title] of phrases) {
+    const review = page.locator(".profile-answer-review");
+    await review.locator("summary").click();
+    await review
+      .getByRole("button", { name: new RegExp(title.replace(/[?]/g, "\\?")) })
+      .click();
+    await page
+      .locator("summary")
+      .filter({ hasText: "Optional details" })
+      .click();
     const input = page.getByRole("textbox", { name: label, exact: true });
     await input.pressSequentially(raw, { delay: 5 });
     await expect(input).toHaveValue(raw);
     await input.press("Tab");
     await expect(input).toHaveValue(saved);
+    await page
+      .getByRole("button", { name: "Return to review", exact: true })
+      .click();
+    await expect
+      .poll(async () => (await storedProfile(page)).preferences[key])
+      .toBe(saved);
+    await page.reload();
+    await review.locator("summary").click();
+    await review
+      .getByRole("button", { name: new RegExp(title.replace(/[?]/g, "\\?")) })
+      .click();
+    await expect(input).toHaveValue(saved);
+    await page
+      .getByRole("button", { name: "Return to review", exact: true })
+      .click();
   }
-  await page
-    .getByRole("button", { name: "Save confirmed preferences", exact: true })
-    .click();
-  await expect(
-    page.getByText("Confirmed preferences saved.", { exact: false }),
-  ).toBeVisible();
-  await page.reload();
-  await page
-    .locator("summary")
-    .filter({ hasText: "Interests & useful skills" })
-    .click();
-  await page.locator("summary").filter({ hasText: "Firm boundaries" }).click();
-  for (const [label, , saved] of phrases)
-    await expect(
-      page.getByRole("textbox", { name: label, exact: true }),
-    ).toHaveValue(saved);
+  await page.getByRole("button", { name: "Looks right", exact: true }).click();
+  await expect(page).toHaveURL(/\/profile$/);
   expect((await storedProfile(page)).preferences).toMatchObject({
     otherSkill: "live sound mixing",
     humorExamples: "dry comedy sketches",
@@ -343,18 +409,20 @@ test("sequential typing preserves spaces in boundaries, humor examples and other
   });
 });
 
-test("account describes confirmed participation and preparation while an unanswered profile stays unknown", async ({
+test("account hub presents only confirmed participation and preparation", async ({
   page,
 }) => {
-  await page.addInitScript(() =>
-    sessionStorage.setItem("sq-demo-started", "1"),
-  );
+  await seed(page);
   await page.goto("/account");
   await expect(
-    page.getByText("No preferences confirmed yet.", { exact: false }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Save name", exact: true }).click();
-  await expect(page.getByText("Profile saved.", { exact: true })).toBeVisible();
+    page.getByRole("progressbar", { name: "Confirmed preference answers" }),
+  ).toHaveAttribute("value", "0");
+  await expect(
+    page.getByText("Happy to rotate roles", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.locator("summary").filter({ hasText: "Your confirmed preferences" }),
+  ).toHaveCount(0);
   await page.evaluate(
     (preferences) => {
       const saved = JSON.parse(localStorage.getItem("sidequest-demo-v1")!);
@@ -369,15 +437,16 @@ test("account describes confirmed participation and preparation while an unanswe
     },
   );
   await page.reload();
+  await page
+    .locator("summary")
+    .filter({ hasText: "Your confirmed preferences" })
+    .click();
   await expect(
     page.getByText("Would perform at an open mic", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("Happy to collect a few things", { exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByText("No preferences confirmed yet.", { exact: false }),
-  ).toHaveCount(0);
   await expect(
     page.getByText("Happy to rotate roles", { exact: true }),
   ).toHaveCount(0);

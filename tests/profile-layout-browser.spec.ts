@@ -86,7 +86,10 @@ for (const width of [320, 390, 430]) {
       const links = page.locator(".social-private-links .button");
       const privateLinks = [
         page.getByRole("link", { name: "Private journal", exact: true }),
-        page.getByRole("link", { name: "Account & preferences", exact: true }),
+        page.getByRole("link", {
+          name: "Account & quest preferences",
+          exact: true,
+        }),
         page.getByRole("link", { name: "Start an original", exact: true }),
       ];
       for (const link of privateLinks) await expectContainedPill(link);
@@ -121,7 +124,7 @@ test("profile pill actions open their intended pages", async ({ page }) => {
   await start(page);
   for (const [name, path, heading] of [
     ["Private journal", "/journal", "Stories worth keeping."],
-    ["Account & preferences", "/account", "Account & preferences"],
+    ["Account & quest preferences", "/account", "Account & quest preferences"],
     ["Start an original", "/originals/new", "A quest only you would invent."],
   ]) {
     await page.goto("/profile?tab=private");

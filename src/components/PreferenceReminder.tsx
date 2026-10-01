@@ -1,6 +1,5 @@
 import { ArrowUpRight, SlidersHorizontal } from "lucide-react";
 import { Link } from "react-router-dom";
-import { isBrandAccount } from "../../shared/account";
 import type { Profile } from "../../shared/domain";
 import { preferenceProgress } from "../../shared/preference-progress";
 import { rememberReturnTo, validateReturnTo } from "../lib/internal-return";
@@ -16,14 +15,12 @@ export function PreferenceReminder({
   compact?: boolean;
 }) {
   const progress = preferenceProgress(profile.preferences);
-  if (isBrandAccount(profile) || progress.complete) return null;
+  if (progress.complete) return null;
   const target = validateReturnTo(returnTo) ?? "/profile";
   // An account that never chose a type and never onboarded starts with the
   // full first onboarding so the account choice is its first step.
   const firstRun = profile.accountType === null && !profile.onboardingCompleted;
-  const search = new URLSearchParams(
-    firstRun ? { returnTo: target } : { preferences: "1", returnTo: target },
-  );
+  const search = new URLSearchParams({ returnTo: target });
 
   return (
     <aside
@@ -49,7 +46,7 @@ export function PreferenceReminder({
       )}
       <Link
         className="preference-reminder-link"
-        to={`/onboarding?${search}`}
+        to={`${firstRun ? "/onboarding" : "/preferences"}?${search}`}
         onClick={() => rememberReturnTo(target)}
       >
         Continue preferences <ArrowUpRight size={17} aria-hidden="true" />

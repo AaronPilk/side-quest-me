@@ -339,9 +339,19 @@ test("business registration is reviewed before available videos and requests are
 }) => {
   await openDemo(page, "/onboarding");
   await page.getByRole("radio", { name: /Brand account/ }).check();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Your ChatGPT head start" }),
+  ).toBeVisible();
   await page
-    .getByRole("button", { name: "Continue to brand setup", exact: true })
+    .getByRole("button", { name: "Continue to preferences", exact: true })
     .click();
+  await expect(page.getByText("1 of 11", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Finish later", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Save and explore for now", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/business$/);
   await expect(
     page.getByRole("heading", {
       name: "Start with your business profile",
@@ -444,6 +454,7 @@ test("perks recover from failed wallet and catalog reads without treating the ba
 }) => {
   await rewardFixture(page);
   let failed = true;
+  let profileReads = 0;
   await page.route("**/api/rewards", async (route) => {
     if (failed)
       return route.fulfill({
@@ -453,7 +464,8 @@ test("perks recover from failed wallet and catalog reads without treating the ba
     await route.fallback();
   });
   await page.route("**/api/me", async (route) => {
-    if (failed)
+    // Pass the completed-account routing check, then fail the perks wallet read.
+    if (failed && ++profileReads > 1)
       return route.fulfill({
         status: 503,
         json: { error: "Points balance unavailable" },
@@ -505,13 +517,19 @@ test("creator, business and Series editor failures have working local retry acti
     page.getByRole("button", { name: "Edit profile", exact: true }),
   ).toBeVisible();
   await page.goto("/account");
+  await page.getByRole("link", { name: /^Account details/ }).click();
   await page.getByRole("radio", { name: /^Brand account/ }).check();
-  await page
-    .getByRole("button", { name: "Save account type", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
-    page.getByText("Account type saved.", { exact: true }),
+    page.getByRole("heading", { name: "Your ChatGPT head start", exact: true }),
   ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem("sidequest-demo-v1")!).me.profile
+          .accountType,
+    ),
+  ).toBe("brand");
   await page.goto("/business");
   await expect(
     page.getByRole("button", { name: "Retry account access", exact: true }),

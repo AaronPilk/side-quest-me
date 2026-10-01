@@ -777,9 +777,11 @@ export function QuestWizard({
           {needsProfile && (
             <Link
               className="profile-nudge"
-              to={firstRun ? "/onboarding" : "/onboarding?preferences=1"}
+              to={`${firstRun ? "/onboarding" : "/preferences"}?returnTo=${encodeURIComponent(location.pathname + location.search + location.hash)}`}
               onClick={() =>
-                rememberReturnTo(location.pathname + location.search)
+                rememberReturnTo(
+                  location.pathname + location.search + location.hash,
+                )
               }
             >
               <Sparkles size={18} />

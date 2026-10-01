@@ -17,7 +17,15 @@ const saved: Profile = {
 
 async function fixture(
   page: Page,
-  { unowned = false, holdInitial = false } = {},
+  {
+    unowned = false,
+    holdInitial = false,
+    currentProfile = saved,
+  }: {
+    unowned?: boolean;
+    holdInitial?: boolean;
+    currentProfile?: Profile;
+  } = {},
 ) {
   const patches: { actor: string; body: Record<string, unknown> }[] = [];
   await page.addInitScript(
@@ -26,6 +34,8 @@ async function fixture(
         sessionStorage.setItem(
           key,
           JSON.stringify({
+            version: 2,
+            baselineProfile: saved,
             ...(unowned ? {} : { ownerId: `user:${accountA}` }),
             profile: {
               ...saved,
@@ -67,7 +77,7 @@ async function fixture(
     }
     return route.fulfill({
       json: {
-        profile: saved,
+        profile: currentProfile,
         wallet: { xp: 0, points: 0, version: 0 },
         roles: [],
       },
@@ -110,7 +120,9 @@ for (const preferencesOnly of [false, true]) {
     await emit(page, accountB, "SIGNED_IN");
     await expect(
       page.getByRole("heading", {
-        name: "What are you here for?",
+        name: preferencesOnly
+          ? "What are you here for?"
+          : "Make Sidequest yours.",
         exact: true,
       }),
     ).toBeVisible();
@@ -121,6 +133,21 @@ for (const preferencesOnly of [false, true]) {
       .poll(async () => (await drafts(page)).join())
       .toContain(`user:${accountB}`);
     await expect(page.getByText(secret, { exact: true })).toHaveCount(0);
+    if (!preferencesOnly) {
+      await expect(
+        page.getByRole("radio", { name: /^Personal account/ }),
+      ).toBeChecked();
+      await page.getByRole("button", { name: "Continue", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Continue to preferences", exact: true })
+        .click();
+      await expect(
+        page.getByRole("heading", {
+          name: "What are you here for?",
+          exact: true,
+        }),
+      ).toBeVisible();
+    }
     if (preferencesOnly) {
       // A skip never writes; an explicit "No preference" + Continue does, and
       // that write must belong to B.
@@ -156,7 +183,9 @@ for (const preferencesOnly of [false, true]) {
     );
     await expect(
       page.getByRole("heading", {
-        name: "What are you here for?",
+        name: preferencesOnly
+          ? "What are you here for?"
+          : "Make Sidequest yours.",
         exact: true,
       }),
     ).toBeVisible();
@@ -220,5 +249,71 @@ test("a late initial A getSession cannot replace newer B SIGNED_IN or restore A 
   await expect
     .poll(async () => (await drafts(page)).join())
     .toContain(`user:${accountB}`);
+  expect((await drafts(page)).join()).not.toContain(secret);
+});
+
+test("a same-account stale wizard cannot restore removed summary or erase newer confirmed answers", async ({
+  page,
+}) => {
+  const currentProfile: Profile = {
+    ...saved,
+    preferences: {
+      ...DEFAULT_PREFERENCES,
+      role: "camera_person",
+      exclusions: ["alcohol"],
+      sources: { role: "survey", exclusions: "survey" },
+    },
+  };
+  const patches = await fixture(page, { currentProfile });
+  await page.goto("/onboarding?preferences=1");
+  await expect(
+    page.getByRole("heading", { name: "What are you here for?", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Your saved profile changed since this draft.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  const current = await page.evaluate(() =>
+    JSON.parse(sessionStorage.getItem("sq-preference-wizard-draft")!),
+  );
+  expect(current).toMatchObject({
+    ownerId: `user:${accountA}`,
+    profile: {
+      summary: "",
+      preferences: { role: "camera_person", exclusions: ["alcohol"] },
+    },
+  });
+  expect((await drafts(page)).join()).not.toContain(secret);
+  await page
+    .getByRole("button", {
+      name: "No preference for this question",
+      exact: true,
+    })
+    .click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByText("2 of 11", { exact: true })).toBeVisible();
+  expect(patches.at(-1)).toMatchObject({
+    actor: accountA,
+    body: {
+      preferences: {
+        categories: [],
+        role: "camera_person",
+        exclusions: ["alcohol"],
+      },
+    },
+  });
+  expect(JSON.stringify(patches)).not.toContain(secret);
+  await page.goto("/onboarding");
+  await expect(
+    page.getByRole("heading", { name: "Make Sidequest yours.", exact: true }),
+  ).toBeVisible();
+  const alternate = await page.evaluate(() =>
+    JSON.parse(sessionStorage.getItem("sq-profile-draft")!),
+  );
+  expect(alternate.profile).toMatchObject({
+    summary: "",
+    preferences: { role: "camera_person", exclusions: ["alcohol"] },
+  });
   expect((await drafts(page)).join()).not.toContain(secret);
 });

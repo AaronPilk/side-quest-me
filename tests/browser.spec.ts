@@ -56,7 +56,7 @@ async function visitYourSpace(page: Page, name: string) {
       .click();
 }
 
-test("ten-question onboarding works without import, preserves answers and exposes five tabs", async ({
+test("eleven-question onboarding works without import, preserves answers and exposes five tabs", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -65,9 +65,14 @@ test("ten-question onboarding works without import, preserves answers and expose
   await page.getByRole("button", { name: "Find my first quest" }).click();
   await page.getByRole("radio", { name: /Personal account/ }).check();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Skip for now" }).click();
+  await page
+    .getByRole("button", { name: "Continue to preferences", exact: true })
+    .click();
   await page.getByRole("button", { name: "Date Night", exact: true }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Which would you actually attempt?" }),
+  ).toBeVisible();
   await page.reload();
   await expect(
     page.getByRole("heading", { name: "Which would you actually attempt?" }),
@@ -76,9 +81,9 @@ test("ten-question onboarding works without import, preserves answers and expose
   await expect(
     page.getByRole("button", { name: "Date Night", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
-  for (let step = 0; step < 10; step++) {
+  for (let step = 0; step < 11; step++) {
     await expect(
-      page.getByText(`${step + 1} of 10`, { exact: true }),
+      page.getByText(`${step + 1} of 11`, { exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Continue", exact: true }).click();
   }
@@ -140,10 +145,19 @@ test("responsive screens, keyboard focus and demo offers stay truthful", async (
   ).toHaveCount(0);
   await assertNoOverflow(page);
   await visitYourSpace(page, "Account settings");
+  await expect(
+    page.getByRole("heading", { name: "Account settings", exact: true }),
+  ).toBeVisible();
+  await page.goto("/account");
+  await page.getByRole("link", { name: /^Account details/ }).click();
+  await page.getByRole("radio", { name: /^Personal account/ }).check();
   await page
     .getByRole("textbox", { name: "What should we call you?" })
     .fill("A very long display name that must wrap without hiding actions");
-  await page.getByRole("button", { name: "Save name" }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Your ChatGPT head start" }),
+  ).toBeVisible();
   await assertNoOverflow(page);
   await page.goto("/operator");
   await expect(

@@ -455,7 +455,6 @@ export default function Quest() {
             error={error || runs.error || me.error}
             needsProfile={Boolean(
               me.data &&
-              me.data.profile.accountType !== "brand" &&
               !preferenceProgress(me.data.profile.preferences).complete,
             )}
             firstRun={Boolean(

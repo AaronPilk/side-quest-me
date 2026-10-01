@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { catalog } from "../shared/catalog";
+import { DEFAULT_PREFERENCES } from "../shared/domain";
 import type { CommunityPost, CreatorProfile } from "../shared/community";
 
 const ownerId = "11111111-1111-4111-8111-111111111111";
@@ -29,6 +30,7 @@ async function reelFixture(page: Page, state: CommunityPost["state"]) {
   const meGate = deferred();
   const postGate = deferred();
   const otherMeRequests: (string | null)[] = [];
+  const setupReads: (string | null)[] = [];
   const post: CommunityPost = {
     id: postId,
     creator: owner,
@@ -63,6 +65,32 @@ async function reelFixture(page: Page, state: CommunityPost["state"]) {
       addEventListener("reel-test-account",event=>{actor=event.detail;for(const callback of listeners)callback(actor?"SIGNED_IN":"SIGNED_OUT",session())});`,
     }),
   );
+  await page.route("**/api/me", (route) => {
+    const actor =
+      route.request().headers().authorization?.replace("Bearer test-", "") ||
+      null;
+    setupReads.push(actor);
+    if (!actor)
+      return route.fulfill({
+        status: 401,
+        json: { error: "Sign in to continue." },
+      });
+    return route.fulfill({
+      json: {
+        profile: {
+          accountType: "personal",
+          displayName: actor === ownerId ? "Reel owner" : "Reel viewer",
+          timezone: "UTC",
+          locale: "en",
+          summary: "",
+          preferences: DEFAULT_PREFERENCES,
+          onboardingCompleted: true,
+        },
+        wallet: { xp: 0, points: 0, version: 0 },
+        roles: [],
+      },
+    });
+  });
   await page.route("**/api/community/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     const actor =
@@ -117,7 +145,7 @@ async function reelFixture(page: Page, state: CommunityPost["state"]) {
   await expect(
     page.getByRole("button", { name: "Unpublish post", exact: true }),
   ).toBeVisible();
-  return { meGate, postGate, otherMeRequests, post };
+  return { meGate, postGate, otherMeRequests, setupReads, post };
 }
 
 async function changeAccount(page: Page, id: string | null) {
@@ -155,6 +183,7 @@ test("public reel sign-out clears owner controls immediately and never issues an
   // Anonymous viewers must not call the private account endpoint at all; the
   // reel's account read is gated on a signed-in session.
   expect(fixture.otherMeRequests).not.toContain(null);
+  expect(fixture.setupReads).not.toContain(null);
   await expect(
     page.getByText("Public reel caption", { exact: true }),
   ).toBeVisible();

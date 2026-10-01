@@ -108,10 +108,32 @@ public class SidequestPlacesPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "availability", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "search", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "lookup", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "cancel", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "cancel", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openChatGPT", returnType: CAPPluginReturnPromise)
     ]
     // Accessed only on the main queue. Cancellation and deadlines settle once.
     private var active: [String: () -> Void] = [:]
+
+    /// A fixed public destination only: iOS decides whether its installed app
+    /// handles the universal link; otherwise use the external system browser.
+    /// Prompts remain on the clipboard for an explicit user paste and send.
+    @objc func openChatGPT(_ call: CAPPluginCall) {
+        let destination = URL(string: "https://chatgpt.com/")!
+        DispatchQueue.main.async {
+            UIApplication.shared.open(destination, options: [.universalLinksOnly: true]) { openedApp in
+                if openedApp {
+                    call.resolve(["destination": "app"])
+                    return
+                }
+                DispatchQueue.main.async {
+                    UIApplication.shared.open(destination, options: [:]) { openedWeb in
+                        if openedWeb { call.resolve(["destination": "web"]) }
+                        else { call.reject("ChatGPT could not open.", "chatgpt_launch_failed") }
+                    }
+                }
+            }
+        }
+    }
 
     @objc func availability(_ call: CAPPluginCall) {
         if #available(iOS 18.0, *) { call.resolve(["available": true]) }

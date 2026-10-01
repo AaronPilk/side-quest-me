@@ -33,7 +33,6 @@ import { socialApi } from "../lib/social-api";
 import { api } from "../lib/api";
 import { DEMO } from "../lib/auth";
 import { QuestProgress } from "../components/QuestProgress";
-import { PreferenceReminder } from "../components/PreferenceReminder";
 import { preferenceProgress } from "../../shared/preference-progress";
 import { rememberReturnTo, validateReturnTo } from "../lib/internal-return";
 import type { SocialProfile } from "../../shared/social";
@@ -311,16 +310,19 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
         <>
           <Link
             className="button secondary profile-preferences-shortcut"
-            to="/onboarding?preferences=1&returnTo=%2Fprofile"
+            to="/preferences?returnTo=%2Fprofile"
             onClick={() => rememberReturnTo("/profile")}
           >
             <SlidersHorizontal size={18} aria-hidden="true" />
-            Quest preferences
+            <span>
+              Account & quest preferences
+              <small>
+                {preferenceProgress(progress.data.profile.preferences).answered}{" "}
+                of 11 answered · Make quests more your style
+              </small>
+            </span>
             <ChevronRight size={18} aria-hidden="true" />
           </Link>
-          {!preferenceProgress(progress.data.profile.preferences).complete && (
-            <PreferenceReminder profile={progress.data.profile} compact />
-          )}
         </>
       )}
       {own && progress.data?.completedQuestCount !== undefined && (
@@ -497,7 +499,7 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
             </Link>
             <Link className="button secondary" to="/account">
               <SlidersHorizontal size={18} aria-hidden="true" />
-              <span>Account & preferences</span>
+              <span>Account & quest preferences</span>
               <ChevronRight size={18} aria-hidden="true" />
             </Link>
           </div>

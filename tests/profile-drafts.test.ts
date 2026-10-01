@@ -24,6 +24,7 @@ import {
   accountIdentityChanged,
   PROFILE_DRAFT_KEYS,
   readProfileDraft,
+  resolveProfileDraft,
   syncProfileDrafts,
 } from "../src/lib/profile-drafts";
 import { api } from "../src/lib/api";
@@ -191,4 +192,180 @@ describe("identity-bound profile drafts", () => {
         readProfileDraft(key, "user:account-a").draft?.profile?.preferences,
       ).toEqual(preferences);
   });
+});
+
+describe("profile draft freshness", () => {
+  it("loads durable data when no draft exists", () => {
+    expect(resolveProfileDraft(profile, null)).toEqual({
+      profile,
+      discarded: false,
+    });
+  });
+
+  it("preserves unsaved retry answers only while the durable baseline still matches", () => {
+    const pending: Profile = {
+      ...profile,
+      displayName: "Unconfirmed nickname",
+      preferences: {
+        ...profile.preferences,
+        role: "camera_person",
+        sources: { role: "survey" },
+      },
+    };
+    const draft = {
+      ownerId: "user:account-a",
+      baselineProfile: profile,
+      profile: pending,
+      summaryDraft: "Unsaved private summary text",
+      summaryReturn: 6,
+      step: -1,
+    };
+    const before = JSON.stringify({ profile, draft });
+    expect(resolveProfileDraft(profile, draft)).toEqual({
+      profile: pending,
+      discarded: false,
+    });
+    expect(JSON.stringify({ profile, draft })).toBe(before);
+  });
+
+  it.each([
+    ["account intent", { accountType: "brand" as const }],
+    ["nickname", { displayName: "Saved on another device" }],
+    ["summary removal", { summary: "" }],
+    [
+      "confirmed preferences",
+      {
+        preferences: {
+          ...DEFAULT_PREFERENCES,
+          interests: ["music" as const],
+          sources: { interests: "survey" as const },
+        },
+      },
+    ],
+    ["setup completion", { onboardingCompleted: false }],
+  ])(
+    "does not overwrite newer %s from a stale same-owner draft",
+    (_label, patch) => {
+      const saved: Profile = { ...profile, ...patch };
+      const draft = {
+        ownerId: "user:account-a",
+        baselineProfile: profile,
+        profile: { ...profile, displayName: "Stale unsaved nickname" },
+        summaryDraft: "Removed text must not reappear",
+      };
+      expect(resolveProfileDraft(saved, draft)).toEqual({
+        profile: saved,
+        discarded: true,
+      });
+    },
+  );
+
+  it("compares source maps structurally rather than by JSON object-key order", () => {
+    const saved: Profile = {
+      ...profile,
+      preferences: {
+        ...profile.preferences,
+        role: "camera_person",
+        interests: ["music"],
+        sources: { role: "survey", interests: "summary_review" },
+      },
+    };
+    const baseline: Profile = {
+      ...saved,
+      preferences: {
+        ...saved.preferences,
+        sources: { interests: "summary_review", role: "survey" },
+      },
+    };
+    const pending = { ...saved, displayName: "Pending nickname" };
+    expect(
+      resolveProfileDraft(saved, {
+        ownerId: "user:account-a",
+        baselineProfile: baseline,
+        profile: pending,
+      }),
+    ).toEqual({ profile: pending, discarded: false });
+  });
+
+  it("resumes a matching legacy draft without inventing its missing account intent", () => {
+    const { accountType: _accountType, ...legacy } = profile;
+    const saved: Profile = { ...profile, accountType: "brand" };
+    expect(
+      resolveProfileDraft(saved, {
+        ownerId: "user:account-a",
+        profile: legacy as Profile,
+        step: 4,
+      }),
+    ).toEqual({ profile: saved, discarded: false });
+    expect(
+      resolveProfileDraft(saved, {
+        ownerId: "user:account-a",
+        profile: { ...legacy, summary: "Stale imported text" } as Profile,
+        step: 4,
+      }),
+    ).toEqual({ profile: saved, discarded: true });
+  });
+
+  it("does not infer a retry baseline for a legacy draft with unsaved durable changes", () => {
+    expect(
+      resolveProfileDraft(profile, {
+        ownerId: "user:account-a",
+        profile: { ...profile, displayName: "Different draft" },
+      }),
+    ).toEqual({ profile, discarded: true });
+  });
+
+  it("rejects malformed draft profiles and malformed explicit baselines", () => {
+    for (const draft of [
+      { ownerId: "user:account-a" },
+      {
+        ownerId: "user:account-a",
+        profile: { ...profile, timezone: 43 } as unknown as Profile,
+      },
+      {
+        ownerId: "user:account-a",
+        profile,
+        baselineProfile: { ...profile, timezone: 43 } as unknown as Profile,
+      },
+    ]) {
+      expect(resolveProfileDraft(profile, draft)).toEqual({
+        profile,
+        discarded: true,
+      });
+    }
+  });
+
+  it.each(PROFILE_DRAFT_KEYS)(
+    "synchronizes edited/removed summary drafts and baselines in %s without losing unrelated pending answers",
+    (key) => {
+      const pending: Profile = {
+        ...profile,
+        displayName: "Unconfirmed nickname",
+      };
+      sessionStorage.setItem(
+        key,
+        JSON.stringify({
+          ownerId: "user:account-a",
+          baselineProfile: profile,
+          profile: pending,
+          summaryDraft: "An older unsaved summary",
+          summaryReturn: 6,
+          step: -1,
+        }),
+      );
+      for (const summary of ["A saved replacement", ""]) {
+        syncProfileDrafts("user:account-a", { summary });
+        const draft = readProfileDraft(key, "user:account-a").draft!;
+        expect(draft.summaryDraft).toBe(summary);
+        expect(draft.summaryReturn).toBe(6);
+        expect(draft.step).toBe(-1);
+        expect(draft.profile).toEqual({ ...pending, summary });
+        expect(draft.baselineProfile).toEqual({ ...profile, summary });
+        expect(resolveProfileDraft({ ...profile, summary }, draft)).toEqual({
+          profile: { ...pending, summary },
+          discarded: false,
+        });
+      }
+    },
+  );
 });
