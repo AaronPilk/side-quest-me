@@ -57,10 +57,25 @@ References: [Grok models](https://docs.x.ai/developers/models),
 
 The production Worker reports OpenAI / GPT-6 Astra as configured. Its server-only
 secret, provider/model variables and separate AI rate limiter are deployed.
-Authenticated production smoke tests verified sign-in and named-provider consent
-guards without generating paid content. Readiness is not a provider health test;
-earlier live synthetic evaluations called the same generator directly. The complete
-signed-in physical-iPhone generation flow remains a TestFlight check.
+For build 5, deployment `36935884932` of backend `3422cbc` passed authenticated
+normal-discovery smoke with real OpenAI generation, exact outing preservation,
+same-key replay, owner isolation, relevant preflight and immutable zero-award
+acceptance. Temporary accounts were cleaned up; no media, completion or public
+posts were produced. See [build-5 evidence](BETA_FEEDBACK_BUILD_5_RELEASE.md) and
+`.local/beta5-production-smoke-final.log`.
+
+Build **1.0.0 (5)** is now `VALID` and `IN_BETA_TESTING` in Sidequest Internal,
+verified at `2026-10-01T23:07:51Z` with exact testing-note readback. The full local
+browser suite passes **209/209**, and 652 unit tests pass. Test-only fixture fix
+`1756a3f` changes neither the iOS binary nor deployed backend. Follow-up GitHub
+CI `36938154871` is still running; these are confirmed local results, not a claim
+of completed independent CI.
+
+Earlier build-2 smoke verified authentication and consent without paid generation;
+the later synthetic evaluations called the generator directly. These are distinct
+from the final production normal-discovery result. Configuration readiness alone
+is still not a provider health test, and the complete signed-in physical-iPhone
+generation flow remains a TestFlight check.
 
 The following instructions are retained for credential rotation or another
 environment; production steps 3–5 were completed for build 2.
@@ -296,5 +311,13 @@ Each proposal is owner-bound and unpublished. The user sees specific booking/pri
 If generation cannot produce an approved plan, the service may return a clearly labeled authored fallback (compatible karting, climbing, escape-room or dining mechanics). It never silently changes intensity, participants or budget. Weak expanded Full Send photo/observation/craft variants are retired from new recommendations; immutable historical versions remain readable for existing stories.
 
 Two bounded live five-friend Full Send tests produced operator-run timed escape-room experiences and passed all independent review checks. The final test took 57.4 seconds and treated the unknown all-in admission charge exactly once. This is a checked example, not a guarantee that every generated idea will meet a user's taste.
+
+The final authenticated production normal-discovery smoke also passed with
+source `ai` for Demon / Full Send / four friends / $300 total / unlimited time /
+venue, followed by same-key replay and owner-bound acceptance checks. Earlier
+fast curated fallbacks exposed an unsupported Worker fetch redirect option;
+backend `3422cbc` uses manual redirect handling and rejects all non-OK responses.
+The complete production evidence and remaining physical checks are recorded in
+[build-5 release evidence](BETA_FEEDBACK_BUILD_5_RELEASE.md).
 
 Native nearby places work without a web Maps token on iOS 18+. Ticketmaster inventory still requires `TICKETMASTER_API_KEY`; Eventbrite remains an outbound resource. No fabricated live concerts, reservations or availability are supplied. Consumer access remains free. Existing brand licensing/campaign tools remain; paid destination targeting and traffic attribution are not added by this release.

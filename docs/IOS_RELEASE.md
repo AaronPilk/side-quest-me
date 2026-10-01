@@ -1,6 +1,10 @@
 # Sidequest iOS release guide
 
-Status checked **October 1, 2026**. The repository contains a Capacitor iOS app that bundles the React interface and connects to the existing Cloudflare/Supabase backend. App Store Connect record **Sidequest Me** (`6817917086`) uses bundle `com.aaronpilk.sidequest` and signing team **`5F5C5G25Y6`**. **Production build 1.0.0 (4) passed Apple validation, uploaded successfully, processed as VALID and is IN_BETA_TESTING in Sidequest Internal.** The matching backend is deployed; build 4 requires no new migration. See `EXPERIENCE_ROUTING_RELEASE_2026-10-01.md` for current delivery evidence, `PREFERENCES_FLOW_REVIEW_2026-10-01.md` for combined setup, and `RELEASE_REVIEW_2026-10-01.md` for the earlier Series review. Public App Store submission and physical iPhone installation/verification remain separate requirements.
+Status checked **October 1, 2026, at 23:07:51 UTC**. **Build 1.0.0 (5) is VALID and IN_BETA_TESTING in Sidequest Internal**, from frozen iOS frontend `292af0a`, with the response to all 20 build-3 screenshot reports. Upload completed at 18:42:16 EDT with delivery/build ID `99b0d926-77e6-46e5-b130-480fba5f4985`; group `f10a5d96-4a4a-4b23-862c-1f33802a4397` membership and exact English-note readback are verified. Backend `3422cbc` fixes the Worker provider transport; deployment `36935884932` passed with version `79ac83f0-569f-4272-b3cd-71fb5087068e`. All 21 migrations are applied; 652 unit tests, 209/209 local browser cases, lint/typecheck and local database/advisors pass. Final authenticated production smoke passed with configured OpenAI generation, exact plan preservation, replay, private-owner checks and cleanup. Test-only fixture fix `1756a3f` changes neither the app binary nor backend; follow-up GitHub CI `36938154871` is still running. See [build-5 release evidence](BETA_FEEDBACK_BUILD_5_RELEASE.md) for artifacts, the earlier fallback diagnosis and verified counts.
+
+Open **TestFlight → Sidequest Me → Update** to install build 5. The earlier build **1.0.0 (4)** delivery remains recorded in [build-4 evidence](EXPERIENCE_ROUTING_RELEASE_2026-10-01.md); build 5 is the current internal beta. Availability does not establish physical-device acceptance or public App Store approval.
+
+The repository contains a Capacitor iOS app that bundles the React interface and connects to the existing Cloudflare/Supabase backend. App Store Connect record **Sidequest Me** (`6817917086`) uses bundle `com.aaronpilk.sidequest` and signing team **`5F5C5G25Y6`**. See `PREFERENCES_FLOW_REVIEW_2026-10-01.md` for combined setup and `RELEASE_REVIEW_2026-10-01.md` for the earlier Series review. Public App Store submission and physical iPhone verification of the final build remain separate requirements.
 
 ## Project and build commands
 
@@ -126,7 +130,31 @@ Use the final device-tested build and functioning backend for review. Do not cla
 
 ## Current handoff to TestFlight
 
-The internal TestFlight build is delivered: the fresh production archive passed release checks, uploaded successfully, and processed as VALID. Build **1.0.0 (3)** is assigned to **Sidequest Internal** and its state is **IN_BETA_TESTING**. The existing tester invitation remains in place. Install or update through TestFlight on the physical iPhone; a public App Store launch has not been submitted. The September 30 camera/place checks below remain historical evidence, while the October 1 Series checks are recorded in `RELEASE_REVIEW_2026-10-01.md`.
+Apple validated and accepted the **1.0.0 (5)** delivery IPA without errors at
+18:42:16 EDT on October 1, with delivery UUID
+`99b0d926-77e6-46e5-b130-480fba5f4985`. It is processed as **VALID** and
+**IN_BETA_TESTING**, assigned to Sidequest Internal, with exact English-note
+readback verified at `2026-10-01T23:07:51Z`. Existing testers can update through
+TestFlight. The
+deployed backend passed real OpenAI normal-discovery smoke with disposable
+accounts and cleanup. See [build-5 release evidence](BETA_FEEDBACK_BUILD_5_RELEASE.md)
+for archive paths and verified results. A public App Store launch has not been
+submitted, and physical-device acceptance of build 5 remains a tester check.
+
+The current normal Create flow uses consented OpenAI / GPT-6 Astra to compare
+experiences, expand a complete plan and independently review it before relevant
+booking/cost/permission checks. Current outing limits and confirmed boundaries
+remain authoritative. A clearly labeled authored fallback may be returned;
+generated proposals stay owner-bound and private and award zero XP/points.
+Editorial **Draft with AI** remains separate and still requires review before a
+draft enters the public catalog. See [AI setup](AI_SETUP.md).
+
+## Earlier Simulator capture and Maps evidence
+
+The following capture/place checks are historical Simulator evidence. The
+October 1 Series checks are recorded in `RELEASE_REVIEW_2026-10-01.md`; the current
+build-5 nearby search and layout checks are recorded in
+`BETA_FEEDBACK_BUILD_5_RELEASE.md`. None establishes full physical-device coverage.
 
 A manual iPhone Simulator check using a synthetic camera stream completed **48.2 seconds across two takes**, left and reopened the draft, and saved the session as one video successfully. This demonstrates the tested draft/session path; it does not establish the entire physical-device acceptance matrix above. Keep the existing synthetic Simulator evidence distinct from real camera/microphone hardware verification.
 
@@ -134,7 +162,7 @@ The bundled iPhone app uses native `MKLocalSearch` and `MKMapItemRequest` on iOS
 
 The native plugin passed unsigned Simulator compilation, 44 focused place/service tests, typecheck and scoped lint. On **September 30, 2026**, the rebuilt **iPhone 17 / iOS 26.4 Simulator** performed a live native search for **Central Park New York**, returned Apple’s real Central Park result (New York, NY 10028), and resolved its durable place ID into the selected-place card with directions controls. Denied location showed the manual fallback, and manual-area search worked. **Allowed/approximate GPS, reopening across a full app restart, the actual directions handoff and physical-device behavior remain to be verified.** The observed search used live Apple data; the unit fixtures remain separate evidence.
 
-Ticketmaster nearby listings need `TICKETMASTER_API_KEY`; Eventbrite and other event resources are outbound browsing links, not a claimed live scraped feed. Set private provider configuration on the backend and test deployed responses. Manual-area fallbacks must continue to work when services are absent or permission is denied. OpenAI / GPT-6 Astra is configured for optional, consented original-quest drafts and filming ideas in build 2; original drafts still require review before entering the catalog. Normal recommendations use reviewed authored activities and conservative selected-place relevance. See `AI_SETUP.md`.
+Ticketmaster nearby listings need `TICKETMASTER_API_KEY`; Eventbrite and other event resources are outbound browsing links, not a claimed live scraped feed. Set private provider configuration on the backend and test deployed responses. Manual-area fallbacks must continue to work when services are absent or permission is denied. Historically, build 2 configured OpenAI / GPT-6 Astra for optional original-quest drafts and filming ideas, while normal Create still used the reviewed catalog. Build 5 adds normal private experience generation as described above; editorial drafts retain their separate review requirement.
 
 The renderer accepts an optional still PNG/JPEG/WebP overlay up to 5 MB at one of five fixed positions. It strips image metadata and applies the chosen image to the saved session; transient upload files are deleted after composition. New single-video final renders include the approved logo and visible “Side quest app” watermark. Legacy three-clip renders retain their existing layout. The rebuilt iPhone Simulator completed a 14.8-second recording with the three-second timer, native Photos picker, a top-left stock-photo overlay, saved video, successful render and the native share-sheet Save Video action. The exported 0:15 video was then opened and played in the Simulator Photos library, visibly retaining the top-left image plus approved Sidequest logo and “Side quest app” watermark at bottom left. Physical iPhone camera/audio, interruptions and export remain to be tested.
 
@@ -142,13 +170,13 @@ The renderer accepts an optional still PNG/JPEG/WebP overlay up to 5 MB at one o
 
 ## TestFlight build 3 delivery — October 1, 2026
 
-Application commit `1deb670031a3e5b94c7b360262e2f640991de400` was archived as `.local/Sidequest-build3-release.xcarchive` and exported as `.local/ios-production-export-build3-release/App.ipa`. The signed arm64 app is version `1.0.0`, build `3`, with `get-task-allow=false` and `beta-reports-active=true`. Apple validation and upload completed without errors. Build `6d4968d2-0e57-4ca0-9fa2-c1d964f57c04` is `VALID` and `IN_BETA_TESTING`, with verified membership in Sidequest Internal and English notes matching `docs/TESTFLIGHT_NOTES.md`.
+Application commit `1deb670031a3e5b94c7b360262e2f640991de400` was archived as `.local/Sidequest-build3-release.xcarchive` and exported as `.local/ios-production-export-build3-release/App.ipa`. The signed arm64 app is version `1.0.0`, build `3`, with `get-task-allow=false` and `beta-reports-active=true`. Apple validation and upload completed without errors. Build `6d4968d2-0e57-4ca0-9fa2-c1d964f57c04` was verified as `VALID` and `IN_BETA_TESTING`, with membership in Sidequest Internal and English notes matching `docs/TESTFLIGHT_NOTES.md` at that application commit. The current notes describe build 5.
 
 The matching production deployment succeeded as Worker version `bdc8f4aa-84ce-408c-adfd-3f56ae588feb`. This release adds combined account/quest onboarding and editing, a ChatGPT copy/open handoff, protected draft recovery and separate account-security routing. No schema migration was needed. Simulator checks passed; physical ChatGPT app handoff and installation remain tester checks. See `PREFERENCES_FLOW_REVIEW_2026-10-01.md` for tests and release evidence.
 
 ## Historical TestFlight build 2 delivery — October 1, 2026
 
-Application commit `6521761` was archived as `.local/Sidequest-build2-ship.xcarchive` and exported as `.local/ios-production-export-build2-ship/App.ipa`. The exported arm64 distribution app has version `1.0.0`, build `2`, `get-task-allow=false` and `beta-reports-active=true`. Apple accepted it with no validation/upload errors, build ID `c77a17d1-f9bb-4fab-ba40-a4357b0e3735`, processed it as `VALID`, and confirmed `IN_BETA_TESTING` after assignment to Sidequest Internal. The build's English testing notes match `docs/TESTFLIGHT_NOTES.md` at application commit `6521761`; the current file describes build 3.
+Application commit `6521761` was archived as `.local/Sidequest-build2-ship.xcarchive` and exported as `.local/ios-production-export-build2-ship/App.ipa`. The exported arm64 distribution app has version `1.0.0`, build `2`, `get-task-allow=false` and `beta-reports-active=true`. Apple accepted it with no validation/upload errors, build ID `c77a17d1-f9bb-4fab-ba40-a4357b0e3735`, processed it as `VALID`, and confirmed `IN_BETA_TESTING` after assignment to Sidequest Internal. The build's English testing notes match `docs/TESTFLIGHT_NOTES.md` at application commit `6521761`; the current file describes build 5.
 
 The matching Worker deployment succeeded after three compatible migrations brought hosted Supabase to 15 migrations. Authenticated production checks verified account/preferences persistence, private Series growth and viewer isolation, native-origin requests, and OpenAI readiness/auth/consent guards using disposable accounts that were cleaned up. No real customer content, awards, or paid AI generation were produced by these smoke tests. Full evidence and remaining physical-device checks are in `RELEASE_REVIEW_2026-10-01.md`.
 
@@ -156,6 +184,6 @@ The matching Worker deployment succeeded after three compatible migrations broug
 
 The fresh production `.local/Sidequest.xcarchive` from commit `80f2d5a` passed the packaged native release guard and exported as an arm64 IPA signed with Cloud Managed Apple Distribution. Its identifiers are `com.aaronpilk.sidequest`, version `1.0.0`, build `1`, team `5F5C5G25Y6`; `get-task-allow` is false and `beta-reports-active` is true. The archive uses the production Worker and configured Supabase project, with `ITSAppUsesNonExemptEncryption=false`.
 
-Apple accepted the upload with no errors, delivery/build ID `7b96b636-a2df-4619-914c-88efba74d300`, and completed processing as `VALID`. Its saved testing notes matched the September 30 version of `docs/TESTFLIGHT_NOTES.md` at commit `80f2d5a`; the current file describes build 3. At that checkpoint, App Store Connect confirmed **Sidequest Internal · 1 Tester · 1 Build**, with **aaronpilk14@gmail.com — Invited**. The invitation allowed installation of **Sidequest Me 1.0.0 (1)** through TestFlight. Invitation delivery status does not prove installation or an app sign-in.
+Apple accepted the upload with no errors, delivery/build ID `7b96b636-a2df-4619-914c-88efba74d300`, and completed processing as `VALID`. Its saved testing notes matched the September 30 version of `docs/TESTFLIGHT_NOTES.md` at commit `80f2d5a`; the current file describes build 5. At that checkpoint, App Store Connect confirmed **Sidequest Internal · 1 Tester · 1 Build**, with **aaronpilk14@gmail.com — Invited**. The invitation allowed installation of **Sidequest Me 1.0.0 (1)** through TestFlight. Invitation delivery status does not prove installation or an app sign-in.
 
 This is an internal beta, not an App Store approval or public release. The production app account remains separate from the Apple TestFlight account; the currently allowed app sign-in email is `pilkingtonent@gmail.com`. Custom SMTP/general-public sign-in and the remaining physical-device checks above still need completion.
