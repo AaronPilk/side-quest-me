@@ -34,6 +34,7 @@ const acceptError = "Mock acceptance stopped before creating a run.";
 type Acceptance = { quest: Candidate; outing: Outing; key: string };
 type FixtureWindow = typeof window & {
   __experienceAccepts: Acceptance[];
+  __experienceConfigReads: number;
 };
 
 function result(
@@ -194,11 +195,15 @@ async function prepare(
         .reverse()[0]?.name || path;
     const { aiQuestApi } = await import(loaded("/src/lib/ai-quest-api.ts"));
     const { api } = await import(loaded("/src/lib/api.ts"));
-    aiQuestApi.config = async () => ({
-      configured: true,
-      provider: "openai",
-      model: "mocked-openai-model",
-    });
+    (window as FixtureWindow).__experienceConfigReads = 0;
+    aiQuestApi.config = async () => {
+      (window as FixtureWindow).__experienceConfigReads += 1;
+      return {
+        configured: true,
+        provider: "openai",
+        model: "mocked-openai-model",
+      };
+    };
     (window as FixtureWindow).__experienceAccepts = [];
     api.accept = async (quest: Candidate, outing: Outing, key: string) => {
       (window as FixtureWindow).__experienceAccepts.push(
@@ -207,15 +212,24 @@ async function prepare(
       throw new Error("Mock acceptance stopped before creating a run.");
     };
   });
-  // Remount Create so its configuration resource uses the mocked provider.
+  // Wait for Discover to render before returning: the URL changes before the
+  // React transition commits, so an immediate click can retain the old Create.
   await page
     .getByRole("link", { name: "Discover", exact: true })
     .first()
     .click();
+  await expect(
+    page.getByRole("heading", { name: "Discover", exact: true }),
+  ).toBeVisible();
   await page.getByRole("link", { name: "Create", exact: true }).first().click();
   await expect(
     page.getByRole("heading", { name: "What’s the plan?", exact: true }),
   ).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as FixtureWindow).__experienceConfigReads),
+    )
+    .toBeGreaterThan(0);
   return { calls, keys, releaseFirst };
 }
 
@@ -593,12 +607,15 @@ test("pending discovery prevents duplicate submits and a delayed result cannot r
   await expect(
     page
       .getByRole("status")
-      .filter({ hasText: "Building your experience and checking the fit" }),
+    .filter({ hasText: "Building your experience and checking the fit" }),
   ).toBeVisible();
   await page
     .getByRole("link", { name: "Discover", exact: true })
     .first()
     .click();
+  await expect(
+    page.getByRole("heading", { name: "Discover", exact: true }),
+  ).toBeVisible();
   await page.getByRole("link", { name: "Create", exact: true }).first().click();
   await page
     .getByRole("button", { name: "Edit intensity", exact: true })
