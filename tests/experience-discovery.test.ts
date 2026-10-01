@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
   DEFAULT_OUTING,
@@ -19,6 +19,7 @@ import {
 } from "../worker/experience-discovery";
 import type { AppBindings, AppContext } from "../worker/services";
 import { ApiError } from "../worker/services";
+import { AiProviderError } from "../worker/ai-provider";
 import {
   approvedQuestQualityFixture,
   questConceptsFixture,
@@ -126,7 +127,9 @@ const send = (
       AI_RATE_LIMITER: { limit: async () => ({ success: true }) },
     } as unknown as AppBindings["Bindings"],
   );
+afterEach(() => vi.restoreAllMocks());
 beforeEach(() => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
   cache = null;
   inProgress = false;
   calls.mockClear();
@@ -288,6 +291,33 @@ describe("private experience discovery", () => {
     ]);
     expect(model).toHaveBeenCalledTimes(3);
     expect(model.mock.calls[2][2].proposal.cost.maxMinor).toBe(0);
+  });
+  it("logs bounded failure stage and status without request data or exception text", async () => {
+    model.mockRejectedValueOnce(new AiProviderError("http", 401));
+    expect((await send()).status).toBe(200);
+    expect(console.warn).toHaveBeenLastCalledWith({
+      event: "experience_generation_failed",
+      stage: "concepts",
+      provider: "openai",
+      elapsedMs: expect.any(Number),
+      failureKind: "http",
+      httpStatus: 401,
+    });
+    cache = null;
+    model.mockRejectedValueOnce(
+      new Error("private provider body or outing details"),
+    );
+    expect((await send()).status).toBe(200);
+    expect(console.warn).toHaveBeenLastCalledWith({
+      event: "experience_generation_failed",
+      stage: "concepts",
+      provider: "openai",
+      elapsedMs: expect.any(Number),
+      failureKind: "generation_failed",
+    });
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain(
+      "private provider body",
+    );
   });
   it("does not spend on a concurrent replay", async () => {
     inProgress = true;

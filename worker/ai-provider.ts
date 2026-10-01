@@ -35,6 +35,35 @@ export function questAiProvider(env: QuestAiEnv) {
   return { provider, model, key };
 }
 
+/** Safe diagnostic fields only. Never retain provider bodies, request context,
+ * credentials, or a nested error that could contain them. */
+export class AiProviderError extends Error {
+  constructor(
+    readonly kind:
+      | "http"
+      | "network"
+      | "timeout"
+      | "response_too_large"
+      | "invalid_response"
+      | "refusal"
+      | "incomplete",
+    readonly httpStatus?: number,
+  ) {
+    super(
+      {
+        http: "Provider unavailable.",
+        network: "Provider connection failed.",
+        timeout: "Provider timed out.",
+        response_too_large: "Provider response exceeded its limit.",
+        invalid_response: "Provider response was invalid.",
+        refusal: "Provider refused.",
+        incomplete: "Provider output is incomplete.",
+      }[kind],
+    );
+    this.name = "AiProviderError";
+  }
+}
+
 const MAX_PROVIDER_BYTES = 64 * 1024;
 const AI_TIMEOUT_MS = 30_000;
 export type AiRequestOptions = {
@@ -46,7 +75,7 @@ async function boundedJson(response: Response): Promise<unknown> {
   const length = Number(response.headers.get("Content-Length") || 0);
   if (length > MAX_PROVIDER_BYTES || !response.body) {
     await response.body?.cancel();
-    throw new Error("Provider response exceeded its limit.");
+    throw new AiProviderError("response_too_large");
   }
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -57,7 +86,7 @@ async function boundedJson(response: Response): Promise<unknown> {
     size += value.byteLength;
     if (size > MAX_PROVIDER_BYTES) {
       await reader.cancel();
-      throw new Error("Provider response exceeded its limit.");
+      throw new AiProviderError("response_too_large");
     }
     chunks.push(value);
   }
@@ -148,7 +177,7 @@ export async function requestAiJson(
   const effort = options.reasoningEffort ?? "low";
   const requestedTimeout = options.timeoutMs ?? AI_TIMEOUT_MS;
   if (!Number.isFinite(requestedTimeout) || requestedTimeout <= 0)
-    throw new Error("Provider request deadline exceeded.");
+    throw new AiProviderError("timeout");
   const timeoutMs = Math.min(60_000, requestedTimeout);
   const input = JSON.stringify(context);
   const target =
@@ -199,6 +228,7 @@ export async function requestAiJson(
           };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let receivedResponse = false;
   try {
     const response = await send(target, {
       method: "POST",
@@ -212,9 +242,10 @@ export async function requestAiJson(
       },
       body: JSON.stringify(body),
     });
+    receivedResponse = true;
     if (!response.ok) {
-      await response.body?.cancel();
-      throw new Error("Provider unavailable.");
+      await response.body?.cancel().catch(() => {});
+      throw new AiProviderError("http", response.status);
     }
     const raw = await boundedJson(response);
     let text: string;
@@ -230,14 +261,23 @@ export async function requestAiJson(
               .flatMap((item) => item.content || []);
       const outputType = provider === "anthropic" ? "text" : "output_text";
       if (parts.some((part) => part.type === "refusal"))
-        throw new Error("Provider refused.");
+        throw new AiProviderError("refusal");
       const texts = parts.filter(
         (part) => part.type === outputType && part.text,
       );
-      if (texts.length !== 1) throw new Error("Provider output is incomplete.");
+      if (texts.length !== 1) throw new AiProviderError("incomplete");
       text = texts[0].text!;
     }
     return JSON.parse(text) as unknown;
+  } catch (error) {
+    if (error instanceof AiProviderError) throw error;
+    throw new AiProviderError(
+      controller.signal.aborted
+        ? "timeout"
+        : receivedResponse
+          ? "invalid_response"
+          : "network",
+    );
   } finally {
     clearTimeout(timer);
   }

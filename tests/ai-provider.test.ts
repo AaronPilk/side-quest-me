@@ -13,7 +13,11 @@ import {
 } from "../shared/ai-quest";
 import { originalQuestIdentity } from "../shared/community";
 import { ineligibilityReasons } from "../shared/recommend";
-import { questAiProvider, requestAiJson } from "../worker/ai-provider";
+import {
+  AiProviderError,
+  questAiProvider,
+  requestAiJson,
+} from "../worker/ai-provider";
 import { generateAiQuestDraft } from "../worker/ai-quest-draft";
 import {
   approvedQuestQualityFixture,
@@ -268,6 +272,55 @@ describe("provider selection and transport isolation", () => {
       ).rejects.toThrow();
     },
   );
+
+  it("retains only a numeric HTTP status for provider failures and discards private error bodies", async () => {
+    const privateBody = "private-provider-body-with-key-or-prompt";
+    const result = await requestAiJson(
+      questAiProvider(keys)!,
+      "Private instructions",
+      { privatePlan: "private outing" },
+      {},
+      "proposal",
+      async () => new Response(privateBody, { status: 401 }),
+    ).catch((error) => error);
+    expect(result).toBeInstanceOf(AiProviderError);
+    expect(result).toMatchObject({
+      kind: "http",
+      httpStatus: 401,
+      message: "Provider unavailable.",
+    });
+    expect(JSON.stringify(result)).not.toContain(privateBody);
+    expect(result).not.toHaveProperty("cause");
+  });
+
+  it("classifies network and malformed response failures without retaining their messages", async () => {
+    const network = await requestAiJson(
+      questAiProvider(keys)!,
+      "Rules",
+      {},
+      {},
+      "proposal",
+      async () => {
+        throw new Error("private connection details");
+      },
+    ).catch((error) => error);
+    expect(network).toMatchObject({
+      kind: "network",
+      message: "Provider connection failed.",
+    });
+    const malformed = await requestAiJson(
+      questAiProvider(keys)!,
+      "Rules",
+      {},
+      {},
+      "proposal",
+      async () => new Response("private malformed body"),
+    ).catch((error) => error);
+    expect(malformed).toMatchObject({
+      kind: "invalid_response",
+      message: "Provider response was invalid.",
+    });
+  });
 
   it("bounds streamed provider responses instead of trusting Content-Length", async () => {
     const stream = new ReadableStream<Uint8Array>({
