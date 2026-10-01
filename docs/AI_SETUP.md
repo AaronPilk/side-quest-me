@@ -237,9 +237,9 @@ scenario makes no more than three calls; there are no automatic retries.
 See `docs/OPENAI_QUALITY_CHECK_2026-10-01.md` for this activation’s measured results
 and remaining native/production checks.
 
-## Unreleased experience routing — October 1 beta follow-up
+## Experience routing — October 1 beta 4
 
-Local changes now build one structured `experience_routing` brief for all three
+Build 4 changes build one structured `experience_routing` brief for all three
 original-draft stages. It connects confirmed interests, skills, humor, participation,
 role and preparation with the current outing's exact group, intensity, available
 time and remaining budget. Current outing choices override usual profile choices;
@@ -274,13 +274,15 @@ This change only affects **Draft with AI**. Ordinary Create recommendations stil
 come from the published catalog. The remaining product work is to connect that
 journey to verified local activities/events and route those facts into generation,
 while keeping availability, booking costs and creative suggestions distinct.
-No local provider search was added, no named venue facts are manufactured, and no
-new TestFlight or Worker deployment has been made for this follow-up.
+This release adds no live place/event data source. The reviewed follow-up
+is now deployed with **TestFlight 1.0.0 (4)** and the matching production Worker;
+see `EXPERIENCE_ROUTING_RELEASE_2026-10-01.md` for delivery evidence.
 
 Verification: 624 unit tests and all 10 focused AI draft browser scenarios pass;
 typecheck, lint and production build pass. Browser provider responses are mocked.
 The iPhone 17 / iOS 26.4 Simulator build compiled, installed and launched with
-production configuration. The native walkthrough did not reach the new form:
-automated scroll/navigation remained on the welcome screen and Simulator control
-was interrupted. Do not count the adult-option UI as Simulator-verified yet.
+production configuration. A follow-up native walkthrough reached the welcome
+screen's email sign-in form using keyboard scrolling. There is no visible guest
+path into Create; the new adult-option form still requires an authenticated
+native/physical-device walkthrough. Do not count it as Simulator-verified yet.
 There are no database changes in this follow-up.
