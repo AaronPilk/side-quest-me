@@ -1,10 +1,13 @@
 # Series and AI milestone — October 1, 2026
 
-This is a **local, unshipped** update in `/Users/pilksclaes/Side Quest Me`.
-Existing Claude and other working-tree changes were preserved. No Git push,
-hosted migration, Cloudflare deployment or TestFlight upload was performed.
-Use `docs/CLAUDE_REVIEW_PROMPT.md` for the complete product/release handoff and
-`docs/AI_SETUP.md` for exact provider configuration.
+**Release update:** this milestone and the later OpenAI quality work were reviewed,
+fixed and delivered in **TestFlight 1.0.0 (2)** on October 1, 2026. The production
+Worker and all 15 hosted migrations are deployed. Use
+`docs/RELEASE_REVIEW_2026-10-01.md` for current delivery evidence and
+`docs/AI_SETUP.md` for the selected OpenAI / GPT-6 Astra configuration.
+
+The milestone notes below preserve earlier development checkpoints, including
+provider options and local-only status before the authorized release.
 
 The AI configuration and evidence below describe the earlier milestone. The later
 OpenAI activation and real quality evaluations are recorded in
@@ -59,8 +62,8 @@ longer requires public state; redacted parts stay unavailable). Apply them in
 that order, after the pending account-intent migration and **before** releasing
 the Worker that uses them. Neither edits historical `quest_runs` rows. The
 isolated database exercised all **15** local migrations, including a dedicated
-grow-from-quest invariant test; hosted production remains at the earlier
-12-migration checkpoint.
+grow-from-quest invariant test. Hosted production was at 12 migrations during
+that checkpoint and now has all 15 after the reviewed build 2 release.
 
 ## AI behavior and remaining configuration
 

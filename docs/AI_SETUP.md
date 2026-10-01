@@ -31,10 +31,11 @@ The default for an explicitly selected provider is:
 These current model identifiers were checked against the providers' documentation
 on October 1, 2026. They are configurable defaults, not a benchmark showing one
 provider is best for Sidequest. The owner has now selected **OpenAI / GPT-6 Astra**.
-The existing server key has been configured only in ignored local `.dev.vars`
-(mode 0600), and model access was verified against OpenAI. This is API billing,
-not pooled ChatGPT subscription usage. No Cloudflare deployment, production secret
-change, GitHub push or TestFlight upload is part of this activation.
+The existing server key is configured in ignored local `.dev.vars` (mode 0600)
+and as a secret on the production `sidequest-me` Worker. Model access was verified
+against OpenAI with synthetic briefs. On October 1, 2026, the reviewed integration
+was deployed with **TestFlight 1.0.0 (2)**. This is API billing, not pooled ChatGPT
+subscription usage. See `RELEASE_REVIEW_2026-10-01.md` for delivery evidence.
 
 If `AI_QUEST_PROVIDER` is omitted, existing OpenAI configurations continue to work.
 `AI_QUEST_MODEL` overrides the selected provider's default; existing
@@ -54,13 +55,15 @@ References: [Grok models](https://docs.x.ai/developers/models),
 
 ## Connect OpenAI
 
-The local Worker reports OpenAI / GPT-6 Astra as configured. This readiness flag
-checks AI bindings only: this checkout still lacks local Supabase credentials, so
-live authenticated app/API and physical-phone verification remain release checks.
-The live evaluation uses synthetic data and calls the same generator directly.
-The production Worker
-still needs its own server secret and reviewed release before the installed
-production iPhone app can use this implementation.
+The production Worker reports OpenAI / GPT-6 Astra as configured. Its server-only
+secret, provider/model variables and separate AI rate limiter are deployed.
+Authenticated production smoke tests verified sign-in and named-provider consent
+guards without generating paid content. Readiness is not a provider health test;
+earlier live synthetic evaluations called the same generator directly. The complete
+signed-in physical-iPhone generation flow remains a TestFlight check.
+
+The following instructions are retained for credential rotation or another
+environment; production steps 3–5 were completed for build 2.
 
 1. Use a Sidequest API key from the [OpenAI API dashboard](https://platform.openai.com/api-keys).
    Set project spending controls there. Never put a key in chat, GitHub source,
@@ -79,7 +82,7 @@ production iPhone app can use this implementation.
    isolated demo (`npm run dev:demo` or the demo iOS bundle) never calls a real AI
    provider; it offers a manual original draft when AI is unavailable.
 
-3. Before the authorized production release, add `OPENAI_API_KEY` as a **Secret**
+3. Add or rotate `OPENAI_API_KEY` as a **Secret**
    on the existing **sidequest-me** Cloudflare Worker. In the correct authenticated
    Cloudflare account, this can also be done through Wrangler's hidden prompt:
 

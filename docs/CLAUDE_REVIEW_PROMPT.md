@@ -1,5 +1,7 @@
 # Sidequest — Claude review handoff
 
+**Historical review prompt:** this review was completed and the owner subsequently authorized release. Build **1.0.0 (2)** is now in internal TestFlight with the matching backend and migrations deployed. See `RELEASE_REVIEW_2026-10-01.md` for current status. The original local-review scope below is retained for context and is not a claim that the current code is unshipped.
+
 Work in **`/Users/pilksclaes/Side Quest Me`**. Review the existing app and latest local changes first, then fix confirmed bugs within this scope and complete the relevant checks. Inspect repository instructions, `git status` and `git diff` first. Preserve unrelated work. Do not rebuild the product, invent speculative features or replace functioning features with placeholders. Report the review and verified local result before any release action.
 
 **Keep this review local. Do not deploy Cloudflare, apply a production migration, push a new TestFlight build, change App Store Connect or publish content. The user wants to review this pass before another release.** Build 1 already exists; do not describe new local changes as shipped.

@@ -1,5 +1,10 @@
 # OpenAI activation and quest quality — October 1, 2026
 
+**Later release update:** the integration described in this local evaluation was
+subsequently deployed with TestFlight **1.0.0 (2)**. Production OpenAI configuration
+and authenticated consent guards are verified. See `RELEASE_REVIEW_2026-10-01.md`
+for delivery evidence; the original evaluation scope and results below are retained.
+
 This is a **local, unshipped** update in `/Users/pilksclaes/Side Quest Me`.
 Existing Claude/Series/UI work was preserved. No GitHub push, Cloudflare
 deployment, hosted migration or TestFlight upload was performed.
