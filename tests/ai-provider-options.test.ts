@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { requestAiJson } from "../worker/ai-provider";
+import { AiProviderError, requestAiJson } from "../worker/ai-provider";
 
 const config = {
   provider: "openai" as const,
@@ -64,7 +64,7 @@ describe("AI reasoning and deadline budgets", () => {
           3500,
           { timeoutMs },
         ),
-      ).rejects.toThrow("deadline exceeded");
+      ).rejects.toMatchObject({ name: "AiProviderError", kind: "timeout" });
       expect(send).not.toHaveBeenCalled();
     },
   );
@@ -94,9 +94,16 @@ describe("AI reasoning and deadline budgets", () => {
       3500,
       { timeoutMs: requested },
     );
-    const rejected = expect(pending).rejects.toThrow("aborted");
-    await vi.advanceTimersByTimeAsync(effective);
+    const rejected = expect(pending).rejects.toMatchObject({
+      name: "AiProviderError",
+      kind: "timeout",
+    });
+    await vi.advanceTimersByTimeAsync(effective - 1);
+    expect(send.mock.calls[0][1]?.signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
     await rejected;
+    await expect(pending).rejects.toBeInstanceOf(AiProviderError);
+    expect(send.mock.calls[0][1]?.signal?.aborted).toBe(true);
     expect(send).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
   });
