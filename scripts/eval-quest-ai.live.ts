@@ -47,6 +47,38 @@ const scenarios: {
   preferences: Preferences;
 }[] = [
   {
+    id: "five-friends-full-send",
+    brief:
+      "Five friends with a confirmed private venue booking want a rowdy Full Send experience: fierce team rivalry, absurd surprises and an outrageous finale worth talking about tomorrow. Everyone must have an active role. No cute date exercise, photo hunt, crafts or ordinary open mic. No drinking requirement.",
+    outing: {
+      ...DEFAULT_OUTING,
+      category: "demon",
+      intensity: "full_send",
+      group: "friends",
+      participants: 5,
+      setting: "venue",
+      budgetMinor: 50_000,
+      budgetScope: "total",
+      durationMinutes: 120,
+      travelMinutes: 20,
+      travelCostMinor: 2000,
+      transport: "transit",
+      adultEligible: true,
+      adultContext: true,
+      venuePermission: true,
+      arrangementConfirmed: true,
+      confirmedVenueCostMinor: 10_000,
+    },
+    preferences: confirmed({
+      humor: ["competitive", "absurd", "surprises"],
+      interests: ["sports", "games"],
+      approach: "group_only",
+      preparation: "proper_setup",
+      role: "rotate",
+      exclusions: ["strangers", "alcohol"],
+    }),
+  },
+  {
     id: "outdoor-full-send-couple",
     brief:
       "Give us an adventurous creative date with a real challenge and a reveal worth showing our friends. We have our phones; don't make it a generic scavenger hunt.",

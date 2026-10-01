@@ -227,7 +227,7 @@ npm run test:ai:live
 SIDEQUEST_AI_EVAL_CASE=outdoor-full-send-couple npm run test:ai:live
 ```
 
-The four scenarios cover Full Send for two outdoors, a free solo home activity,
+The five scenarios cover Full Send for five friends at a venue, Full Send for two outdoors, a free solo home activity,
 a short outing with per-person budget/travel, and the previously nonsensical
 “first time you laughed together” premise. Reports go only to ignored
 `.local/ai-eval/`, with model, synthetic inputs, proposed concepts, quest, critique,
@@ -236,3 +236,51 @@ scenario makes no more than three calls; there are no automatic retries.
 
 See `docs/OPENAI_QUALITY_CHECK_2026-10-01.md` for this activation’s measured results
 and remaining native/production checks.
+
+## Unreleased experience routing — October 1 beta follow-up
+
+Local changes now build one structured `experience_routing` brief for all three
+original-draft stages. It connects confirmed interests, skills, humor, participation,
+role and preparation with the current outing's exact group, intensity, available
+time and remaining budget. Current outing choices override usual profile choices;
+unknown answers do not become permissions. Retained exclusions remain restrictions.
+Food challenges and being the target of a surprise stay narrower than ordinary
+food activities or a confirmed organizer/camera role in a surprise.
+
+Full Send now requires a substantial experience for the actual group. The prompts
+explicitly reject an ordinary open mic, observation exercise, craft or extra rounds
+as sufficient intensity. Friends can receive rowdy adult experiences; couples can
+also choose ambitious Full Send activities. Concepts must describe their concrete
+intensity mechanic, and the independent review must affirm audience/experience fit
+from the actual instructions. A weak shortlist stops before expansion with
+`ai_quality_retry`; it does not quietly lower intensity or change the outing.
+
+The AI draft plan exposes existing venue age eligibility, venue permission and
+optional adult-nightlife controls. These are outing-specific self-declarations,
+not DOB collection, age verification or proof that everyone is 21+. Changing the
+group, headcount or setting clears inherited eligibility, permissions, arrangements
+and venue charges. Boundaries still apply. Adult atmosphere and irreverent humor
+are allowed; mandatory intoxication or drinking before physical activities is not
+a quest mechanic.
+
+The live `five-friends-full-send` test **did not produce an acceptable quest**.
+GPT-6 Astra returned three private-party/improv concepts with audience/intensity
+scores of 2, 3 and 3. The first-stage threshold correctly rejected all of them
+after one successful provider call (about 37 seconds). This is evidence that the
+rejection works, not evidence that the desired quality has been achieved. Report:
+`.local/ai-eval/gpt-6-astra/five-friends-full-send.json`.
+
+This change only affects **Draft with AI**. Ordinary Create recommendations still
+come from the published catalog. The remaining product work is to connect that
+journey to verified local activities/events and route those facts into generation,
+while keeping availability, booking costs and creative suggestions distinct.
+No local provider search was added, no named venue facts are manufactured, and no
+new TestFlight or Worker deployment has been made for this follow-up.
+
+Verification: 624 unit tests and all 10 focused AI draft browser scenarios pass;
+typecheck, lint and production build pass. Browser provider responses are mocked.
+The iPhone 17 / iOS 26.4 Simulator build compiled, installed and launched with
+production configuration. The native walkthrough did not reach the new form:
+automated scroll/navigation remained on the welcome screen and Simulator control
+was interrupted. Do not count the adult-option UI as Simulator-verified yet.
+There are no database changes in this follow-up.

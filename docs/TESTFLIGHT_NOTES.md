@@ -1,9 +1,23 @@
-# Internal iPhone beta — 1.0.0 (3)
+# Internal iPhone beta — 1.0.0 (4)
 
 This beta connects to the live Sidequest account, quest and video services. Videos and new Series stay private until you explicitly publish them.
 
 Please try:
 
+- Focus on **Create → Draft with AI** for this build's changes. Try the same
+  theme with different groups and intensities. Confirm your saved interests,
+  participation preferences and boundaries influence the proposal while the
+  current outing's exact group, budget and time remain authoritative. Full Send
+  now has stricter audience/experience checks. It may return a clear no-fit
+  message; please report those cases with the plan and brief you entered.
+- In the AI plan, choose a venue and try the age eligibility, venue permission
+  and optional adult-nightlife choices. These are self-declarations, not age
+  verification. Change the group, headcount or setting and check that old
+  confirmations and venue costs are cleared instead of carried to a new plan.
+- Quest quality is still being tuned. A live five-friends Full Send evaluation
+  returned ideas that were too mild and were rejected. This build does not yet
+  connect nearby Apple Maps places or live events to AI generation. The ordinary
+  Create recommendations still use the existing catalog.
 - On a fresh signed-in account, follow the new setup: personal or brand,
   optional nickname, optional ChatGPT summary, then one preference question at a
   time with progress. Skip a question or choose **Finish later → Save and explore

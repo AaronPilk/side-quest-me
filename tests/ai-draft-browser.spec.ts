@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { DEFAULT_OUTING, outingSchema, type Outing } from "../shared/domain";
 
 async function prepare(
   page: Page,
@@ -6,6 +7,7 @@ async function prepare(
   failFirst = false,
   holdFirst = false,
   provider: "xai" | "openai" = "xai",
+  initialOuting?: Outing,
 ) {
   await page.goto("/");
   await page.getByRole("button", { name: "Explore the demo first" }).click();
@@ -126,6 +128,11 @@ async function prepare(
     },
     { configured, failFirst, holdFirst, provider },
   );
+  if (initialOuting)
+    await page.evaluate(
+      (outing) => sessionStorage.setItem("sq-outing", JSON.stringify(outing)),
+      initialOuting,
+    );
   await page.getByRole("link", { name: "Create", exact: true }).first().click();
   await page.getByRole("link", { name: "Draft with AI", exact: true }).click();
 }
@@ -180,6 +187,10 @@ test("AI quest proposal requires Grok consent and stays unsaved until the editab
       group: "couple",
       intensity: "full_send",
       setting: "outside",
+      adultEligible: false,
+      adultContext: false,
+      venuePermission: false,
+      arrangementConfirmed: false,
     },
   });
   await expect(
@@ -220,6 +231,179 @@ test("AI quest proposal requires Grok consent and stays unsaved until the editab
     page.getByLabel("On-screen caption", { exact: true }).first(),
   ).toHaveValue("Can we find all three?");
 });
+
+test("venue AI drafts default to no adult context and send only explicitly confirmed nightlife choices", async ({
+  page,
+}) => {
+  await prepare(page);
+  await page
+    .getByRole("textbox", { name: "Your idea", exact: true })
+    .fill("A lively night out for five friends");
+  await page.getByRole("button", { name: "Shape the plan" }).click();
+  await page
+    .getByRole("group", { name: "AI quest group", exact: true })
+    .getByRole("button", { name: "Friends", exact: true })
+    .click();
+  await page.getByRole("spinbutton", { name: "Number of people" }).fill("5");
+  await page
+    .getByRole("group", { name: "AI quest setting", exact: true })
+    .getByRole("button", { name: "At a venue", exact: true })
+    .click();
+  const age = page.getByRole("group", {
+    name: "AI quest age eligibility",
+    exact: true,
+  });
+  const permission = page.getByRole("group", {
+    name: "AI quest venue permission",
+    exact: true,
+  });
+  const nightlife = page.getByRole("group", {
+    name: "AI quest adult nightlife",
+    exact: true,
+  });
+  await expect(
+    age.getByRole("button", { name: "Not confirmed" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(permission).toHaveCount(0);
+  await expect(nightlife).toHaveCount(0);
+  await page.getByRole("checkbox", { name: /Send my brief/ }).check();
+  await page
+    .getByRole("button", { name: "Create a proposal", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Change the plan" }),
+  ).toBeVisible();
+  expect(outingSchema.parse((await calls(page))[0].outing)).toMatchObject({
+    group: "friends",
+    participants: 5,
+    setting: "venue",
+    adultEligible: false,
+    adultContext: false,
+    venuePermission: false,
+  });
+  await page.getByRole("button", { name: "Change the plan" }).click();
+  await age.getByRole("button", { name: "Adults and eligible" }).click();
+  await expect(nightlife).toHaveCount(0);
+  await expect(
+    permission.getByRole("button", { name: "Not confirmed" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await permission.getByRole("button", { name: "We have permission" }).click();
+  await expect(
+    nightlife.getByRole("button", { name: "Skip it" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await nightlife.getByRole("button", { name: "Include it" }).click();
+  await nightlife.scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: ".local/ai-evidence/ai-draft-adult-options-mocked.png",
+  });
+  await page
+    .getByRole("button", { name: "Create a proposal", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Change the plan" }),
+  ).toBeVisible();
+  expect(outingSchema.parse((await calls(page))[1].outing)).toMatchObject({
+    group: "friends",
+    participants: 5,
+    adultEligible: true,
+    adultContext: true,
+    venuePermission: true,
+  });
+  await page.getByRole("button", { name: "Change the plan" }).click();
+  await age.getByRole("button", { name: "Not confirmed" }).click();
+  await expect(nightlife).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Create a proposal", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Change the plan" }),
+  ).toBeVisible();
+  expect(outingSchema.parse((await calls(page))[2].outing)).toMatchObject({
+    adultEligible: false,
+    adultContext: false,
+  });
+});
+
+for (const change of ["group", "participants", "outside", "home"] as const) {
+  test(`changing AI draft ${change} clears inherited confirmations while unchanged selections keep them`, async ({
+    page,
+  }) => {
+    await prepare(page, true, false, false, "xai", {
+      ...DEFAULT_OUTING,
+      group: "friends",
+      participants: 5,
+      setting: "venue",
+      adultEligible: true,
+      adultContext: true,
+      venuePermission: true,
+      arrangementConfirmed: true,
+      confirmedVenueCostMinor: 1200,
+      transport: "transit",
+      travelMinutes: 20,
+      travelCostMinor: 500,
+    });
+    await page
+      .getByRole("textbox", { name: "Your idea", exact: true })
+      .fill("An unexpected challenge for our group");
+    await page.getByRole("button", { name: "Shape the plan" }).click();
+    const group = page.getByRole("group", {
+      name: "AI quest group",
+      exact: true,
+    });
+    const setting = page.getByRole("group", {
+      name: "AI quest setting",
+      exact: true,
+    });
+    await group.getByRole("button", { name: "Friends", exact: true }).click();
+    await page.getByRole("spinbutton", { name: "Number of people" }).fill("5");
+    await setting
+      .getByRole("button", { name: "At a venue", exact: true })
+      .click();
+    await expect(
+      page
+        .getByRole("group", { name: "AI quest adult nightlife", exact: true })
+        .getByRole("button", { name: "Include it" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    if (change === "group")
+      await group.getByText("Just me", { exact: true }).click();
+    else if (change === "participants")
+      await page
+        .getByRole("spinbutton", { name: "Number of people" })
+        .fill("6");
+    else
+      await setting
+        .getByText(change === "home" ? "At home" : "Outside", { exact: true })
+        .click();
+    await expect(
+      page.getByRole("group", {
+        name: "AI quest adult nightlife",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await page.getByRole("checkbox", { name: /Send my brief/ }).check();
+    await page
+      .getByRole("button", { name: "Create a proposal", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Use editable draft" }),
+    ).toBeVisible();
+    const outing = outingSchema.parse((await calls(page))[0].outing);
+    expect(outing).toMatchObject({
+      adultEligible: false,
+      adultContext: false,
+      venuePermission: false,
+      arrangementConfirmed: false,
+      confirmedVenueCostMinor: null,
+    });
+    if (change === "home")
+      expect(outing).toMatchObject({
+        setting: "home",
+        travelMinutes: 0,
+        travelCostMinor: 0,
+        transport: "none",
+      });
+  });
+}
 
 test("AI draft failure preserves the brief and offers another try", async ({
   page,

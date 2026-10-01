@@ -22,6 +22,8 @@ export function questConceptsFixture(
         mission:
           "Set up the challenge, alternate contrasting attempts, and reveal the results. Each attempt must follow the same rule.",
         goal: content.completionQuestions[0].slice(0, 90),
+        intensityMechanic:
+          "Synthetic transport fixture; live experience quality is not assessed here.",
         durationMinutes: content.durationMinutes,
         estimatedCostMinor:
           content.cost.maxMinor *
@@ -40,6 +42,8 @@ export function questConceptsFixture(
         mission:
           "Draw each other for five minutes without lifting the pencil. Reveal both portraits and each identify one recognizable detail.",
         goal: "Complete two portraits and identify one actual detail in each.",
+        intensityMechanic:
+          "Synthetic alternate fixture for budget and duration filtering.",
         durationMinutes: 20,
         estimatedCostMinor: 0,
         scores: {
@@ -56,6 +60,8 @@ export function questConceptsFixture(
         mission:
           "Choose an owned object. Write a factual museum label and an absurd fictional label, then reveal both beside the same object.",
         goal: "Complete the two labels and show how differently they explain the same object.",
+        intensityMechanic:
+          "Synthetic alternate fixture for provider output validation.",
         durationMinutes: 15,
         estimatedCostMinor: 0,
         scores: {
@@ -78,6 +84,9 @@ export function approvedQuestQualityFixture() {
     constraintsHonored: true,
     factsHonest: true,
     metadataHonest: true,
+    audienceExperienceFits: true,
+    intensityEvidence:
+      "Synthetic reviewer envelope, not evidence of actual Full Send quality.",
     scores: {
       playability: 5,
       goal: 5,

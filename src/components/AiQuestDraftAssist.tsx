@@ -45,7 +45,39 @@ export function AiQuestDraftAssist({
     heading.current?.focus();
   }, [step, config.data?.configured]);
   const update = (patch: Partial<Outing>) =>
-    setOuting((current) => ({ ...current, ...patch }));
+    setOuting((current) => {
+      const settingChanged =
+        patch.setting !== undefined && patch.setting !== current.setting;
+      const groupChanged =
+        (patch.group !== undefined && patch.group !== current.group) ||
+        (patch.participants !== undefined &&
+          patch.participants !== current.participants);
+      return {
+        ...current,
+        ...patch,
+        ...(settingChanged || groupChanged
+          ? {
+              adultEligible: false,
+              adultContext: false,
+              venuePermission: false,
+              arrangementConfirmed: false,
+              confirmedVenueCostMinor: null,
+            }
+          : {}),
+        ...(settingChanged
+          ? {
+              applePlaceId: null,
+              ...(patch.setting === "home"
+                ? {
+                    travelMinutes: 0,
+                    travelCostMinor: 0,
+                    transport: "none" as const,
+                  }
+                : {}),
+            }
+          : {}),
+      };
+    });
   async function generate() {
     if (!consent || !config.data?.configured || generating.current) return;
     generating.current = true;
@@ -255,6 +287,82 @@ export function AiQuestDraftAssist({
                 }
               />
             </label>
+            {outing.setting === "venue" && (
+              <>
+                <div className="ai-draft-plan" style={{ gap: 10 }}>
+                  <span>Age eligibility at this venue</span>
+                  <Chips
+                    label="AI quest age eligibility"
+                    options={[
+                      { id: "unknown", label: "Not confirmed" },
+                      { id: "eligible", label: "Adults and eligible" },
+                    ]}
+                    value={outing.adultEligible ? "eligible" : "unknown"}
+                    onChange={(value) =>
+                      update({
+                        adultEligible: value === "eligible",
+                        ...(value !== "eligible"
+                          ? { adultContext: false }
+                          : {}),
+                      })
+                    }
+                  />
+                  <span className="fine-print">
+                    Choosing “Adults and eligible” confirms everyone in this
+                    group is an adult and meets this venue’s age requirement.
+                  </span>
+                </div>
+                {outing.adultEligible && (
+                  <div className="ai-draft-plan" style={{ gap: 10 }}>
+                    <span>Venue permission</span>
+                    <Chips
+                      label="AI quest venue permission"
+                      options={[
+                        { id: "unknown", label: "Not confirmed" },
+                        { id: "permitted", label: "We have permission" },
+                      ]}
+                      value={outing.venuePermission ? "permitted" : "unknown"}
+                      onChange={(value) =>
+                        update({
+                          venuePermission: value === "permitted",
+                          ...(value !== "permitted"
+                            ? { adultContext: false }
+                            : {}),
+                        })
+                      }
+                    />
+                    <span className="fine-print">
+                      The venue permits your planned activity and any filming.
+                    </span>
+                  </div>
+                )}
+                {outing.adultEligible && outing.venuePermission ? (
+                  <div className="ai-draft-plan" style={{ gap: 10 }}>
+                    <span>Adult nightlife · optional</span>
+                    <Chips
+                      label="AI quest adult nightlife"
+                      options={[
+                        { id: "skip", label: "Skip it" },
+                        { id: "include", label: "Include it" },
+                      ]}
+                      value={outing.adultContext ? "include" : "skip"}
+                      onChange={(value) =>
+                        update({ adultContext: value === "include" })
+                      }
+                    />
+                    <span className="fine-print">
+                      Include adult nightlife only if everyone agrees. Alcohol
+                      is optional, and your saved boundaries still apply.
+                    </span>
+                  </div>
+                ) : (
+                  <p className="fine-print">
+                    Confirm age eligibility and venue permission to opt into
+                    adult nightlife.
+                  </p>
+                )}
+              </>
+            )}
             <label className="ai-provider-consent">
               <input
                 type="checkbox"

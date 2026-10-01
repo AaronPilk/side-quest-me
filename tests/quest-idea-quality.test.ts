@@ -12,6 +12,7 @@ import {
   type AiQuestDraftRequest,
 } from "../shared/ai-quest";
 import { originalQuestIdentity } from "../shared/community";
+import { buildQuestRoutingBrief } from "../shared/quest-routing";
 import { ineligibilityReasons } from "../shared/recommend";
 import { generateAiQuestDraft } from "../worker/ai-quest-draft";
 import {
@@ -134,6 +135,7 @@ describe("bounded concept comparison and independent quality review", () => {
       "constraintsHonored",
       "factsHonest",
       "metadataHonest",
+      "audienceExperienceFits",
     ] as const)
       expect(acceptsQuestQuality({ ...accepted, [field]: false })).toBe(false);
     expect(
@@ -198,6 +200,27 @@ describe("bounded concept comparison and independent quality review", () => {
         hasCompleteQuestText({ ...fitting, ...patch } as QuestVariant),
       ).toBe(false);
   });
+
+  it("requires the critic to assess the experience even when every numeric score is high", () => {
+    const inflated = questQualityReviewSchema.parse({
+      ...approvedQuestQualityFixture(),
+      audienceExperienceFits: false,
+      intensityEvidence:
+        "Finding six shades of gray is ordinary observation, regardless of added rounds.",
+    });
+    expect(acceptsQuestQuality(inflated)).toBe(false);
+    const { audienceExperienceFits: _fit, ...oldReview } = inflated;
+    expect(questQualityReviewSchema.safeParse(oldReview).success).toBe(false);
+    expect(
+      questQualityReviewSchema.safeParse({
+        ...inflated,
+        intensityEvidence: " ",
+      }).success,
+    ).toBe(false);
+    const concepts = questConceptsFixture(fitting);
+    concepts.candidates[0].intensityMechanic = " ";
+    expect(questConceptsSchema.safeParse(concepts).success).toBe(false);
+  });
 });
 
 describe("three-call quest drafting budget and semantic gate", () => {
@@ -255,6 +278,46 @@ describe("three-call quest drafting budget and semantic gate", () => {
     expect(reviewed.selectedConcept).not.toHaveProperty("scores");
     expect(reviewed.proposal).toEqual(proposal);
     expect(reviewed).not.toHaveProperty("candidates");
+    for (const body of bodies) {
+      const context = JSON.parse(body.input[0].content[0].text);
+      expect(context.experience_routing).toEqual(
+        buildQuestRoutingBrief(DEFAULT_PREFERENCES, outing),
+      );
+      expect(context.experience_routing).not.toHaveProperty("area");
+      expect(context.experience_routing).not.toHaveProperty("summary");
+    }
+  });
+
+  it("does not expand a weak Full Send just to return something", async () => {
+    const concepts = questConceptsFixture(fitting);
+    for (const concept of concepts.candidates) {
+      concept.scores.audienceIntensity = 2;
+      concept.intensityMechanic =
+        "This is a mild observation exercise with more rounds, not a substantial experience.";
+    }
+    const send = vi.fn(async () => envelope(concepts));
+    await expect(
+      generateAiQuestDraft(env, DEFAULT_PREFERENCES, input, send),
+    ).rejects.toMatchObject({ code: "ai_quality_retry", status: 503 });
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an inflated audience fit after expansion without retrying or accepting", async () => {
+    const stages = [
+      questConceptsFixture(fitting),
+      proposal,
+      {
+        ...approvedQuestQualityFixture(),
+        audienceExperienceFits: false,
+        intensityEvidence:
+          "A longer sound hunt still lacks the substantial experience the group requested.",
+      },
+    ];
+    const send = vi.fn(async () => envelope(stages.shift()));
+    await expect(
+      generateAiQuestDraft(env, DEFAULT_PREFERENCES, input, send),
+    ).rejects.toMatchObject({ code: "ai_quality_retry", status: 503 });
+    expect(send).toHaveBeenCalledTimes(3);
   });
 
   it("stops after concept comparison when no concrete idea fits the remaining time and budget", async () => {
@@ -266,7 +329,7 @@ describe("three-call quest drafting budget and semantic gate", () => {
     const send = vi.fn(async () => envelope(concepts));
     await expect(
       generateAiQuestDraft(env, DEFAULT_PREFERENCES, input, send),
-    ).rejects.toMatchObject({ code: "ai_unavailable" });
+    ).rejects.toMatchObject({ code: "ai_quality_retry" });
     expect(send).toHaveBeenCalledTimes(1);
   });
 
