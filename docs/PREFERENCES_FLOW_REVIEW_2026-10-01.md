@@ -1,12 +1,13 @@
 # Account and quest preferences review — October 1, 2026
 
-The combined setup and editing flow is implemented locally for planned iOS
+The combined setup and editing flow is delivered in internal TestFlight iOS
 **1.0.0 (3)**. **599 unit tests, typecheck, lint and production build passed.** All 37 focused
 preference/profile browser scenarios passed, including real safe-area emulation
 at 390×844 and 402×874. The iPhone 17 / iOS 26.4 Simulator build passed and its
-setup flow was exercised manually. All 185 browser scenarios passed across the broad run and final focused reruns.
-The distribution archive passed Apple validation. Signed build 3 delivery is
-pending; this document does not yet establish TestFlight availability.
+setup flow was exercised manually. All 185 browser scenarios also passed in one
+clean GitHub CI run on the shipped application commit.
+The distribution archive passed Apple validation, processed as `VALID`, and is
+`IN_BETA_TESTING` in the existing Sidequest Internal group.
 
 ## Implemented flow
 
@@ -127,7 +128,7 @@ are not a promise of survival after app termination; confirmed server saves
 must persist. Camera, Photos, mail callbacks and actual device interruptions
 remain separate physical-device acceptance checks in [iOS release](IOS_RELEASE.md).
 
-## Build candidate
+## Delivered build
 
 Final native source compiled successfully in the iPhone Simulator and as an
 arm64 distribution archive at `.local/Sidequest-build3-release.xcarchive`.
@@ -143,3 +144,30 @@ The 185 passing browser scenarios are the union of the 159-case broad run
 final affected cases passed after the parallel-draft fix; all 599 unit tests
 were also rerun successfully. Logs remain in ignored `.local/combined-*` and
 `.local/preferences-*` files.
+
+## Delivery evidence
+
+Application commit `1deb670031a3e5b94c7b360262e2f640991de400` is pushed to
+`AaronPilk/side-quest-me` main. The matching
+[production deployment](https://github.com/AaronPilk/side-quest-me/actions/runs/36912107205)
+succeeded, Worker version `bdc8f4aa-84ce-408c-adfd-3f56ae588feb`, at
+<https://sidequest-me.aaron-9c3.workers.dev>. Production health reports the database
+and renderer configured with demo mode off; `/preferences`, `/account/security`
+and their shipped assets return successfully. This release changes no database
+schema; the existing 15 migrations remain applicable.
+
+The independent [Checks run](https://github.com/AaronPilk/side-quest-me/actions/runs/36912068691)
+also completed successfully on this exact commit: lint, typecheck, 599 unit tests
+across 55 files, isolated PostgreSQL invariants, all 185 browser scenarios in one
+run (13.1 minutes), and production build. The CI PostgreSQL run used no remote
+database. Full logs are saved locally in `.local/preferences-ci-checks.log` and
+`.local/preferences-ci-deploy.log`.
+
+Apple accepted build `6d4968d2-0e57-4ca0-9fa2-c1d964f57c04` with no validation or
+upload errors. App Store Connect confirms version `1.0.0`, build `3`, processing
+state `VALID`, and internal build state `IN_BETA_TESTING`. Membership in the
+existing `Sidequest Internal` group was verified, as were the saved English
+notes against `docs/TESTFLIGHT_NOTES.md`. The existing tester can update through
+TestFlight. No new tester invitation, external beta review or public App Store
+submission was created. Physical installation and the installed ChatGPT app
+handoff remain tester checks, not claims made by these release results.
