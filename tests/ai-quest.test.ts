@@ -139,7 +139,7 @@ describe("confirmed AI inputs and structured filming proposals", () => {
     expect(quest).toEqual(original);
     const [url, init] = send.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://api.openai.com/v1/responses");
-    expect(init.redirect).toBe("error");
+    expect(init.redirect).toBe("manual");
     const body = JSON.parse(init.body as string);
     expect(body).toMatchObject({
       model: "gpt-6-astra",

@@ -185,7 +185,7 @@ describe("provider selection and transport isolation", () => {
           anthropic: "https://api.anthropic.com/v1/messages",
         }[provider],
       );
-      expect(init.redirect).toBe("error");
+      expect(init.redirect).toBe("manual");
       expect(init.signal).toBeInstanceOf(AbortSignal);
       expect(init.body).not.toContain(config.key);
       const body = JSON.parse(init.body as string);
@@ -270,6 +270,45 @@ describe("provider selection and transport isolation", () => {
           async () => Response.json(response),
         ),
       ).rejects.toThrow();
+    },
+  );
+
+  it.each(providers)(
+    "%s rejects a redirect without forwarding credentials to its destination",
+    async (provider) => {
+      const destination = "https://untrusted.example/credential-collector";
+      const send = vi.fn<typeof fetch>(
+        async () =>
+          new Response(null, {
+            status: 302,
+            headers: { Location: destination },
+          }),
+      );
+      await expect(
+        requestAiJson(
+          questAiProvider({ ...keys, AI_QUEST_PROVIDER: provider })!,
+          "Rules",
+          {},
+          {},
+          "proposal",
+          send,
+        ),
+      ).rejects.toMatchObject({
+        name: "AiProviderError",
+        kind: "http",
+        httpStatus: 302,
+      });
+      expect(send).toHaveBeenCalledTimes(1);
+      const [url, init] = send.mock.calls[0];
+      expect(String(url)).toBe(
+        {
+          openai: "https://api.openai.com/v1/responses",
+          xai: "https://api.x.ai/v1/chat/completions",
+          anthropic: "https://api.anthropic.com/v1/messages",
+        }[provider],
+      );
+      expect(init?.redirect).toBe("manual");
+      expect(String(url)).not.toBe(destination);
     },
   );
 

@@ -232,7 +232,9 @@ export async function requestAiJson(
   try {
     const response = await send(target, {
       method: "POST",
-      redirect: "error",
+      // workerd rejects redirect:"error" before sending. Manual mode keeps
+      // credentials on the fixed provider URL; every 3xx fails the !ok gate.
+      redirect: "manual",
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
