@@ -1,0 +1,150 @@
+.ai-quest-assist {
+  padding: 20px;
+  margin: 22px 0;
+  border: 1px solid var(--divider);
+  background: var(--surface);
+  border-radius: 28px;
+}
+.ai-assist-heading {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.ai-assist-heading > svg {
+  color: var(--action-ink);
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.ai-assist-heading h2 {
+  font-size: 18px;
+  margin: 0 0 6px;
+}
+.ai-assist-heading p {
+  color: var(--secondary);
+  font-size: 14px;
+  margin: 0 0 16px;
+}
+.ai-quest-assist .button {
+  width: 100%;
+  margin: 8px 0 0;
+}
+.ai-provider-consent {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 6px 0 16px;
+}
+.ai-provider-consent input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  margin: 2px 0 0;
+}
+.ai-assist-proposal {
+  overflow-wrap: anywhere;
+}
+.ai-assist-proposal h3 {
+  margin: 12px 0;
+}
+.ai-assist-hook {
+  border-left: 3px solid var(--action);
+  padding-left: 12px;
+}
+.ai-assist-proposal ol {
+  padding-left: 22px;
+}
+.ai-assist-proposal li {
+  padding: 6px 0;
+}
+.ai-assist-proposal li p {
+  margin: 6px 0;
+}
+.ai-assist-proposal small {
+  color: var(--secondary);
+}
+.ai-draft-helper {
+  display: grid;
+  gap: 20px;
+  max-width: 100%;
+}
+.ai-draft-helper h2,
+.ai-draft-helper p {
+  margin: 0;
+}
+.ai-draft-helper label {
+  display: grid;
+  gap: 10px;
+}
+.ai-draft-helper .ai-provider-consent {
+  display: flex;
+}
+.ai-draft-progress {
+  display: flex;
+  gap: 8px;
+}
+.ai-draft-progress span {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  text-align: center;
+  padding-top: 12px;
+  border-top: 3px solid var(--divider);
+  color: var(--secondary);
+}
+.ai-draft-progress .complete {
+  border-color: var(--action-ink);
+  color: var(--action-ink);
+}
+.ai-draft-actions {
+  display: flex;
+  gap: 12px;
+}
+.ai-draft-busy {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--divider);
+  border-radius: 22px;
+  background: var(--glass, var(--surface));
+  color: var(--secondary);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+.ai-draft-busy .spinner {
+  margin-top: 3px;
+  color: var(--action-ink);
+}
+.ai-draft-busy p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ai-draft-plan {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.ai-draft-actions .button {
+  min-width: 0;
+}
+.ai-draft-beats {
+  display: grid;
+  gap: 20px;
+  padding-left: 24px;
+}
+.ai-draft-beats small {
+  display: block;
+  margin-top: 8px;
+  color: var(--secondary);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-draft-busy .spinner {
+    animation: none;
+  }
+}

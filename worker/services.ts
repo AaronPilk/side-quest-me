@@ -1,3 +1,4 @@
+import { normalizeAccountType } from "../shared/account";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Context } from "hono";
@@ -18,6 +19,12 @@ export type AppEnv = Env &
     SHARE_SIGNING_KEY: string;
     APPLE_MAPS_TOKEN?: string;
     TICKETMASTER_API_KEY?: string;
+    OPENAI_API_KEY?: string;
+    OPENAI_QUEST_MODEL?: string;
+    XAI_API_KEY?: string;
+    ANTHROPIC_API_KEY?: string;
+    AI_QUEST_PROVIDER?: string;
+    AI_QUEST_MODEL?: string;
     NATIVE_APP_ORIGIN?: string;
   };
 export type AppBindings = {
@@ -306,6 +313,7 @@ export async function owned(
 }
 export function profileDto(row: Record<string, unknown>): Profile {
   return {
+    accountType: normalizeAccountType(row.account_type),
     displayName: String(row.display_name || ""),
     timezone: String(row.timezone || "UTC"),
     locale: String(row.locale || "en-US"),
@@ -407,6 +415,22 @@ export async function runDto(
     sponsorDisclosure?: string;
     series?: Run["series"];
   };
+  // A later series decision attaches separately; accepted snapshots stay frozen.
+  let series = snapshot.series;
+  if (!series) {
+    const { data, error } = await c.get("serviceDb").rpc("sq_series_read", {
+      p_actor: c.get("actor"),
+      p_view: "run",
+      p_input: { id: row.id },
+    });
+    if (error)
+      throw new ApiError(
+        "load_failed",
+        "Your saved quest could not be loaded. Try again.",
+        503,
+      );
+    series = data ?? undefined;
+  }
   const latest = jobs?.[0];
   const previousReady = jobs?.find((j) => j.status === "ready");
   // Preserve a usable previous reel until a replacement is ready.
@@ -422,7 +446,7 @@ export async function runDto(
     },
     outing: row.outing as Run["outing"],
     role: snapshot.role ?? null,
-    ...(snapshot.series ? { series: snapshot.series } : {}),
+    ...(series ? { series } : {}),
     status: row.status as Run["status"],
     clips: (media || []).map(clipDto),
     createdAt: String(row.created_at),

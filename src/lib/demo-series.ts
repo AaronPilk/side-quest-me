@@ -2,10 +2,12 @@ import { catalog } from "../../shared/catalog";
 import {
   deriveSeriesProgress,
   seriesSaveSchema,
+  seriesStartFromRunSchema,
   type SeriesContext,
   type SeriesDetail,
   type SeriesPart,
   type SeriesSave,
+  type SeriesStartFromRun,
   type SeriesSummary,
   type SeriesTemplate,
 } from "../../shared/series";
@@ -17,7 +19,12 @@ export const DEMO_SERIES_KEY = "sidequest-series-demo-v1";
 type Stored = Omit<
   SeriesSummary,
   "following" | "followerCount" | "publishedPartCount" | "partCount"
-> & { parts: SeriesPart[]; lockedPartIds: string[]; everPublished: boolean };
+> & {
+  parts: SeriesPart[];
+  lockedPartIds: string[];
+  everPublished: boolean;
+  sourceRunId?: string;
+};
 type State = {
   series: Stored[];
   follows: { seriesId: string; actorId: string }[];
@@ -45,6 +52,114 @@ function accessible(id: string) {
 }
 function runs(): Run[] {
   return JSON.parse(localStorage.getItem(demoDataKey()) || "null")?.runs ?? [];
+}
+/** Private series parts never acquire public reel attribution until published. */
+export function demoPublicRunSeries(runId: string, context?: SeriesContext) {
+  if (!context) return undefined;
+  void runId;
+  const series = load().series.find((series) => series.id === context.id);
+  return series?.state === "published" &&
+    accessible(series.authorId) &&
+    series.parts.some((part) => part.id === context.partId && part.published)
+    ? context
+    : undefined;
+}
+export function demoSeriesStartFromRun(
+  input: SeriesStartFromRun,
+  key = crypto.randomUUID(),
+): SeriesDetail {
+  const parsed = seriesStartFromRunSchema.parse(input);
+  const state = load(),
+    actor = demoActor().id;
+  const receiptKey = `${actor}:start_from_run:${key}`,
+    fingerprint = JSON.stringify(parsed);
+  const receipt = state.receipts[receiptKey];
+  if (receipt) {
+    if (receipt.fingerprint !== fingerprint)
+      throw new Error("This request key was already used for another change.");
+    return structuredClone(receipt.result);
+  }
+  const raw = localStorage.getItem(demoDataKey());
+  const data = JSON.parse(raw || "null") as { runs: Run[] } | null;
+  const run = data?.runs.find((run) => run.id === parsed.runId);
+  if (
+    !run ||
+    !["accepted", "in_progress", "review_needed", "finalized"].includes(
+      run.status,
+    )
+  )
+    throw new Error(
+      "Choose one of your active or completed quests to start a series.",
+    );
+  if (
+    run.series ||
+    state.series.some((series) => series.sourceRunId === run.id)
+  )
+    throw new Error(
+      "This quest already belongs to a series. Open that series to continue it.",
+    );
+  const author = creator(actor);
+  const id = crypto.randomUUID(),
+    partId = crypto.randomUUID();
+  const context: SeriesContext = {
+    id,
+    title: parsed.title,
+    partId,
+    partTitle: run.quest.title,
+    position: 1,
+  };
+  const stored: Stored = {
+    id,
+    authorId: actor,
+    authorName: author.displayName,
+    title: parsed.title,
+    premise: parsed.premise,
+    cover: parsed.cover,
+    kind: parsed.kind,
+    state: "draft",
+    version: 1,
+    createdAt: new Date().toISOString(),
+    sourceRunId: run.id,
+    lockedPartIds: [partId],
+    everPublished: false,
+    parts: [
+      {
+        id: partId,
+        title: run.quest.title,
+        templateId: run.quest.id,
+        prerequisitePartId: null,
+        prerequisiteReason: "",
+        published: false,
+        position: 1,
+        locked: true,
+        templateVersion: run.quest.version,
+        quest: structuredClone(run.quest),
+        available: false,
+        unavailableReason: "This part is still a draft.",
+      },
+    ],
+  };
+  state.series.push(stored);
+  const priorSeries = localStorage.getItem(DEMO_SERIES_KEY);
+  run.series = context;
+  // LocalStorage writes are synchronous. Roll back both stores if persistence fails.
+  try {
+    localStorage.setItem(demoDataKey(), JSON.stringify(data));
+    localStorage.setItem(DEMO_SERIES_KEY, JSON.stringify(state));
+    const result = demoSeriesDetail(id, data!.runs);
+    state.receipts[receiptKey] = {
+      fingerprint,
+      result: structuredClone(result),
+    };
+    save(state);
+    return result;
+  } catch (error) {
+    if (raw === null) localStorage.removeItem(demoDataKey());
+    else localStorage.setItem(demoDataKey(), raw);
+    if (priorSeries === null) localStorage.removeItem(DEMO_SERIES_KEY);
+    else localStorage.setItem(DEMO_SERIES_KEY, priorSeries);
+    throw error;
+  }
 }
 export function demoSeriesTemplates(): SeriesTemplate[] {
   return [...catalog, ...demoOriginalTemplates()].map(
@@ -115,14 +230,21 @@ export function demoSeriesDetail(id: string, ownRuns = runs()): SeriesDetail {
       .filter((r) => r.status === "finalized" && r.series?.id === id)
       .map((r) => r.series!.partId),
   );
+  const attempted = new Set(
+    ownRuns
+      .filter((run) => run.series?.id === id)
+      .map((run) => run.series!.partId),
+  );
   const templates = new Map(
     demoSeriesTemplates().map((t) => [t.id, t.version]),
   );
   const parts = s.parts
     .filter((p) => p.published || s.authorId === actor)
     .map((p) => {
+      // The author may attempt their own unpublished parts (the next chapter
+      // is filmed before it is shown to anyone); others need a published part.
       const unavailableReason =
-        s.state !== "published" || !p.published
+        (s.state !== "published" || !p.published) && s.authorId !== actor
           ? "This part is still a draft."
           : !templates.has(p.templateId)
             ? "This quest is no longer available."
@@ -134,6 +256,7 @@ export function demoSeriesDetail(id: string, ownRuns = runs()): SeriesDetail {
       return {
         ...p,
         locked: s.lockedPartIds.includes(p.id),
+        attempted: s.authorId === actor && attempted.has(p.id),
         available: !unavailableReason,
         unavailableReason,
       };
@@ -143,6 +266,7 @@ export function demoSeriesDetail(id: string, ownRuns = runs()): SeriesDetail {
     parts,
     progress: null,
     isOwner: s.authorId === actor,
+    formatLocked: s.everPublished,
   };
   result.progress = deriveSeriesProgress(result, ownRuns);
   return result;
@@ -157,11 +281,13 @@ export function demoSeriesPart(id: string, ownRuns = runs()) {
     parts: _parts,
     progress: _progress,
     isOwner: _owner,
+    formatLocked: _formatLocked,
     ...series
   } = detail;
   void _parts;
   void _progress;
   void _owner;
+  void _formatLocked;
   return {
     series,
     part,
@@ -257,14 +383,47 @@ export function demoSeriesMutate(
           "Published parts keep their identity, order, and requirements.",
         );
     }
+    // Every accepted attempt keeps its original attribution, even after it
+    // is canceled. Private display metadata may change for future attempts.
+    const attemptedPartIds = new Set(
+      runs()
+        .filter((run) => run.series?.id === id)
+        .map((run) => run.series!.partId),
+    );
+    for (const partId of attemptedPartIds) {
+      const before = old?.parts.find((part) => part.id === partId),
+        after = parsed.parts.find((part) => part.id === partId);
+      if (
+        before &&
+        (!after ||
+          after.templateId !== before.templateId ||
+          parsed.parts.findIndex((part) => part.id === partId) + 1 !==
+            before.position)
+      )
+        throw new Error(
+          "Parts with saved attempts keep their identity, quest, and order.",
+        );
+    }
     const templates = [...catalog, ...demoOriginalTemplates()];
+    const source = old?.sourceRunId ? old.parts[0] : undefined;
     const parts: SeriesPart[] = parsed.parts.map((part, index) => {
       const locked = Boolean(old?.lockedPartIds.includes(part.id));
-      const before = locked
-        ? old?.parts.find((p) => p.id === part.id)
-        : undefined;
+      const storedPart = old?.parts.find((p) => p.id === part.id);
+      const before =
+        locked || attemptedPartIds.has(part.id) ? storedPart : undefined;
+      if (source && part.templateId !== source.templateId)
+        throw new Error("New parts repeat this series’s original quest.");
+      if (source && !storedPart) {
+        const current = templates.find((t) => t.id === source.templateId);
+        if (!current || current.version !== source.templateVersion)
+          throw new Error(
+            "This series’s original quest version is no longer available for a new part.",
+          );
+      }
       const quest =
-        before?.quest ?? templates.find((t) => t.id === part.templateId);
+        before?.quest ??
+        source?.quest ??
+        templates.find((t) => t.id === part.templateId);
       if (!quest)
         throw new Error("Choose an available reviewed quest for every part.");
       if (
@@ -277,7 +436,8 @@ export function demoSeriesMutate(
         ...part,
         position: index + 1,
         locked,
-        templateVersion: before?.templateVersion ?? quest.version,
+        templateVersion:
+          before?.templateVersion ?? source?.templateVersion ?? quest.version,
         quest,
         available: false,
         unavailableReason: null,
@@ -307,6 +467,7 @@ export function demoSeriesMutate(
       everPublished: Boolean(
         old?.everPublished || parsed.state === "published",
       ),
+      ...(old?.sourceRunId ? { sourceRunId: old.sourceRunId } : {}),
     };
     state.series = state.series.filter((s) => s.id !== id);
     state.series.push(stored);

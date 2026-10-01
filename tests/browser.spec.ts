@@ -42,20 +42,18 @@ async function visitYourSpace(page: Page, name: string) {
       .click();
     return;
   }
-  const desktopLink = page
-    .locator(".desktop-space")
-    .getByRole("link", { name, exact: true });
-  if (await desktopLink.isVisible()) {
-    await desktopLink.click();
-    return;
-  }
-  const menu = page.locator(".space-menu");
-  const link = menu.getByRole("link", { name, exact: true });
-  if (!(await link.isVisible()))
-    await menu.locator('summary[aria-label="Your space"]').click();
-  await expect(link).toBeVisible();
-  await link.click();
-  await expect(menu).not.toHaveAttribute("open");
+  await page
+    .getByRole("navigation", { name: "Primary" })
+    .getByRole("link", { name: "Profile", exact: true })
+    .click();
+  await page
+    .getByRole("link", { name: "Profile settings", exact: true })
+    .click();
+  if (name !== "Settings")
+    await page
+      .getByRole("navigation", { name: "Settings", exact: true })
+      .getByRole("link", { name: new RegExp(name) })
+      .click();
 }
 
 test("ten-question onboarding works without import, preserves answers and exposes five tabs", async ({
@@ -65,6 +63,8 @@ test("ten-question onboarding works without import, preserves answers and expose
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
   await page.getByRole("button", { name: "Find my first quest" }).click();
+  await page.getByRole("radio", { name: /Personal account/ }).check();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("button", { name: "Skip for now" }).click();
   await page.getByRole("button", { name: "Date Night", exact: true }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();

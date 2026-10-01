@@ -125,3 +125,11 @@ html.native-app {
 .native-app .capture-actions .take-controls {
   margin-top: 10px;
 }
+
+/* Input focus must never let content show through the iPhone status strip.
+   The camera keeps its own dark status surface. */
+.native-app body:not(:has(.capture-overlay))::before {
+  background: #f3f3fc;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}

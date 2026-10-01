@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
-  NavLink,
   Route,
   Routes,
   Link,
@@ -8,7 +7,6 @@ import {
   useLocation,
 } from "react-router-dom";
 import {
-  BookOpen,
   Gift,
   UserRound,
   ArrowUpRight,
@@ -16,17 +14,17 @@ import {
   Compass,
   PlusCircle,
   Bell,
-  MoreHorizontal,
-  Settings2,
-  BriefcaseBusiness,
 } from "lucide-react";
-import { useCommunity } from "./components/Community";
 import { BrandMark } from "./components/BrandMark";
 import "./navigation-design.css";
 import { supabase, DEMO } from "./lib/auth";
 import { emailSignInRedirect, startNativeApp } from "./lib/native-app";
 import { isNativeApp } from "./lib/runtime";
 import { clearCaptureDrafts } from "./lib/capture-drafts";
+import {
+  accountIdentityChanged,
+  PROFILE_DRAFT_KEYS,
+} from "./lib/profile-drafts";
 import { APP_CONFIG } from "../shared/domain";
 import {
   consumeReturnTo,
@@ -35,6 +33,7 @@ import {
 } from "./lib/internal-return";
 import { Button, Loading, Notice } from "./components/ui";
 import { AdventureCarousel } from "./components/AdventureCarousel";
+import { BrandAccountGate } from "./components/BrandAccountGate";
 import Quest from "./pages/Quest";
 import Profile from "./pages/Profile";
 import Onboarding from "./pages/Onboarding";
@@ -73,6 +72,7 @@ export default function App() {
   const [nativeError, setNativeError] = useState("");
   const [authRevision, setAuthRevision] = useState(0);
   const [loading, setLoading] = useState(!DEMO && !!supabase);
+  const authIdentity = useRef<string | null | undefined>(undefined);
   const location = useLocation();
   const navigate = useNavigate();
   const nativeNavigate = useRef(navigate);
@@ -105,33 +105,55 @@ export default function App() {
   useEffect(() => {
     if (!supabase) return;
     let active = true;
+    let authEventRevision = 0;
+    function acceptIdentity(next: string | null, event?: string) {
+      if (accountIdentityChanged(authIdentity.current, next, event)) {
+        void clearCaptureDrafts().catch(() => {});
+        try {
+          for (const key of [
+            "sq-quest-flow",
+            "sq-outing",
+            "sq-return-to",
+            ...PROFILE_DRAFT_KEYS,
+          ])
+            sessionStorage.removeItem(key);
+        } catch {
+          /* Identity-bound draft reads also reject foreign/unowned storage. */
+        }
+        try {
+          for (const key of Object.keys(localStorage)) {
+            if (key.startsWith("sq-series-editor:"))
+              localStorage.removeItem(key);
+          }
+        } catch {
+          /* Owner-scoped series drafts are also checked before loading/saving. */
+        }
+      }
+      authIdentity.current = next;
+      setSignedIn(!!next);
+      setIdentity(next);
+    }
     setLoading(true);
     setAuthError("");
     supabase.auth
       .getSession()
       .then(({ data, error }) => {
         if (error) throw error;
-        if (!active) return;
-        setSignedIn(!!data.session);
-        setIdentity(data.session?.user.id ?? null);
+        if (!active || authEventRevision !== 0) return;
+        acceptIdentity(data.session?.user.id ?? null);
       })
       .catch(() => {
-        if (active) setAuthError("Could not check your sign-in. Try again.");
+        if (active && authEventRevision === 0)
+          setAuthError("Could not check your sign-in. Try again.");
       })
       .finally(() => {
         if (active) setLoading(false);
       });
     const { data } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (_e === "SIGNED_OUT") {
-        void clearCaptureDrafts().catch(() => {});
-        sessionStorage.removeItem("sq-quest-flow");
-        sessionStorage.removeItem("sq-outing");
-        sessionStorage.removeItem("sq-return-to");
-        sessionStorage.removeItem("sq-profile-draft");
-      }
+      if (!active) return;
+      authEventRevision++;
       setAuthError("");
-      setSignedIn(!!session);
-      setIdentity(session?.user.id ?? null);
+      acceptIdentity(session?.user.id ?? null, _e);
       setLoading(false);
     });
     return () => {
@@ -146,20 +168,17 @@ export default function App() {
     sessionStorage.getItem("sq-demo-started") ||
     localStorage.getItem("sidequest-demo-v1");
   const [welcome, setWelcome] = useState(DEMO && !started);
-  const accountAccess = useCommunity(
-    "me",
-    {},
-    signedIn && !welcome,
-    identity ?? "guest",
-  );
-  const admin = Boolean(
-    signedIn && accountAccess.data?.roles.includes("operator"),
-  );
   const navigationVisible =
     ((signedIn && !welcome) || publicPage) &&
     !location.pathname.startsWith("/onboarding") &&
     !isReel;
   const isDiscover = location.pathname === "/discover";
+  const isSeriesBrowse = /^\/series(?:\/[0-9a-f-]{36})?$/i.test(
+    location.pathname,
+  );
+  const isSeriesEditor =
+    location.pathname === "/series/new" ||
+    /^\/series\/[^/]+\/edit$/.test(location.pathname);
   useEffect(() => {
     if ((!signedIn || welcome) && !publicPage) {
       const target = validateReturnTo(location.pathname + location.search);
@@ -201,41 +220,12 @@ export default function App() {
             {DEMO ? "DEMO" : "PILOT"}
           </span>
         </Link>
-        {navigationVisible ? (
-          <details
-            className="space-menu"
-            onClick={(event) => {
-              if ((event.target as Element).closest("a"))
-                event.currentTarget.open = false;
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.currentTarget.open = false;
-                event.currentTarget.querySelector("summary")?.focus();
-              }
-            }}
-          >
-            <summary aria-label="Your space">
-              <MoreHorizontal size={24} />
-            </summary>
-            <SpaceLinks admin={admin} />
-          </details>
-        ) : (
+        {!navigationVisible && (
           <span className="private-note">
             <ShieldCheck size={15} /> Your story, your call
           </span>
         )}
       </header>
-      {navigationVisible && (
-        <div className="desktop-space">
-          <SpaceLinks admin={admin} />
-          <p>
-            Good stories start
-            <br />
-            with a little curiosity.
-          </p>
-        </div>
-      )}
       <main id="main" tabIndex={-1}>
         {nativeError && (
           <Notice error>
@@ -291,7 +281,14 @@ export default function App() {
               <Route path="/studio" element={<CommunityStudio />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/settings/demo-tools" element={<DemoTools />} />
-              <Route path="/business" element={<BusinessWorkspace />} />
+              <Route
+                path="/business"
+                element={
+                  <BrandAccountGate>
+                    <BusinessWorkspace />
+                  </BrandAccountGate>
+                }
+              />
               <Route path="/admin" element={<CommunityAdmin />} />
               <Route path="/originals/new" element={<OriginalQuest />} />
               <Route path="/originals/:id" element={<OriginalQuest />} />
@@ -340,35 +337,26 @@ export default function App() {
             { to: "/create", label: "Create", icon: PlusCircle },
             { to: "/rewards", label: "Rewards", icon: Gift },
             { to: "/profile", label: "Profile", icon: UserRound },
-          ].map((item) => (
-            <NavLink key={item.to} to={item.to} end>
-              <item.icon size={22} />
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
+          ].map((item) => {
+            const active =
+              location.pathname === item.to ||
+              (item.to === "/discover" && isSeriesBrowse) ||
+              (item.to === "/create" && isSeriesEditor);
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={active ? "active" : undefined}
+                aria-current={active ? "page" : undefined}
+              >
+                <item.icon size={22} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
         </nav>
       )}
     </div>
-  );
-}
-function SpaceLinks({ admin }: { admin: boolean }) {
-  return (
-    <nav className="secondary-nav" aria-label="Your space">
-      <Link to="/journal">
-        <BookOpen size={19} /> Private journal
-      </Link>
-      <Link to="/settings">
-        <Settings2 size={19} /> Settings
-      </Link>
-      <Link to="/business">
-        <BriefcaseBusiness size={19} /> Business workspace
-      </Link>
-      {admin && (
-        <Link to="/admin">
-          <ShieldCheck size={19} /> Admin
-        </Link>
-      )}
-    </nav>
   );
 }
 function Welcome({ onStart }: { onStart: () => void }) {

@@ -50,6 +50,7 @@ function part(
 
 const publicDetail: SeriesDetail = {
   ...summary,
+  formatLocked: true,
   parts: [
     part(firstId, "The opening chapter", 1),
     part(secondId, "A second small adventure", 2),
@@ -59,6 +60,7 @@ const publicDetail: SeriesDetail = {
 };
 const ownerDetail: SeriesDetail = {
   ...summary,
+  formatLocked: true,
   partCount: 3,
   following: true,
   parts: [
@@ -191,15 +193,14 @@ test("anonymous visitors can browse the public Series library without owner tabs
       ["/api/series/mine", "/api/community/me"].includes(request.path),
     ),
   ).toBe(false);
-  const create = page.getByRole("link", {
-    name: "Create a series",
-    exact: true,
-  });
-  await expect(create).toHaveAttribute("href", "/account");
-  await create.click();
-  expect(
-    await page.evaluate(() => sessionStorage.getItem("sq-return-to")),
-  ).toBe("/series/new");
+  // A series grows out of a quest, so the library offers no authoring entry
+  // to anyone, signed in or not.
+  await expect(
+    page.getByRole("link", { name: /Create a series|Start a series/ }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Your series", exact: true }),
+  ).toHaveCount(0);
 });
 
 test("anonymous public Series detail hides personal progress and preserves the sign-in follow destination", async ({

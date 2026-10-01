@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
+import type { AiQuestDraftResult } from "../../shared/ai-quest";
+import type { Outing } from "../../shared/domain";
+import { AiQuestDraftAssist } from "../components/AiQuestDraftAssist";
 import {
   originalQuestIdentity,
   type OriginalDraft,
@@ -41,14 +50,18 @@ const FLAGS = [
 function DraftForm({
   draft,
   onSaved,
+  generated,
 }: {
   draft?: OriginalDraft;
   onSaved: (draft: OriginalDraft) => void;
+  generated?: AiQuestDraftResult;
 }) {
-  const [draftId] = useState(draft?.id ?? crypto.randomUUID());
+  const [draftId] = useState(
+    draft?.id ?? generated?.draftId ?? crypto.randomUUID(),
+  );
   const [error, setError] = useState("");
   const action = useCommunityAction();
-  const q = draft?.quest;
+  const q = draft?.quest ?? generated?.quest;
   const frozen = draft?.state === "submitted" || draft?.state === "approved";
   return (
     <form
@@ -69,7 +82,9 @@ function DraftForm({
           label: String(form.get(`label${index}`)),
           action: String(form.get(`action${index}`)),
           filming: String(form.get(`filming${index}`)),
-          caption: String(form.get(`label${index}`)),
+          caption: String(
+            form.get(`caption${index}`) || form.get(`label${index}`),
+          ),
         }));
         const parsed = questVariantSchema.safeParse({
           ...originalQuestIdentity(draftId, q?.version ?? 1),
@@ -80,6 +95,7 @@ function DraftForm({
           durationMinutes: Number(form.get("duration")),
           minParticipants: Number(form.get("minParticipants")),
           maxParticipants: Number(form.get("maxParticipants")),
+          ...(q?.allowedGroups ? { allowedGroups: q.allowedGroups } : {}),
           cost: {
             minMinor: Math.round(Number(form.get("costMin")) * 100),
             maxMinor: Math.round(Number(form.get("costMax")) * 100),
@@ -90,7 +106,12 @@ function DraftForm({
           },
           settings: form.getAll("settings"),
           interests: form.getAll("interests"),
-          roles: ["main_character", "mastermind", "camera_person", "rotate"],
+          roles: q?.roles ?? [
+            "main_character",
+            "mastermind",
+            "camera_person",
+            "rotate",
+          ],
           preparation: form.get("preparation"),
           conflicts: form.getAll("conflicts"),
           ...Object.fromEntries(
@@ -99,7 +120,7 @@ function DraftForm({
           beats,
           materials: lines("materials"),
           requirements: lines("instructions"),
-          completionQuestions: [String(form.get("completion"))],
+          completionQuestions: lines("completion"),
           fallback: String(form.get("fallback")),
           award: AWARDS[intensity],
           cooldownDays: 30,
@@ -297,10 +318,10 @@ function DraftForm({
             defaultValue={q?.materials.join("\n")}
           />
         </label>
-        <h2>Three filming moments</h2>
+        <h2>The story in three beats</h2>
         <p className="support">
-          Each moment needs an action and a way to film it. Participants still
-          choose their own 5–15 second clips.
+          Give each beat an action and a useful shot. Participants can film in
+          one session, add takes, or import a finished video.
         </p>
         {[0, 1, 2].map((index) => (
           <section className="original-beat" key={index}>
@@ -332,6 +353,14 @@ function DraftForm({
                 required
                 maxLength={400}
                 defaultValue={q?.beats[index].filming}
+              />
+            </label>
+            <label>
+              On-screen caption
+              <input
+                name={`caption${index}`}
+                maxLength={80}
+                defaultValue={q?.beats[index].caption}
               />
             </label>
           </section>
@@ -378,14 +407,14 @@ function DraftForm({
           </fieldset>
         </details>
         <label>
-          Completion check
+          Completion checks · one per line
           <textarea
             name="completion"
             rows={2}
             required
-            maxLength={300}
+            maxLength={1800}
             placeholder="What should someone confirm after completing this quest?"
-            defaultValue={q?.completionQuestions[0]}
+            defaultValue={q?.completionQuestions.join("\n")}
           />
         </label>
         <label>
@@ -412,6 +441,10 @@ function DraftForm({
 export default function OriginalQuest() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const location = useLocation();
+  const [useAi, setUseAi] = useState(params.get("ai") === "1");
+  const [generated, setGenerated] = useState<AiQuestDraftResult>();
   const current = useCommunity("draft", { id }, Boolean(id));
   const action = useCommunityAction(current.refresh);
   const draft = current.data;
@@ -459,14 +492,34 @@ export default function OriginalQuest() {
           )}
         </>
       )}
-      <DraftForm
-        key={draft ? `${draft.id}-${draft.version}` : "new"}
-        draft={draft}
-        onSaved={(saved) => {
-          if (id) current.refresh();
-          else navigate(`/originals/${saved.id}`, { replace: true });
-        }}
-      />
+      {!draft && useAi && !generated && (
+        <AiQuestDraftAssist
+          initialOuting={(location.state as { outing?: Outing } | null)?.outing}
+          onUse={setGenerated}
+          onManual={() => setUseAi(false)}
+        />
+      )}
+      {generated && (
+        <Notice>
+          AI proposal loaded into your editable form. Review every field, then
+          save when ready. Nothing has been saved or published yet.
+        </Notice>
+      )}
+      {(draft || !useAi || generated) && (
+        <DraftForm
+          key={
+            draft
+              ? `${draft.id}-${draft.version}`
+              : (generated?.generatedAt ?? "new")
+          }
+          draft={draft}
+          generated={generated}
+          onSaved={(saved) => {
+            if (id) current.refresh();
+            else navigate(`/originals/${saved.id}`, { replace: true });
+          }}
+        />
+      )}
       {draft && ["draft", "rejected"].includes(draft.state) && (
         <section className="section">
           <Button

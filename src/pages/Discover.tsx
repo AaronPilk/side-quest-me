@@ -12,11 +12,9 @@ import {
   Clapperboard,
   Layers2,
   MoreHorizontal,
-  Plus,
   Sparkles,
   ShieldCheck,
   X,
-  Users,
   Search,
 } from "lucide-react";
 import {
@@ -25,7 +23,9 @@ import {
   useSearchParams,
   useNavigate,
   useLocation,
+  useNavigationType,
 } from "react-router-dom";
+import { isBrandAccount } from "../../shared/account";
 import type {
   CommunityPost,
   CommunityMe,
@@ -47,6 +47,7 @@ import "../discovery-social.css";
 import { rememberReturnTo, validateReturnTo } from "../lib/internal-return";
 import "../reel-design.css";
 import { SeriesEpisodeNav } from "../components/SeriesEpisodeNav";
+import { DiscoverSections } from "../components/DiscoverSections";
 
 export function DiscoverPostCard({
   post,
@@ -260,6 +261,8 @@ export function DiscoverPostCard({
         {detail &&
           !own &&
           openForInquiries &&
+          viewer &&
+          isBrandAccount(viewer) &&
           (viewer?.brand?.state === "approved" ? (
             <details className="community-panel">
               <summary>Request to use video</summary>
@@ -487,15 +490,72 @@ export default function Discover({ signedIn = false }: { signedIn?: boolean }) {
   const { id } = useParams();
   const location = useLocation();
   const closeLink = useRef<HTMLAnchorElement>(null);
+  const navigationType = useNavigationType();
   const [params, setParams] = useSearchParams();
   const templateId = params.get("template") || undefined;
   const brandOnly = params.get("view") === "brands";
   const followingOnly = params.get("view") === "following";
   const query = (params.get("q") || "").trim().slice(0, 80);
   const [search, setSearch] = useState(query);
-  // Reconcile URL navigation before the next paint/input event; a deferred
-  // effect can overwrite a second query typed immediately after submission.
-  useLayoutEffect(() => setSearch(query), [query]);
+  const [searchPage, setSearchPage] = useState(false);
+  const searchDialog = useRef<HTMLDialogElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const searchButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (searchPage) searchInput.current?.focus();
+  }, [searchPage]);
+  const searchSequence = useRef(0);
+  const searchNavigations = useRef(new Set<number>());
+  const previousQuery = useRef(query);
+  useLayoutEffect(() => {
+    const changed = previousQuery.current !== query;
+    previousQuery.current = query;
+    const submission = (
+      location.state as { discoverSearchSubmission?: number } | null
+    )?.discoverSearchSubmission;
+    // Router transitions can commit after the next keystroke. A submission
+    // already has the user's input; only external navigation should replace it.
+    if (
+      navigationType !== "POP" &&
+      submission !== undefined &&
+      searchNavigations.current.delete(submission)
+    ) {
+      if (submission === searchSequence.current)
+        searchNavigations.current.clear();
+      return;
+    }
+    if (changed || navigationType === "POP") {
+      searchNavigations.current.clear();
+      setSearch(query);
+    }
+  }, [query, location.key, location.state, navigationType]);
+  function submitSearch(value: string) {
+    const next = new URLSearchParams(params);
+    if (value.trim()) next.set("q", value.trim());
+    else next.delete("q");
+    const submission = ++searchSequence.current;
+    searchNavigations.current.add(submission);
+    setParams(next, {
+      state: { ...location.state, discoverSearchSubmission: submission },
+    });
+  }
+  function openSearch() {
+    setSearch(query);
+    if (typeof searchDialog.current?.showModal === "function") {
+      searchDialog.current.showModal();
+      searchInput.current?.focus();
+    } else {
+      // The native target also supports iOS 15.0–15.3, before WebKit dialogs.
+      setSearchPage(true);
+    }
+  }
+  function closeSearch() {
+    if (searchDialog.current?.open) searchDialog.current.close();
+    setSearchPage(false);
+    requestAnimationFrame(() =>
+      searchButton.current?.focus({ preventScroll: true }),
+    );
+  }
   const post = useCommunity("post", { id }, Boolean(id));
   const me = useCommunity("me", {}, signedIn);
   useEffect(() => {
@@ -538,6 +598,61 @@ export default function Discover({ signedIn = false }: { signedIn?: boolean }) {
         />
       </section>
     );
+  const searchForm = (
+    <>
+      <form
+        className="discovery-search"
+        role="search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitSearch(search);
+          closeSearch();
+        }}
+      >
+        <label>
+          <span className="sr-only">Search public stories</span>
+          <input
+            ref={searchInput}
+            type="search"
+            enterKeyHint="search"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            maxLength={80}
+            placeholder="Quests, creators, moments…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+        <Button type="submit" aria-label="Show search results">
+          <Search size={19} aria-hidden="true" /> Search
+        </Button>
+      </form>
+      <p className="support">
+        Find public stories by quest, creator, username or caption.
+      </p>
+    </>
+  );
+  if (searchPage)
+    return (
+      <section
+        className="discover-search-page"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") closeSearch();
+        }}
+      >
+        <button
+          type="button"
+          className="back"
+          aria-label="Close search"
+          onClick={closeSearch}
+        >
+          Back to Discover
+        </button>
+        <h1>Search</h1>
+        {searchForm}
+      </section>
+    );
   return (
     <div className="discover-layout">
       <section className="discover-main" aria-label="Quest videos">
@@ -550,14 +665,18 @@ export default function Discover({ signedIn = false }: { signedIn?: boolean }) {
                 : "A little inspiration. Your next great story."}
             </p>
           </div>
-          <Link
-            className="feed-create"
-            to="/create"
-            aria-label="Create a quest"
+          <button
+            ref={searchButton}
+            type="button"
+            className="feed-search"
+            aria-label="Search stories"
+            aria-haspopup="dialog"
+            onClick={openSearch}
           >
-            <Plus size={22} />
-          </Link>
+            <Search size={22} aria-hidden="true" />
+          </button>
         </header>
+        <DiscoverSections current="quests" />
         <div className="feed-tabs" role="group" aria-label="Discover feed">
           <button
             aria-pressed={!brandOnly && !followingOnly}
@@ -567,7 +686,6 @@ export default function Discover({ signedIn = false }: { signedIn?: boolean }) {
               setParams(next);
             }}
           >
-            <Clapperboard size={17} />
             {templateId ? "All attempts" : "All quests"}
           </button>
           <button
@@ -578,7 +696,7 @@ export default function Discover({ signedIn = false }: { signedIn?: boolean }) {
               setParams(next);
             }}
           >
-            <Users size={17} /> Following
+            Following
           </button>
           <button
             aria-pressed={brandOnly}
@@ -588,64 +706,64 @@ export default function Discover({ signedIn = false }: { signedIn?: boolean }) {
               setParams(next);
             }}
           >
-            <Sparkles size={17} />
             Open to brands
           </button>
-          {templateId && (
-            <Link to="/discover">
-              Back to Discover <ArrowUpRight size={15} />
-            </Link>
-          )}
         </div>
-        <form
-          className="discovery-search"
-          role="search"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const next = new URLSearchParams(params);
-            if (search.trim()) next.set("q", search.trim());
-            else next.delete("q");
-            setParams(next);
+        {templateId && (
+          <Link className="discovery-back" to="/discover">
+            Back to Discover <ArrowUpRight size={15} />
+          </Link>
+        )}
+        <dialog
+          ref={searchDialog}
+          className="discover-search-sheet"
+          aria-label="Search public stories"
+          onClose={() => searchButton.current?.focus({ preventScroll: true })}
+          onClick={(event) => {
+            if (event.target !== event.currentTarget) return;
+            const bounds = event.currentTarget.getBoundingClientRect();
+            if (
+              event.clientX < bounds.left ||
+              event.clientX > bounds.right ||
+              event.clientY < bounds.top ||
+              event.clientY > bounds.bottom
+            )
+              event.currentTarget.close();
           }}
         >
-          <label>
-            <span className="sr-only">Search public stories</span>
-            <input
-              type="search"
-              maxLength={80}
-              placeholder="Quests, creators, moments…"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
-          <Button type="submit" secondary aria-label="Search stories">
-            <Search size={19} />
-          </Button>
-          {query && (
+          <div className="discover-search-heading">
+            <h2>Search</h2>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Close search"
+              onClick={closeSearch}
+            >
+              <X size={21} aria-hidden="true" />
+            </button>
+          </div>
+          {searchForm}
+        </dialog>
+        {query && (
+          <div className="discovery-search-status" role="status">
+            <button type="button" aria-label="Edit search" onClick={openSearch}>
+              <Search size={16} aria-hidden="true" />
+              <span>Results for “{query}”</span>
+            </button>
             <button
               type="button"
               className="icon-button"
               aria-label="Clear search"
               onClick={() => {
                 setSearch("");
-                const next = new URLSearchParams(params);
-                next.delete("q");
-                setParams(next);
+                submitSearch("");
               }}
             >
-              <X size={19} />
+              <X size={18} aria-hidden="true" />
             </button>
-          )}
-        </form>
-        {query && (
-          <p className="discovery-search-status" role="status">
-            Public stories matching “{query}”
-          </p>
+          </div>
         )}
         <nav className="discovery-shortcuts" aria-label="Explore more">
-          <Link to="/series">
-            <Layers2 size={17} /> Explore series
-          </Link>
           <Link to="/rewards?tab=offers">
             <Sparkles size={17} /> Creator opportunities
           </Link>
@@ -733,7 +851,11 @@ export default function Discover({ signedIn = false }: { signedIn?: boolean }) {
             <Clapperboard size={20} />
           </span>
           <span>
-            <strong>Brand & creator studio</strong>
+            <strong>
+              {me.data && isBrandAccount(me.data)
+                ? "Business workspace"
+                : "Creator opportunities"}
+            </strong>
             <small>Your stories. New possibilities.</small>
           </span>
           <ArrowUpRight size={17} />

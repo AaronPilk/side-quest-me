@@ -10,3 +10,14 @@ APPLE_MAPS_TOKEN=
 
 # Optional server-only Ticketmaster Discovery key for nearby Ticketmaster / Universe / Front Gate listings.
 TICKETMASTER_API_KEY=
+
+# Optional server-only AI filming and original-draft proposals.
+# Never use a VITE_ prefix or put a key in the iOS app.
+# Publish the key separately as a Worker secret when deployment is authorized.
+AI_QUEST_PROVIDER=openai
+AI_QUEST_MODEL=gpt-6-astra
+XAI_API_KEY=
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+# Existing OPENAI_QUEST_MODEL remains supported when provider=openai and AI_QUEST_MODEL is empty.
+OPENAI_QUEST_MODEL=

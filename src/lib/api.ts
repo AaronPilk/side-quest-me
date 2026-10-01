@@ -1,3 +1,4 @@
+import { normalizeAccountType } from "../../shared/account";
 import type { PlaceContext } from "../../shared/place-matching";
 import {
   DEFAULT_PREFERENCES,
@@ -14,6 +15,11 @@ import { countsAsCompleted } from "../../shared/progress";
 import { assessViability, type QuestViability } from "../../shared/viability";
 import { recommend } from "../../shared/recommend";
 import { accessToken, DEMO, supabase } from "./auth";
+import {
+  currentProfileDraftOwner,
+  demoProfileDraftOwner,
+  syncProfileDrafts,
+} from "./profile-drafts";
 import { apiUrl } from "./runtime";
 import { hasReadyVideo } from "./recording-session";
 import type { Clip, Me, Offer, Redemption, Run, Reel } from "./types";
@@ -23,7 +29,11 @@ import {
   demoActor,
   resetDemoState,
 } from "./demo-identity";
-import { demoInspiration, demoOriginalTemplates } from "./demo-community";
+import {
+  demoAccountType,
+  demoInspiration,
+  demoOriginalTemplates,
+} from "./demo-community";
 import { demoValidateSeriesPart } from "./demo-series";
 
 type DemoData = {
@@ -34,6 +44,7 @@ type DemoData = {
 const initial = (): DemoData => ({
   me: {
     profile: {
+      accountType: demoAccountType(),
       displayName: demoPersona() === "creator" ? "" : demoActor().name,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       locale: navigator.language,
@@ -50,6 +61,7 @@ function read(key = demoDataKey()): DemoData {
   try {
     const data = localStorage.getItem(key);
     const saved: DemoData = data ? JSON.parse(data) : initial();
+    saved.me.profile.accountType = demoAccountType(key);
     saved.me.profile.preferences = normalizePreferences(
       saved.me.profile.preferences,
     );
@@ -174,12 +186,28 @@ export function eligibility(runs: Run[], familyId: string) {
 export const api = {
   me: async (): Promise<Me> => {
     const me = DEMO ? read().me : await request<Me>("/api/me");
-    if (DEMO) me.completedQuestCount = read().runs.filter(countsAsCompleted).length;
+    if (DEMO)
+      me.completedQuestCount = read().runs.filter(countsAsCompleted).length;
+    me.profile.accountType = DEMO
+      ? demoAccountType()
+      : normalizeAccountType(me.profile.accountType);
     me.profile.preferences = normalizePreferences(me.profile.preferences);
     return me;
   },
   updateProfile: async (input: Partial<Profile>): Promise<void> => {
     const patch = profilePatchSchema.parse(input);
+    const session = DEMO
+      ? null
+      : (await supabase?.auth.getSession())?.data.session;
+    if (!DEMO && !session)
+      throw new Error(
+        "Sign in to save your profile. Your draft is still here.",
+      );
+    const ownerId = DEMO
+      ? demoProfileDraftOwner()
+      : session?.user.id
+        ? `user:${session.user.id}`
+        : null;
     if (DEMO)
       await transaction((d) => {
         d.me.profile = { ...d.me.profile, ...patch };
@@ -188,29 +216,28 @@ export const api = {
       await request<Me>("/api/me", {
         method: "PATCH",
         body: JSON.stringify(patch),
+        // Keep a pending edit scoped to its original account even if a native
+        // sign-in callback replaces the session before this request starts.
+        ...(session
+          ? { headers: { Authorization: `Bearer ${session.access_token}` } }
+          : {}),
       });
-    // A saved summary edit/removal must not be resurrected by an older survey draft.
-    // Preserve unrelated answers still being edited in that draft.
-    try {
-      const draft = JSON.parse(
-        sessionStorage.getItem("sq-profile-draft") || "null",
-      );
-      if (draft?.profile)
-        sessionStorage.setItem(
-          "sq-profile-draft",
-          JSON.stringify({ ...draft, profile: { ...draft.profile, ...patch } }),
-        );
-    } catch {
-      /* Saving the durable profile succeeded even if draft storage is unavailable. */
-    }
+    // Saved edits must not be resurrected by either onboarding draft. Preserve
+    // unrelated answers and progress, and isolate malformed/unavailable drafts.
+    const currentOwner = DEMO
+      ? demoProfileDraftOwner()
+      : await currentProfileDraftOwner();
+    if (currentOwner === ownerId) syncProfileDrafts(ownerId, patch);
   },
   saveProfile: async (profile: Profile): Promise<void> =>
     api.updateProfile(profile),
   quest: async (templateId: string): Promise<QuestVariant> => {
     if (!DEMO) return request(`/api/quests/${encodeURIComponent(templateId)}`);
-    const quest = [...catalog, ...historicalActivityCatalog, ...demoOriginalTemplates()].find(
-      (item) => item.id === templateId,
-    );
+    const quest = [
+      ...catalog,
+      ...historicalActivityCatalog,
+      ...demoOriginalTemplates(),
+    ].find((item) => item.id === templateId);
     if (!quest)
       throw new Error("This quest is unavailable. Choose another quest.");
     return quest;

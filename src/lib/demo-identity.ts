@@ -49,8 +49,12 @@ export function resetDemoState() {
   localStorage.removeItem("sidequest-series-demo-v1");
   localStorage.removeItem("sidequest-social-demo-v1");
   localStorage.removeItem("sidequest-demo-persona");
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("sq-series-editor:")) localStorage.removeItem(key);
+  }
   for (const key of [
     "sq-profile-draft",
+    "sq-preference-wizard-draft",
     "sq-outing",
     "sq-quest-flow",
     "sq-demo-started",
@@ -62,6 +66,7 @@ export function resetDemoState() {
 export function switchDemoPersona(value: DemoPersona) {
   localStorage.setItem("sidequest-demo-persona", value);
   sessionStorage.removeItem("sq-profile-draft");
+  sessionStorage.removeItem("sq-preference-wizard-draft");
   sessionStorage.removeItem("sq-outing");
   sessionStorage.removeItem("sq-quest-flow");
   sessionStorage.removeItem("sq-return-to");

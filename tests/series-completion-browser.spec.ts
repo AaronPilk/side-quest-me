@@ -3,6 +3,17 @@ import path from "node:path";
 import { reviewQuestPlans } from "./quest-wizard-helpers";
 import { selectDemoPersona } from "./demo-persona-helper";
 import type { Run } from "../src/lib/types";
+import {
+  openPartOptions,
+  reachSeriesParts,
+  reviewSeries,
+} from "./series-authoring-helpers";
+import {
+  acceptQuest,
+  createNextPart,
+  markRunFinalized,
+  turnIntoSeries,
+} from "./series-growth-helpers";
 
 test.use({ actionTimeout: 15_000 });
 
@@ -76,29 +87,38 @@ test("a real Series attempt completes privately, publishes a frozen episode, and
   await page.emulateMedia({ reducedMotion: "reduce" });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/series/new");
-  await page
-    .getByLabel("Series title", { exact: true })
-    .fill("A story in three experiments");
+  // The author does the quest three times; the series grows one part per attempt.
+  const firstRun = await acceptQuest(page);
+  await markRunFinalized(page, firstRun);
+  await page.reload();
+  const seriesUrl = await turnIntoSeries(page, "A story in three experiments");
+  for (const position of [2, 3]) {
+    const run = await createNextPart(page, position);
+    await markRunFinalized(page, run);
+    await page.goto(seriesUrl);
+  }
+  await page.getByRole("link", { name: "Edit series", exact: true }).click();
   await page
     .getByLabel("Premise", { exact: true })
     .fill(
       "An independent middle chapter opens the way to the final experiment.",
     );
+  await reachSeriesParts(page, "planned");
   const editParts = page.locator(".series-edit-part");
-  for (const [index, title, template] of [
-    [0, "The opening discovery", "day_tiny_discovery_chill_v1"],
-    [1, "The middle menu draft", "date_menu_draft_chill_v1"],
-    [2, "Build on the menu", "day_tiny_discovery_chill_v1"],
+  await expect(editParts).toHaveCount(3);
+  for (const [index, title] of [
+    [1, "The middle discovery"],
+    [2, "Build on the middle"],
   ] as const) {
-    if (index)
-      await page.getByRole("button", { name: "Add part", exact: true }).click();
-    const part = editParts.nth(index);
-    await part.getByLabel("Part title", { exact: true }).fill(title);
-    await part
-      .getByLabel("Reviewed quest", { exact: true })
-      .selectOption(template);
-    await part
+    await editParts
+      .nth(index)
+      .getByLabel("Part title", { exact: true })
+      .fill(title);
+  }
+  for (const index of [0, 1, 2]) {
+    await openPartOptions(editParts.nth(index));
+    await editParts
+      .nth(index)
       .getByLabel("Include this part when the series is published")
       .check();
   }
@@ -109,18 +129,20 @@ test("a real Series attempt completes privately, publishes a frozen episode, and
   await editParts
     .nth(2)
     .getByLabel("Why is that part required?", { exact: true })
-    .fill("Use the menu you created in the middle chapter.");
+    .fill("Use what you found in the middle chapter.");
+  await reviewSeries(page);
   await page
     .getByRole("button", { name: "Publish series", exact: true })
     .click();
+  await expect(page).toHaveURL(seriesUrl);
   await expect(
     page.getByRole("heading", {
       name: "A story in three experiments",
       exact: true,
     }),
   ).toBeVisible();
-  const seriesUrl = page.url();
   const seriesPath = new URL(seriesUrl).pathname;
+  await expect(page.locator(".series-part")).toHaveCount(3);
   const sourcePartIds = await page
     .locator(".series-part")
     .evaluateAll((parts) => parts.map((part) => part.id.slice(5)));
@@ -141,6 +163,7 @@ test("a real Series attempt completes privately, publishes a frozen episode, and
     .getByRole("button", { name: "Record or import video", exact: true })
     .click();
   const capture = page.getByRole("dialog", { name: "Record your quest" });
+  await expect(capture.getByLabel("Import video")).toBeEnabled();
   await capture
     .getByLabel("Import video")
     .setInputFiles(path.resolve(".local/fixtures/landscape-with-audio.mp4"));
@@ -211,9 +234,12 @@ test("a real Series attempt completes privately, publishes a frozen episode, and
   await page
     .getByLabel("Series title", { exact: true })
     .fill("The renamed three experiments");
+  await reachSeriesParts(page);
+  await reviewSeries(page);
   await page
     .getByRole("button", { name: "Publish series", exact: true })
     .click();
+  await expect(page).toHaveURL(seriesUrl);
   await expect(
     page.getByRole("heading", {
       name: "The renamed three experiments",
@@ -239,7 +265,7 @@ test("a real Series attempt completes privately, publishes a frozen episode, and
     "A story in three experiments",
   );
   await expect(page.locator(".series-post-link")).toContainText(
-    "Part 2 · The middle menu draft",
+    "Part 2 · The middle discovery",
   );
   const episodes = page.getByRole("navigation", {
     name: "Series episodes",
@@ -273,16 +299,20 @@ test("a real Series attempt completes privately, publishes a frozen episode, and
   expect(inspired.inspiredByPostId).toBe(postId);
   expect(inspired.series?.partId).toBe(sourcePartIds[1]);
   expect(inspired.clips).toEqual([]);
+  // The author's new attempt at Part 2 sits beside their earlier completion.
   await page.goto(seriesUrl);
   await expect(
     page.getByRole("link", { name: "Continue your attempt", exact: true }),
+  ).toHaveAttribute("href", `/runs/${inspired.id}`);
+  await expect(page.locator(".series-part").nth(1)).toContainText(
+    "Part 2 of 3 · Completed",
+  );
+  await expect(
+    page
+      .locator(".series-part")
+      .nth(1)
+      .getByRole("link", { name: "Resume this part", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".series-part").nth(1)).not.toContainText(
-    "Completed",
-  );
-  await expect(page.locator(".series-part").nth(2)).toContainText(
-    "Complete the required earlier part",
-  );
   await selectDemoPersona(page, "viewer");
   await page.goto(seriesUrl);
   await expect(page.locator(".series-progress")).toContainText(

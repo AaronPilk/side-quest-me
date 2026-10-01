@@ -1,0 +1,60 @@
+.account-type-choice {
+  border: 0;
+  padding: 0;
+  margin: 0 0 24px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.account-type-choice legend {
+  font-weight: 650;
+  margin-bottom: 14px;
+}
+.account-type-choice label {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--input-border);
+  border-radius: 28px;
+  background: var(--glass);
+  cursor: pointer;
+}
+.account-type-choice label.selected {
+  border-color: var(--action);
+  background: #eee7ff;
+}
+.account-type-choice label:focus-within {
+  outline: 3px solid var(--action);
+  outline-offset: 3px;
+}
+.account-type-choice input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.account-type-choice label > svg {
+  flex-shrink: 0;
+}
+.account-type-choice label > span {
+  flex: 1;
+  min-width: 0;
+}
+.account-type-choice strong {
+  display: block;
+}
+.account-type-choice small {
+  display: block;
+  margin-top: 5px;
+  color: var(--secondary);
+  font-weight: 400;
+  line-height: 1.5;
+}
+.account-type-choice:disabled label {
+  cursor: default;
+  opacity: 0.7;
+}

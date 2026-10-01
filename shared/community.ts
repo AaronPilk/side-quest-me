@@ -1,3 +1,4 @@
+import type { AccountType } from "./account";
 import { z } from "zod";
 import { questVariantSchema, type QuestVariant } from "./domain";
 import type { SeriesContext } from "./series";
@@ -393,6 +394,7 @@ export interface CommunityReport {
   createdAt: string;
 }
 export interface CommunityMe {
+  accountType: AccountType | null;
   userId: string;
   roles: string[];
   publications: { runId: string; postId: string }[];

@@ -1,0 +1,272 @@
+/* One focused question at a time, with a quiet horizontal page transition. */
+.preferences-journey .onboard-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.preferences-journey .onboard-top .support {
+  margin: 0;
+  white-space: nowrap;
+}
+.preferences-journey .onboard-top > .text-button {
+  justify-self: end;
+  width: auto;
+  margin: 0;
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+.preferences-journey .survey-progress {
+  gap: 5px;
+  margin-bottom: 24px;
+}
+.preferences-journey .survey-progress i {
+  height: 5px;
+}
+.preference-question-panel {
+  min-width: 0;
+  outline: 0;
+}
+.preference-question-panel.slide-forward {
+  animation: preference-enter-forward 200ms ease-out both;
+}
+.preference-question-panel.slide-back {
+  animation: preference-enter-back 200ms ease-out both;
+}
+@keyframes preference-enter-forward {
+  from {
+    opacity: 0;
+    transform: translateX(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes preference-enter-back {
+  from {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.preferences-journey .preference-question-panel .page-title {
+  margin-bottom: 20px;
+}
+.preferences-journey .preference-question-panel h1 {
+  font-size: 1.8rem;
+  line-height: 1.15;
+}
+.preferences-journey .preference-question-panel .page-title p {
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+.preferences-journey .preference-origin {
+  margin: 0 0 12px;
+  font-size: 0.72rem;
+}
+.preferences-journey .preference-control-compact .survey-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.preferences-journey .preference-control-compact .survey-option {
+  padding: 11px 13px;
+  min-height: 53px;
+  gap: 9px;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.preferences-journey .survey-option .selection-mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+.preferences-journey .preference-control label {
+  margin-top: 14px;
+  font-size: 0.75rem;
+}
+.preferences-journey .preference-control label input {
+  min-height: 46px;
+  padding-block: 10px;
+}
+.preferences-journey .preference-question-panel > .text-button,
+.preferences-journey .preference-control > .text-button {
+  font-size: 0.72rem;
+  padding-block: 10px;
+  margin: 4px 0;
+}
+.preferences-journey .survey-footer {
+  position: static;
+  margin-top: 10px;
+  padding: 0;
+  background: transparent;
+}
+.preferences-journey .survey-footer > .text-button {
+  margin: 6px 0 0;
+  padding-block: 11px;
+  font-size: 0.78rem;
+}
+.preferences-journey .survey-footer .support {
+  margin: 4px 0 0;
+  text-align: center;
+  font-size: 0.67rem;
+}
+.preferences-direct .preference-question-panel .eyebrow {
+  margin-bottom: 12px;
+}
+.account-preference-entry {
+  padding: 23px;
+  margin-bottom: 28px;
+  border: 1px solid rgb(255 255 255 / 95%);
+  border-radius: 27px;
+  background: rgb(255 255 255 / 72%);
+  box-shadow: var(--shadow-card);
+}
+.account-preference-entry-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--action-ink);
+}
+.account-preference-entry-heading .support {
+  margin: 0 0 0 auto;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.account-preference-entry h2 {
+  margin: 16px 0 8px;
+}
+.account-preference-entry p {
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: var(--secondary);
+  margin: 0 0 16px;
+}
+.account-preference-entry progress {
+  display: block;
+  width: 100%;
+  height: 5px;
+  margin-bottom: 20px;
+  accent-color: var(--action);
+}
+.account-preference-entry .button {
+  width: 100%;
+}
+.account-summary-link {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-top: 8px;
+  font-size: 0.75rem;
+  text-align: center;
+}
+.account-summary-link svg {
+  flex: 0 0 auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .preference-question-panel.slide-forward,
+  .preference-question-panel.slide-back {
+    animation: none;
+  }
+}
+@media (max-width: 360px) {
+  .preferences-journey .preference-control-compact .survey-option {
+    padding-inline: 10px;
+    font-size: 0.72rem;
+  }
+  .account-preference-entry {
+    padding: 19px;
+  }
+}
+.preferences-journey .preference-other-detail {
+  margin-top: 10px;
+  font-size: 0.72rem;
+  color: var(--secondary);
+}
+.preferences-journey .preference-other-detail > summary {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.preferences-journey .preference-other-detail > summary::before {
+  content: "+";
+  margin-right: 6px;
+}
+.preferences-journey .preference-other-detail[open] > summary::before {
+  content: "−";
+}
+/* Keep the horizontal page transition inside the form, including its first frame. */
+.preferences-journey {
+  overflow-x: clip;
+}
+.preferences-journey .preference-control-compact > .text-button {
+  display: inline-flex;
+  width: auto;
+  min-height: 36px;
+  margin-right: 8px;
+}
+.preferences-journey
+  .preference-control-compact
+  > .text-button[aria-pressed="true"] {
+  color: var(--text);
+  font-weight: 650;
+}
+/* iPhone safe areas leave less room than a browser viewport of the same size. */
+.preferences-direct .preference-question-panel .eyebrow {
+  display: none;
+}
+.preferences-direct .onboard-top {
+  margin-bottom: 14px;
+}
+.preferences-direct .survey-progress {
+  margin-bottom: 16px;
+}
+.preferences-direct .preference-question-panel .page-title {
+  margin-bottom: 12px;
+}
+.preferences-direct .preference-question-panel h1 {
+  font-size: 1.55rem;
+}
+.preferences-direct .preference-question-panel .page-title p {
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.preferences-direct .preference-control-compact .survey-option {
+  min-height: 48px;
+  padding-block: 9px;
+}
+.native-app .app-shell:has(.preferences-direct) .brandbar {
+  min-height: calc(50px + env(safe-area-inset-top));
+  padding-top: calc(5px + env(safe-area-inset-top));
+  padding-bottom: 8px;
+}
+.native-app .app-shell:has(.preferences-direct) main {
+  padding-top: 8px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+.preferences-direct .preference-origin {
+  margin-bottom: 8px;
+}
+.preferences-direct .preference-question-panel > .text-button {
+  margin-block: 0;
+}
+.preferences-direct .preference-control-compact > .text-button {
+  min-height: 44px;
+}
+.preferences-direct .preference-other-detail > summary {
+  min-height: 44px;
+}
+.preferences-direct .survey-footer {
+  margin-top: 4px;
+}
+.preferences-direct .survey-footer > .text-button {
+  margin-top: 0;
+}

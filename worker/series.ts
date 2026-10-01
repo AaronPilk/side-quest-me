@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { z } from "zod";
-import { seriesSaveSchema } from "../shared/series";
+import { seriesSaveSchema, seriesStartFromRunSchema } from "../shared/series";
 import {
   ApiError,
   authenticate,
@@ -16,6 +16,12 @@ export const SERIES_PRIVATE_ROUTE =
 const uuid = z.uuid();
 const mutationSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("save"), input: seriesSaveSchema }).strict(),
+  z
+    .object({
+      action: z.literal("start_from_run"),
+      input: seriesStartFromRunSchema,
+    })
+    .strict(),
   z
     .object({
       action: z.literal("follow"),
@@ -35,13 +41,17 @@ export function seriesError(message: string): never {
     invalid_prerequisite:
       "A prerequisite must be an earlier part with a reason, published before this part.",
     published_part_immutable:
-      "Published parts keep their order, quest version, and requirements. Add a new part to an ongoing series instead.",
+      "Started parts keep their order and quest version. Published parts also keep their titles and requirements. Add a new part to continue the story.",
     published_series_immutable:
       "A published finite series keeps its planned parts and type.",
     invalid_series: "Review the series title, parts, and publication choices.",
     creator_profile_required:
       "Save your public creator profile before creating a series.",
     stale_version: "This series changed. Refresh it before saving again.",
+    series_run_unavailable:
+      "Choose one of your active or completed quests to start a series.",
+    series_run_linked:
+      "This quest already belongs to a series. Open that series to continue it.",
   };
   const code = Object.keys(mapping).find((key) => message.includes(key));
   if (code)

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
+import { runSeriesSourceTests } from "./series-source-invariants.mjs";
+import { runSeriesGrowthTests } from "./series-growth-invariants.mjs";
 
 export async function runSeriesTests(sql) {
+  await runSeriesSourceTests(sql);
+  await runSeriesGrowthTests(sql);
   const q = (v) => `'${String(v).replaceAll("'", "''")}'`,
     j = (v) => `${q(JSON.stringify(v))}::jsonb`,
     hash = (v) => createHash("sha256").update(JSON.stringify(v)).digest("hex");

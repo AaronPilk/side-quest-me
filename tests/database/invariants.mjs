@@ -1,3 +1,4 @@
+import { runAccountTypeTests } from "./account-type-invariants.mjs";
 import { runRecordingSessionTests } from "./recording-session-invariants.mjs";
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
@@ -8,6 +9,7 @@ import { runSeriesTests } from "./series-invariants.mjs";
 import { runHostedHelperTests } from "./hosted-helper-invariants.mjs";
 import { runActivityCatalogTests } from "./activity-catalog-invariants.mjs";
 export async function runDatabaseTests(sql) {
+  await runAccountTypeTests(sql);
   await runActivityCatalogTests(sql);
   await runHostedHelperTests(sql);
   const quote = (v) => `'${String(v).replaceAll("'", "''")}'`;
@@ -878,6 +880,7 @@ export async function runDatabaseTests(sql) {
     "Checking deletion cancels work and closes unresolved review without award…",
   );
   const deleting = await user();
+  await sql(`update profiles set account_type='brand' where id=${quote(deleting)};`);
   const pending = await done(deleting, distinct[0], true);
   const running = JSON.parse(
     await sql(
@@ -886,6 +889,7 @@ export async function runDatabaseTests(sql) {
   );
   const deletion = await rpc("sq_delete_account", deleting, {});
   assert.equal(deletion.status, "deleting");
+  assert.equal(await scalar(`select account_type is null from profiles where id=${quote(deleting)};`), "t", "Account deletion clears account intent");
   await deny(
     () =>
       sql(

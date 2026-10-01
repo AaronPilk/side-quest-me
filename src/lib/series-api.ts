@@ -1,9 +1,11 @@
 import { z } from "zod";
 import {
   seriesSaveSchema,
+  seriesStartFromRunSchema,
   type SeriesDetail,
   type SeriesPart,
   type SeriesSave,
+  type SeriesStartFromRun,
   type SeriesSummary,
   type SeriesTemplate,
 } from "../../shared/series";
@@ -15,6 +17,7 @@ import {
   demoSeriesPart,
   demoSeriesMutate,
   demoSeriesTemplates,
+  demoSeriesStartFromRun,
 } from "./demo-series";
 export const seriesApi = {
   list: async (creatorId?: string, mine = false): Promise<SeriesSummary[]> =>
@@ -40,6 +43,19 @@ export const seriesApi = {
       : request(`/api/series/parts/${z.uuid().parse(id)}`),
   templates: async (): Promise<SeriesTemplate[]> =>
     DEMO ? demoSeriesTemplates() : request("/api/series/templates"),
+  startFromRun: async (
+    input: SeriesStartFromRun,
+    key = crypto.randomUUID(),
+  ): Promise<SeriesDetail> => {
+    const parsed = seriesStartFromRunSchema.parse(input);
+    return DEMO
+      ? demoSeriesStartFromRun(parsed, key)
+      : request("/api/series/mutate", {
+          method: "POST",
+          headers: { "Idempotency-Key": key },
+          body: JSON.stringify({ action: "start_from_run", input: parsed }),
+        });
+  },
   save: async (
     input: SeriesSave,
     key = crypto.randomUUID(),

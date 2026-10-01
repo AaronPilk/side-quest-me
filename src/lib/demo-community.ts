@@ -1,3 +1,4 @@
+import { normalizeAccountType } from "../../shared/account";
 import { demoFollowingIds, demoSocialIdentity } from "./demo-social";
 import { catalog } from "../../shared/catalog";
 import {
@@ -16,7 +17,14 @@ import {
   type CommunityReport,
 } from "../../shared/community";
 import type { Run } from "./types";
-import { DEMO_PEOPLE, demoActor, demoPersona } from "./demo-identity";
+import { demoPublicRunSeries } from "./demo-series";
+import {
+  DEMO_PEOPLE,
+  demoActor,
+  demoPersona,
+  demoDataKey,
+  type DemoPersona,
+} from "./demo-identity";
 
 const KEY = "sidequest-community-demo-v1";
 export const DEMO_POST_ID = "55555555-5555-4555-8555-555555555555";
@@ -220,7 +228,10 @@ function isPublished(_state: State, post: StoredPost) {
 }
 function postDto(state: State, item: StoredPost): CommunityPost {
   const { ownerId, runId: _runId, assetId: _assetId, ...publicFields } = item;
-  const series = runsFor(ownerId).find((run) => run.id === item.runId)?.series;
+  const series = demoPublicRunSeries(
+    item.runId,
+    runsFor(ownerId).find((run) => run.id === item.runId)?.series,
+  );
   return {
     ...publicFields,
     ...(series ? { series } : {}),
@@ -343,6 +354,24 @@ export function demoOriginalTemplates() {
     .drafts.filter((draft) => draft.state === "approved")
     .map((draft) => draft.quest);
 }
+export function demoAccountType(key = demoDataKey()) {
+  const persona = (Object.keys(DEMO_PEOPLE) as DemoPersona[]).find(
+    (value) => demoDataKey(value) === key,
+  );
+  if (!persona) return null;
+  let stored: unknown;
+  try {
+    stored = JSON.parse(localStorage.getItem(key) || "null")?.me?.profile
+      ?.accountType;
+  } catch {
+    /* An absent or unreadable choice remains unknown. */
+  }
+  const brand = read().brands.find(
+    (item) => item.ownerId === DEMO_PEOPLE[persona].id,
+  );
+  return normalizeAccountType(stored, brand);
+}
+
 export function demoInspiration(
   postId: string,
   templateId: string,
@@ -463,6 +492,7 @@ export function demoRead<T>(
       break;
     case "me":
       result = {
+        accountType: demoAccountType(),
         userId: actor,
         roles: demoPersona() === "operator" ? ["operator"] : [],
         creator: creatorDto(state, actor),

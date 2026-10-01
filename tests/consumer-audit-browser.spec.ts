@@ -8,6 +8,10 @@ async function start(page: Page, path: string) {
     sessionStorage.setItem("sq-demo-started", "1"),
   );
   await page.goto(path);
+  if (path === "/onboarding") {
+    await page.getByRole("radio", { name: /Personal account/ }).check();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+  }
 }
 
 async function savedProfile(page: Page) {
@@ -162,9 +166,11 @@ test("every survey question can be reviewed directly without changing unknown an
   await page.getByRole("button", { name: "Select all", exact: true }).click();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page).toHaveURL(/\/create$/);
-  expect(
-    await page.evaluate(() => localStorage.getItem("sidequest-demo-v1")),
-  ).toBeNull();
+  expect(await savedProfile(page)).toMatchObject({
+    accountType: "personal",
+    onboardingCompleted: false,
+    preferences: DEFAULT_PREFERENCES,
+  });
   expect(
     await page.evaluate(() => sessionStorage.getItem("sq-profile-draft")),
   ).toBeNull();
@@ -306,6 +312,15 @@ for (const path of ["/account", "/profile/import", "/onboarding"]) {
     await expect(page.getByRole("alert")).toContainText(
       "Profile is temporarily unavailable",
     );
+    if (path === "/account") {
+      // Leaving or deleting the account never waits for a profile read.
+      await expect(
+        page.getByRole("button", { name: "Sign out", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Delete my account", exact: true }),
+      ).toBeVisible();
+    }
     failed = false;
     await page
       .getByRole("button", { name: "Retry profile", exact: true })
@@ -518,6 +533,8 @@ test("corrupt survey drafts recover to the saved account instead of crashing", a
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/onboarding");
+  await page.getByRole("radio", { name: /Personal account/ }).check();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
     page.getByRole("heading", {
       name: "Bring your ChatGPT context",
@@ -538,7 +555,6 @@ test("settings links and all demo identities remain reachable, and a blocked cre
   for (const [name, path] of [
     ["Account settings", "/account"],
     ["Private journal", "/journal"],
-    ["Business workspace", "/business"],
     ["Demo tools", "/settings/demo-tools"],
   ]) {
     await page
@@ -560,6 +576,17 @@ test("settings links and all demo identities remain reachable, and a blocked cre
         .getByRole("navigation", { name: "Settings", exact: true })
         .getByRole("link", { name: /^Admin/ }),
     ).toHaveCount(identity === "operator" ? 1 : 0);
+    const business = page
+      .getByRole("navigation", { name: "Settings", exact: true })
+      .getByRole("link", { name: /Business workspace/ });
+    await expect(business).toHaveCount(identity === "brand" ? 1 : 0);
+    if (identity === "brand") {
+      await business.click();
+      await expect(page).toHaveURL(/\/business$/);
+      await expect(
+        page.getByRole("heading", { name: "Business workspace", exact: true }),
+      ).toBeVisible();
+    }
   }
   await page.goto("/creators/22222222-2222-4222-8222-222222222222");
   await page.locator(".profile-video-tile").first().click();
@@ -603,14 +630,29 @@ test("settings account-load failure can retry without hiding ordinary navigation
   await expect(page.getByRole("alert")).toHaveText(
     "Settings temporarily unavailable.",
   );
+  const settings = page.getByRole("navigation", {
+    name: "Settings",
+    exact: true,
+  });
   await expect(
-    page
-      .getByRole("navigation", { name: "Settings", exact: true })
-      .getByRole("link", { name: /Account settings/ }),
+    settings.getByRole("link", { name: /Account settings/ }),
   ).toBeVisible();
+  // Workspaces that gate themselves stay reachable while the account read is
+  // failing; the gate pages carry their own retry.
+  await expect(
+    settings.getByRole("link", { name: /Business workspace/ }),
+  ).toHaveAttribute("href", "/business");
+  await expect(settings.getByRole("link", { name: /^Admin/ })).toHaveAttribute(
+    "href",
+    "/admin",
+  );
   failed = false;
   await page
     .getByRole("button", { name: "Retry account settings", exact: true })
     .click();
   await expect(page.getByRole("alert")).toHaveCount(0);
+  // Once the account is known, a personal demo creator sees no Business entry.
+  await expect(
+    settings.getByRole("link", { name: /Business workspace/ }),
+  ).toHaveCount(0);
 });

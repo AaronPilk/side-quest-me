@@ -37,6 +37,16 @@ const seriesId = "22222222-2222-4222-8222-222222222222";
 const partId = "33333333-3333-4333-8333-333333333333";
 const auth = { Authorization: "Bearer valid-session" };
 const follow = { action: "follow", input: { id: seriesId, following: true } };
+const startFromRun = {
+  action: "start_from_run",
+  input: {
+    runId: partId,
+    title: "A story that continues",
+    premise: "Our next real adventures.",
+    cover: "night",
+    kind: "ongoing",
+  },
+};
 const save = {
   action: "save",
   input: {
@@ -184,7 +194,7 @@ describe("Series Worker public and authenticated route boundary", () => {
 
 describe("Series mutation transport and error contract", () => {
   it("dispatches a validated operation with server identity and a stable action-inclusive request hash", async () => {
-    for (const operation of [save, follow]) {
+    for (const operation of [save, follow, startFromRun]) {
       expect((await mutate(operation)).status).toBe(200);
       const first = state.rpc.mock.lastCall;
       expect((await mutate(operation)).status).toBe(200);
@@ -205,6 +215,8 @@ describe("Series mutation transport and error contract", () => {
       { ...follow, actorId: actor },
       { ...follow, input: { ...follow.input, following: "true" } },
       { ...save, input: { ...save.input, ownerId: actor } },
+      { ...startFromRun, input: { ...startFromRun.input, state: "published" } },
+      { ...startFromRun, input: { ...startFromRun.input, runId: "foreign" } },
       {
         ...save,
         input: {
@@ -292,6 +304,8 @@ describe("Series mutation transport and error contract", () => {
   it("preserves availability, prerequisite, source-part, version and permission errors without leaking database detail", async () => {
     for (const [code, status] of [
       ["series_unavailable", 404],
+      ["series_run_unavailable", 409],
+      ["series_run_linked", 409],
       ["series_prerequisite", 409],
       ["series_inspiration_mismatch", 409],
       ["series_template_mismatch", 409],

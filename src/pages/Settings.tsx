@@ -10,6 +10,7 @@ import {
 import { useCommunity, useCommunityAction } from "../components/Community";
 import { PageTitle, Notice, Button } from "../components/ui";
 import { DEMO } from "../lib/auth";
+import { hasBusinessWorkspace } from "../../shared/account";
 import {
   DEMO_PEOPLE,
   demoPersona,
@@ -42,20 +43,30 @@ export default function Settings() {
           </span>
           <ChevronRight />
         </Link>
-        <Link to="/business">
-          <BriefcaseBusiness />
-          <span>
-            <strong>Business workspace</strong>
-            <small>Business setup and licensed videos</small>
-          </span>
-          <ChevronRight />
-        </Link>
-        {me.data?.roles.includes("operator") && (
+        {(me.data ? hasBusinessWorkspace(me.data) : Boolean(me.error)) && (
+          <Link to="/business">
+            <BriefcaseBusiness />
+            <span>
+              <strong>Business workspace</strong>
+              <small>
+                {me.data
+                  ? "Business setup and licensed videos"
+                  : "Opens if your account has a business"}
+              </small>
+            </span>
+            <ChevronRight />
+          </Link>
+        )}
+        {(me.data ? me.data.roles.includes("operator") : Boolean(me.error)) && (
           <Link to="/admin">
             <ShieldCheck />
             <span>
               <strong>Admin</strong>
-              <small>Approvals, reports, and manual verification</small>
+              <small>
+                {me.data
+                  ? "Approvals, reports, and manual verification"
+                  : "Opens if your account is an operator"}
+              </small>
             </span>
             <ChevronRight />
           </Link>

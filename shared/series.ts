@@ -14,6 +14,17 @@ export type SeriesContext = {
   partTitle: string;
   position: number;
 };
+/** An existing personal attempt becomes the first episode without being replayed. */
+export const seriesStartFromRunSchema = z
+  .object({
+    runId: uuid,
+    title: z.string().trim().min(1).max(100),
+    premise: z.string().trim().min(1).max(800),
+    cover: seriesCoverSchema,
+    kind: z.enum(["finite", "ongoing"]),
+  })
+  .strict();
+export type SeriesStartFromRun = z.infer<typeof seriesStartFromRunSchema>;
 export const seriesPartInputSchema = z
   .object({
     id: uuid,
@@ -88,6 +99,8 @@ export type SeriesSave = z.infer<typeof seriesSaveSchema>;
 export type SeriesPart = z.infer<typeof seriesPartInputSchema> & {
   position: number;
   locked: boolean;
+  /** Owner-only history flag; older saved DTOs may omit it. */
+  attempted?: boolean;
   templateVersion: number;
   quest: QuestVariant;
   available: boolean;
@@ -120,6 +133,7 @@ export type SeriesDetail = SeriesSummary & {
   parts: SeriesPart[];
   progress: SeriesProgress | null;
   isOwner: boolean;
+  formatLocked: boolean;
 };
 export type SeriesTemplate = {
   id: string;
@@ -147,7 +161,9 @@ export function deriveSeriesProgress(
     ["accepted", "in_progress", "review_needed"].includes(run.status),
   );
   const published = series.parts.filter((part) => part.published);
-  const current = published.find(
+  // Availability already encodes publication for other viewers; the author
+  // can be pointed at their own unpublished next part.
+  const current = series.parts.find(
     (part) =>
       !completed.has(part.id) &&
       part.available &&
@@ -162,4 +178,99 @@ export function deriveSeriesProgress(
     complete: series.kind === "finite" && caughtUp,
     caughtUp: series.kind === "ongoing" && caughtUp,
   };
+}
+
+/** The editable save payload for an existing series, exactly as stored. */
+export function seriesSaveFromDetail(series: SeriesDetail): SeriesSave {
+  return {
+    id: series.id,
+    expectedVersion: series.version,
+    title: series.title,
+    premise: series.premise,
+    cover: series.cover,
+    kind: series.kind,
+    state: series.state,
+    parts: series.parts.map(
+      ({
+        id,
+        title,
+        templateId,
+        prerequisitePartId,
+        prerequisiteReason,
+        published,
+      }) => ({
+        id,
+        title,
+        templateId,
+        prerequisitePartId,
+        prerequisiteReason,
+        published,
+      }),
+    ),
+  };
+}
+
+export const SERIES_MAX_PARTS = 40;
+
+/** Why the author cannot add the next part right now, or null when they can. */
+export function nextSeriesPartBlocker(
+  series: Pick<SeriesDetail, "kind" | "formatLocked" | "parts" | "isOwner">,
+): string | null {
+  if (!series.isOwner) return "Only the author can add a part.";
+  if (!series.parts.length) return "This series has no first part yet.";
+  if (!series.parts[0].available)
+    return (
+      series.parts[0].unavailableReason ||
+      "This series’s original quest is no longer available for a new part."
+    );
+  if (series.kind === "finite" && series.formatLocked)
+    return "A published planned story keeps its part count. Growing stories can add parts.";
+  if (series.parts.length >= SERIES_MAX_PARTS)
+    return `A series holds up to ${SERIES_MAX_PARTS} parts.`;
+  return null;
+}
+
+/** A series grows by doing the same quest again: the next part repeats the
+ * quest the series started from, as a new private part the author attempts
+ * with their own outing. Nothing already saved is changed. */
+export function withNextSeriesPart(series: SeriesDetail): {
+  save: SeriesSave;
+  partId: string;
+  templateId: string;
+  position: number;
+} {
+  const blocker = nextSeriesPartBlocker(series);
+  if (blocker) throw new Error(blocker);
+  const save = seriesSaveFromDetail(series);
+  const source = series.parts[0];
+  const partId = crypto.randomUUID();
+  const position = save.parts.length + 1;
+  save.parts.push({
+    id: partId,
+    title: `Part ${position}`,
+    templateId: source.templateId,
+    prerequisitePartId: null,
+    prerequisiteReason: "",
+    published: false,
+  });
+  return { save, partId, templateId: source.templateId, position };
+}
+
+/** Publishing a part the author has finished. A growing story becomes public
+ * with its first published part; a planned (finite) story only goes public once
+ * every part is published, so earlier parts keep their draft state until then. */
+export function withPartPublished(
+  series: SeriesDetail,
+  partId: string,
+): SeriesSave {
+  const save = seriesSaveFromDetail(series);
+  const part = save.parts.find((candidate) => candidate.id === partId);
+  if (!part) throw new Error("This part is not in the series.");
+  part.published = true;
+  if (
+    series.kind === "ongoing" ||
+    save.parts.every((candidate) => candidate.published)
+  )
+    save.state = "published";
+  return save;
 }

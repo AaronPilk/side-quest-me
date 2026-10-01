@@ -40,3 +40,24 @@
 .journal-no-results h2 {
   font-size: 1.25rem;
 }
+.journal-main-link {
+  color: inherit;
+  display: block;
+}
+.journal-series-action {
+  border-top: 1px solid var(--divider);
+  padding: 14px;
+}
+.journal-series-action .button {
+  min-height: 44px;
+  font-size: 0.76rem;
+  padding: 10px 12px;
+  white-space: normal;
+  width: 100%;
+}
+.journal-series-action p {
+  color: var(--secondary);
+  margin: 8px 0 0;
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}

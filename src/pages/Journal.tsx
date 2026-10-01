@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Play, Clock3 } from "lucide-react";
+import { ArrowUpRight, Play, Clock3, Layers } from "lucide-react";
 import { api } from "../lib/api";
+import { hasReadyVideo } from "../lib/recording-session";
 import "./journal-design.css";
 import { AuthImage } from "../components/PrivateMedia";
 import { CATEGORIES } from "../../shared/domain";
@@ -87,7 +88,8 @@ export default function Journal() {
           to="/"
           action="Find a quest"
         >
-          Three little moments can make a very good story. Yours will live here.
+          Your quests and videos live here. Any quest can become the first part
+          of a series.
         </Empty>
       ) : data?.length && !visible?.length ? (
         <div className="journal-no-results" role="status">
@@ -106,64 +108,89 @@ export default function Journal() {
       ) : (
         <div className="journal-grid">
           {visible?.map((r) => (
-            <Link className="journal-card" to={`/runs/${r.id}`} key={r.id}>
-              <div className="journal-image">
-                {r.render?.thumbnailUrl ? (
-                  <AuthImage
-                    src={r.render.thumbnailUrl}
-                    alt={`A frame from ${r.quest.title}`}
-                    width="320"
-                    height="400"
-                  />
-                ) : (
-                  <QuestArt variant={r.quest.category} small />
-                )}
-                <span className="journal-status">
-                  {r.render?.status === "ready" ? (
-                    <>
-                      <Play size={12} /> Reel ready
-                    </>
-                  ) : r.status === "finalized" ? (
-                    r.render?.status === "failed" ? (
-                      "Render needs a retry"
-                    ) : (
-                      "Quest complete"
-                    )
-                  ) : r.status === "review_needed" ? (
-                    "Submitted for review"
-                  ) : r.status === "abandoned" ? (
-                    "Abandoned"
+            <article className="journal-card" key={r.id}>
+              <Link className="journal-main-link" to={`/runs/${r.id}`}>
+                <div className="journal-image">
+                  {r.render?.thumbnailUrl ? (
+                    <AuthImage
+                      src={r.render.thumbnailUrl}
+                      alt={`A frame from ${r.quest.title}`}
+                      width="320"
+                      height="400"
+                    />
                   ) : (
-                    <>
-                      <Clock3 size={12} /> In progress
-                    </>
+                    <QuestArt variant={r.quest.category} small />
                   )}
-                </span>
-              </div>
-              <div className="journal-info">
-                <span className="eyebrow">
-                  {CATEGORIES.find((c) => c.id === r.quest.category)?.label}
-                </span>
-                <h2>{r.quest.title}</h2>
-                {["accepted", "in_progress"].includes(r.status) && (
-                  <p className="journal-next-step">
-                    {r.clips.length === 3
-                      ? "Ready to review and finish"
-                      : `${3 - r.clips.length} ${r.clips.length === 2 ? "part" : "parts"} to go · Continue filming`}
-                  </p>
-                )}
-                <div className="card-footer">
-                  <span>
-                    {new Date(r.createdAt).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                    })}{" "}
-                    · {r.clips.length} moments
+                  <span className="journal-status">
+                    {r.render?.status === "ready" ? (
+                      <>
+                        <Play size={12} /> Reel ready
+                      </>
+                    ) : r.status === "finalized" ? (
+                      r.render?.status === "failed" ? (
+                        "Render needs a retry"
+                      ) : (
+                        "Quest complete"
+                      )
+                    ) : r.status === "review_needed" ? (
+                      "Submitted for review"
+                    ) : r.status === "abandoned" ? (
+                      "Abandoned"
+                    ) : (
+                      <>
+                        <Clock3 size={12} /> In progress
+                      </>
+                    )}
                   </span>
-                  <ArrowUpRight size={18} />
                 </div>
-              </div>
-            </Link>
+                <div className="journal-info">
+                  <span className="eyebrow">
+                    {CATEGORIES.find((c) => c.id === r.quest.category)?.label}
+                  </span>
+                  <h2>{r.quest.title}</h2>
+                  {["accepted", "in_progress"].includes(r.status) && (
+                    <p className="journal-next-step">
+                      {hasReadyVideo(r.clips)
+                        ? "Ready to review and finish"
+                        : "Record or import your quest video"}
+                    </p>
+                  )}
+                  <div className="card-footer">
+                    <span>
+                      {new Date(r.createdAt).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      })}{" "}
+                      ·{" "}
+                      {r.clips.length === 1 && r.clips[0].mode === "session"
+                        ? "1 video"
+                        : `${r.clips.length} saved moments`}
+                    </span>
+                    <ArrowUpRight size={18} />
+                  </div>
+                </div>
+              </Link>
+              {r.status !== "abandoned" && (
+                <div className="journal-series-action">
+                  <Link
+                    className="button secondary"
+                    to={
+                      r.series
+                        ? `/series/${r.series.id}`
+                        : `/series/new?run=${r.id}`
+                    }
+                  >
+                    <Layers size={16} aria-hidden="true" />
+                    {r.series ? "View series" : "Turn into a series"}
+                  </Link>
+                  {r.series && (
+                    <p>
+                      Part {r.series.position} · {r.series.title}
+                    </p>
+                  )}
+                </div>
+              )}
+            </article>
           ))}
         </div>
       )}

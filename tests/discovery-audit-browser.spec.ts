@@ -27,12 +27,18 @@ test("Following is earned through a follow, persists, searches public stories, a
   await page.reload();
   await expect(page.locator(".public-post")).toHaveCount(1);
   await page
+    .getByRole("button", { name: "Search stories", exact: true })
+    .click();
+  await page
     .getByRole("searchbox", { name: "Search public stories" })
     .fill("another demo creator");
-  await page.getByRole("button", { name: "Search stories" }).click();
+  await page.getByRole("button", { name: "Show search results" }).click();
   await expect(page.locator(".public-post")).toHaveCount(1);
+  await page
+    .getByRole("button", { name: "Search stories", exact: true })
+    .click();
   await page.getByRole("searchbox").fill("no story could match this phrase");
-  await page.getByRole("button", { name: "Search stories" }).click();
+  await page.getByRole("button", { name: "Show search results" }).click();
   await expect(
     page.getByRole("heading", { name: "No matching stories yet." }),
   ).toBeVisible();
@@ -76,9 +82,55 @@ test("reel sharing exposes a usable fallback and close returns to the same searc
   await page.getByRole("heading", { name: "Your Date Has a Pit Crew" }).click();
   await page.getByRole("link", { name: "Close reel" }).click();
   await expect(page).toHaveURL(/\/discover\?view=brands&q=pit$/);
+  await page.getByRole("button", { name: "Edit search" }).click();
   await expect(page.getByRole("searchbox")).toHaveValue("pit");
-  await page.getByRole("link", { name: "Explore series", exact: true }).click();
+  await page.getByRole("button", { name: "Close search" }).click();
+  await page
+    .getByRole("navigation", { name: "Discover sections" })
+    .getByRole("link", { name: "Series", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/series$/);
+});
+
+test("rapid Discover searches preserve the latest draft and Back/Forward restore each URL query", async ({
+  page,
+}) => {
+  await page.goto("/discover?q=another");
+  const input = page.getByRole("searchbox", { name: "Search public stories" });
+  const open = page.getByRole("button", {
+    name: "Search stories",
+    exact: true,
+  });
+  const submit = page.getByRole("button", { name: "Show search results" });
+  await open.click();
+  await expect(input).toHaveValue("another");
+  await expect(page.locator(".public-post")).toHaveCount(1);
+  for (const query of ["demo", "creator", "no story could match this phrase"]) {
+    await input.fill(query);
+    await submit.click();
+    await open.click();
+  }
+  await expect(
+    page.getByRole("heading", { name: "No matching stories yet." }),
+  ).toBeVisible();
+  await expect(input).toHaveValue("no story could match this phrase");
+  await expect(page).toHaveURL(/q=no\+story\+could\+match\+this\+phrase$/);
+  await input.fill("A draft I have not submitted");
+  await page.goBack();
+  await expect(input).toHaveValue("creator");
+  await expect(page.locator(".public-post")).toHaveCount(1);
+  await page.goForward();
+  await expect(input).toHaveValue("no story could match this phrase");
+  await expect(
+    page.getByRole("heading", { name: "No matching stories yet." }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close search" }).click();
+  await page.getByRole("button", { name: "Clear search" }).click();
+  await open.click();
+  await expect(input).toHaveValue("");
+  await expect(page).toHaveURL(/\/discover$/);
+  await page.goBack();
+  await expect(input).toHaveValue("no story could match this phrase");
 });
 
 test("feed follow failures are recoverable without a false follow state", async ({

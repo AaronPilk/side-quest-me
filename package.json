@@ -30,7 +30,8 @@
     "ios:sync:demo": "npm run ios:build:demo && cap sync ios",
     "ios:open": "cap open ios",
     "ios:verify:release": "node scripts/verify-ios-release.mjs",
-    "ios:simulator": "node scripts/run-ios-simulator.mjs"
+    "ios:simulator": "node scripts/run-ios-simulator.mjs",
+    "test:ai:live": "vitest run --config scripts/ai-eval.config.ts"
   },
   "dependencies": {
     "@apple/mapkit-loader": "1.0.0",

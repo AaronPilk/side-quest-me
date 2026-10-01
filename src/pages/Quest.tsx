@@ -28,6 +28,9 @@ import { seriesApi } from "../lib/series-api";
 import type { QuestViability, QuestRecovery } from "../../shared/viability";
 import { QuestFit } from "../components/QuestFit";
 import { ApplePlaceCard } from "../components/ApplePlaces";
+import { preferenceProgress } from "../../shared/preference-progress";
+import { PreferenceReminder } from "../components/PreferenceReminder";
+import { AiQuestAssist } from "../components/AiQuestAssist";
 import {
   Button,
   Notice,
@@ -312,6 +315,7 @@ export default function Quest() {
             ))}
           </ol>
         </section>
+        <AiQuestAssist key={selected.id} quest={selected} outing={outing} />
         <section className="section">
           <h2>Before you say yes</h2>
           <ul className="clean-list">
@@ -450,7 +454,14 @@ export default function Quest() {
             busy={busy}
             error={error || runs.error || me.error}
             needsProfile={Boolean(
-              me.data && !me.data.profile.onboardingCompleted,
+              me.data &&
+              me.data.profile.accountType !== "brand" &&
+              !preferenceProgress(me.data.profile.preferences).complete,
+            )}
+            firstRun={Boolean(
+              me.data &&
+              me.data.profile.accountType === null &&
+              !me.data.profile.onboardingCompleted,
             )}
           />
         )}
@@ -479,6 +490,13 @@ export default function Quest() {
             </span>
           </div>
           {error && <Notice error>{error}</Notice>}
+          {me.data && (
+            <PreferenceReminder
+              profile={me.data.profile}
+              returnTo={"/create" + (params.toString() ? `?${params}` : "")}
+              compact
+            />
+          )}
           {candidates.length === 0 ? (
             fit ? (
               <QuestFit

@@ -1,9 +1,101 @@
 import Capacitor
 import MapKit
+import UIKit
+import WebKit
 
 class SidequestViewController: CAPBridgeViewController {
+    private let editingStatusSurface = UIView()
+    private var statusAreaHandler: SidequestStatusAreaHandler?
+
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(SidequestPlacesPlugin())
+        guard let content = webView?.configuration.userContentController else { return }
+        let handler = SidequestStatusAreaHandler(owner: self)
+        statusAreaHandler = handler
+        content.add(handler, name: "sidequestStatusArea")
+        // This observes presentation only; it cannot invoke app actions or read user text.
+        content.addUserScript(WKUserScript(source: """
+            (() => {
+              let last = '';
+              let queued = false;
+              const update = () => {
+                queued = false;
+                const active = document.activeElement;
+                const editing = Boolean(active && (
+                  active.matches('textarea, select, [contenteditable="true"]') ||
+                  (active.matches('input') && !['checkbox', 'radio', 'range', 'button', 'submit', 'reset', 'image', 'file', 'hidden'].includes(active.type))
+                ));
+                const dark = Boolean(document.querySelector('.capture-overlay, .reel-viewer'));
+                const key = `${editing}:${dark}`;
+                if (key === last) return;
+                last = key;
+                window.webkit.messageHandlers.sidequestStatusArea.postMessage({ editing, dark });
+              };
+              const schedule = () => {
+                if (!queued) { queued = true; requestAnimationFrame(update); }
+              };
+              document.addEventListener('focusin', schedule, true);
+              document.addEventListener('focusout', schedule, true);
+              new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+              update();
+            })();
+            """, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        guard let webView else { return }
+        // Capacitor normally uses WKWebView as the root. A sibling UIKit surface
+        // stays above its scrolling/focus viewport while preserving full-size web content.
+        let container = UIView(frame: webView.frame)
+        container.backgroundColor = UIColor(red: 245.0 / 255, green: 246.0 / 255, blue: 252.0 / 255, alpha: 1)
+        webView.removeFromSuperview()
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(webView)
+        view = container
+        NSLayoutConstraint.activate([
+            webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: container.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+        editingStatusSurface.translatesAutoresizingMaskIntoConstraints = false
+        editingStatusSurface.isUserInteractionEnabled = false
+        editingStatusSurface.isAccessibilityElement = false
+        editingStatusSurface.accessibilityElementsHidden = true
+        editingStatusSurface.backgroundColor = UIColor(red: 243.0 / 255, green: 243.0 / 255, blue: 252.0 / 255, alpha: 1)
+        editingStatusSurface.isHidden = true
+        container.addSubview(editingStatusSurface)
+        NSLayoutConstraint.activate([
+            editingStatusSurface.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            editingStatusSurface.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            editingStatusSurface.topAnchor.constraint(equalTo: container.topAnchor),
+            editingStatusSurface.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor)
+        ])
+    }
+
+    fileprivate func updateStatusArea(editing: Bool, dark: Bool) {
+        editingStatusSurface.isHidden = !editing
+        editingStatusSurface.backgroundColor = dark
+            ? UIColor(red: 9.0 / 255, green: 10.0 / 255, blue: 14.0 / 255, alpha: 1)
+            : UIColor(red: 243.0 / 255, green: 243.0 / 255, blue: 252.0 / 255, alpha: 1)
+        statusBarStyle = dark ? .lightContent : .darkContent
+        setNeedsStatusBarAppearanceUpdate()
+    }
+}
+
+private final class SidequestStatusAreaHandler: NSObject, WKScriptMessageHandler {
+    weak var owner: SidequestViewController?
+    init(owner: SidequestViewController) { self.owner = owner }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame,
+              message.frameInfo.request.url?.scheme == "capacitor",
+              message.frameInfo.request.url?.host == "localhost",
+              let state = message.body as? [String: Any],
+              let editing = state["editing"] as? Bool,
+              let dark = state["dark"] as? Bool else { return }
+        DispatchQueue.main.async { [weak self] in self?.owner?.updateStatusArea(editing: editing, dark: dark) }
     }
 }
 

@@ -22,6 +22,8 @@
     "tests",
     "playwright.config.ts",
     "vite.ios.config.ts",
+    "scripts/ai-eval.config.ts",
+    "scripts/eval-quest-ai.live.ts",
     "capacitor.config.ts"
   ],
   "exclude": ["node_modules", "dist", "dist-ios", "ios"]

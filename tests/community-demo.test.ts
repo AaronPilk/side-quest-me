@@ -20,6 +20,11 @@ import {
   demoNotify,
 } from "../src/lib/demo-community";
 import { DEMO_PEOPLE, type DemoPersona } from "../src/lib/demo-identity";
+import { withPartPublished } from "../shared/series";
+import {
+  demoSeriesMutate,
+  demoSeriesStartFromRun,
+} from "../src/lib/demo-series";
 import type { Run } from "../src/lib/types";
 
 vi.mock("../src/lib/auth", () => ({
@@ -153,20 +158,30 @@ afterEach(() => {
 });
 
 describe("isolated demo publication", () => {
-  it("publishes frozen source series attribution without exposing personal progress", async () => {
-    const series = {
-      id: crypto.randomUUID(),
+  it("publishes frozen Series attribution only when the part is public, without exposing personal progress", async () => {
+    seedRuns("creator", [readyRun()]);
+    const detail = demoSeriesStartFromRun({
+      runId,
       title: "A three-part adventure",
-      partId: crypto.randomUUID(),
-      partTitle: "Find the clue",
-      position: 1,
-    };
-    seedRuns("creator", [readyRun({ series })]);
+      premise: "Find a different clue each time.",
+      cover: "forest",
+      kind: "ongoing",
+    });
+    const series = JSON.parse(localStorage.getItem(keyFor("creator"))!).runs[0]
+      .series;
     expect(demoRead<CommunityReadResults["feed"]>("feed").posts).toHaveLength(
       1,
     );
     const post = await publish("publish-series-part");
-    expect(post.series).toEqual(series);
+    expect(post.series).toBeUndefined();
+    persona("viewer");
+    const privatePart = demoRead<CommunityPost>("post", { id: post.id });
+    expect(privatePart.series).toBeUndefined();
+    expect(JSON.stringify(privatePart)).not.toContain(series.title);
+    persona("creator");
+    const publication = withPartPublished(detail, detail.parts[0].id);
+    publication.title = "The current display title";
+    demoSeriesMutate("save", publication);
     persona("viewer");
     const visible = demoRead<CommunityPost>("post", { id: post.id });
     expect(visible.series).toEqual(series);

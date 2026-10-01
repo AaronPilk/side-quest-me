@@ -12,8 +12,12 @@ import { api } from "../lib/api";
 import { DEMO, supabase } from "../lib/auth";
 import { levelFromXp } from "../../shared/domain";
 import { preferenceChips } from "../../shared/profile";
+import { preferenceProgress } from "../../shared/preference-progress";
+import "./preferences-wizard.css";
 import { rememberReturnTo } from "../lib/internal-return";
 import { QuestProgress } from "../components/QuestProgress";
+import { AccountTypeChoice } from "../components/AccountTypeChoice";
+import type { AccountType } from "../../shared/account";
 import {
   Button,
   PageTitle,
@@ -26,10 +30,80 @@ export default function Profile() {
   const { data, error, refresh } = useResource(api.me);
   const navigate = useNavigate();
   const [name, setName] = useState<string>();
+  const [accountType, setAccountType] = useState<AccountType | null>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [saveError, setSaveError] = useState(false);
-  const [feedbackFor, setFeedbackFor] = useState<"name" | "account">("name");
+  const [feedbackFor, setFeedbackFor] = useState<"name" | "account" | "type">(
+    "name",
+  );
+  // Sign-out and deletion never depend on a successful profile read.
+  const accountControls = (
+    <>
+      {!DEMO && (
+        <Button
+          secondary
+          busy={busy}
+          onClick={async () => {
+            setBusy(true);
+            setMessage("");
+            setSaveError(false);
+            setFeedbackFor("account");
+            try {
+              if (!supabase)
+                throw new Error(
+                  "Sign out is unavailable. Please reload and try again.",
+                );
+              const result = await supabase.auth.signOut();
+              if (result.error) throw result.error;
+              navigate("/");
+            } catch (cause) {
+              setSaveError(true);
+              setMessage((cause as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <LogOut size={18} />
+          Sign out
+        </Button>
+      )}
+      <button
+        className="text-button danger"
+        disabled={busy}
+        onClick={async () => {
+          if (
+            !confirm(
+              DEMO
+                ? "Reset the entire local demo? This clears all four demo views in this browser, including profiles, posts, drafts, offers and progress, and deletes every uploaded clip and rendered reel from the local renderer. The labeled starter fixtures will return. This cannot be undone."
+                : "Delete your account and revoke access to your media? Media cleanup is queued. Minimal reward accounting records are retained. This cannot be undone.",
+            )
+          )
+            return;
+          setBusy(true);
+          setMessage("");
+          setSaveError(false);
+          setFeedbackFor("account");
+          try {
+            await api.deleteAccount();
+            if (!DEMO) sessionStorage.clear();
+            location.assign("/");
+          } catch (e) {
+            setSaveError(true);
+            setMessage((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {DEMO ? "Reset entire local demo" : "Delete my account"}
+      </button>
+      {message && feedbackFor === "account" && (
+        <Notice error={saveError}>{message}</Notice>
+      )}
+    </>
+  );
   if (!data)
     return error ? (
       <>
@@ -38,12 +112,14 @@ export default function Profile() {
         <Button secondary onClick={refresh}>
           Retry profile
         </Button>
+        {accountControls}
       </>
     ) : (
       <Loading />
     );
   const level = levelFromXp(data.wallet.xp);
   const chips = preferenceChips(data.profile.preferences);
+  const progress = preferenceProgress(data.profile.preferences);
   return (
     <>
       <Back to="/settings">Settings</Back>
@@ -51,6 +127,46 @@ export default function Profile() {
         eyebrow="YOUR PRIVATE PREFERENCES"
         title="Account & preferences"
       />
+      <section
+        className="account-preference-entry"
+        aria-labelledby="preferences-entry-title"
+      >
+        <div className="account-preference-entry-heading">
+          <SlidersHorizontal size={22} aria-hidden="true" />
+          <span className="eyebrow">YOUR QUEST PREFERENCES</span>
+          <span className="support">
+            {progress.answered} / {progress.total}
+          </span>
+        </div>
+        <h2 id="preferences-entry-title">Make each quest more you.</h2>
+        <p>
+          A few quick answers, one at a time. Your interests and boundaries help
+          us find a better fit.
+        </p>
+        <progress
+          max={progress.total}
+          value={progress.answered}
+          aria-label="Confirmed preference answers"
+        />
+        <Link
+          className="button"
+          to="/onboarding?preferences=1&returnTo=%2Faccount"
+          onClick={() => rememberReturnTo("/account")}
+        >
+          {progress.complete
+            ? "Edit preferences"
+            : progress.answered
+              ? "Finish preferences"
+              : "Set your preferences"}
+          <ArrowUpRight size={18} aria-hidden="true" />
+        </Link>
+        <Link className="account-summary-link" to="/profile/import">
+          <FileText size={17} aria-hidden="true" />
+          {data.profile.summary
+            ? "Edit or review your imported summary"
+            : "Use an optional ChatGPT summary"}
+        </Link>
+      </section>
       <div className="profile-identity">
         <div className="avatar">
           <UserRound size={32} />
@@ -133,6 +249,54 @@ export default function Profile() {
           )}
         </form>
       </section>
+      <section className="section">
+        <h2>Account type</h2>
+        <AccountTypeChoice
+          value={
+            accountType === undefined ? data.profile.accountType : accountType
+          }
+          disabled={busy}
+          onChange={setAccountType}
+        />
+        <Button
+          secondary
+          busy={busy}
+          // Saving an unchanged value is harmless and makes an inferred choice
+          // explicit, so only an empty selection disables Save.
+          disabled={!accountType}
+          onClick={async () => {
+            if (!accountType) return;
+            setBusy(true);
+            setMessage("");
+            setSaveError(false);
+            setFeedbackFor("type");
+            try {
+              await api.updateProfile({ accountType });
+              setMessage("Account type saved.");
+              refresh();
+            } catch (cause) {
+              setSaveError(true);
+              setMessage((cause as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Save account type
+        </Button>
+        <p className="support">
+          Brand accounts have a Business workspace. Business approval and video
+          permissions are reviewed separately.
+        </p>
+        {data.profile.accountType === "brand" && (
+          <Link className="button secondary" to="/business">
+            Open Business workspace
+          </Link>
+        )}
+        {message && feedbackFor === "type" && (
+          <Notice error={saveError}>{message}</Notice>
+        )}
+      </section>
       <section className="section confirmed-preferences">
         <h2>Confirmed preferences</h2>
         {chips.length ? (
@@ -156,14 +320,6 @@ export default function Profile() {
         )}
       </section>
       <div className="settings-list">
-        <Link to="/onboarding" onClick={() => rememberReturnTo("/account")}>
-          <SlidersHorizontal size={20} />
-          <span>
-            <strong>Preferences & boundaries</strong>
-            <small>Your interests, role, and things to leave out</small>
-          </span>
-          <ArrowUpRight size={18} />
-        </Link>
         <Link to="/profile/import">
           <FileText size={20} />
           <span>
@@ -205,68 +361,7 @@ export default function Profile() {
           </p>
         )}
       </section>
-      {!DEMO && (
-        <Button
-          secondary
-          busy={busy}
-          onClick={async () => {
-            setBusy(true);
-            setMessage("");
-            setSaveError(false);
-            setFeedbackFor("account");
-            try {
-              if (!supabase)
-                throw new Error(
-                  "Sign out is unavailable. Please reload and try again.",
-                );
-              const result = await supabase.auth.signOut();
-              if (result.error) throw result.error;
-              navigate("/");
-            } catch (cause) {
-              setSaveError(true);
-              setMessage((cause as Error).message);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <LogOut size={18} />
-          Sign out
-        </Button>
-      )}
-      <button
-        className="text-button danger"
-        disabled={busy}
-        onClick={async () => {
-          if (
-            !confirm(
-              DEMO
-                ? "Reset the entire local demo? This clears all four demo views in this browser, including profiles, posts, drafts, offers and progress, and deletes every uploaded clip and rendered reel from the local renderer. The labeled starter fixtures will return. This cannot be undone."
-                : "Delete your account and revoke access to your media? Media cleanup is queued. Minimal reward accounting records are retained. This cannot be undone.",
-            )
-          )
-            return;
-          setBusy(true);
-          setMessage("");
-          setSaveError(false);
-          setFeedbackFor("account");
-          try {
-            await api.deleteAccount();
-            if (!DEMO) sessionStorage.clear();
-            location.assign("/");
-          } catch (e) {
-            setSaveError(true);
-            setMessage((e as Error).message);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        {DEMO ? "Reset entire local demo" : "Delete my account"}
-      </button>
-      {message && feedbackFor === "account" && (
-        <Notice error={saveError}>{message}</Notice>
-      )}
+      {accountControls}
     </>
   );
 }

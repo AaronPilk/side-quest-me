@@ -1,3 +1,4 @@
+import { normalizeAccountType } from "../../shared/account";
 import type {
   CommunityAction,
   CommunityMe,
@@ -51,7 +52,14 @@ export const communityApi = {
     const path = paths[view]
       ? `${paths[view]}/${encodeURIComponent(parsed.id || "")}`
       : view;
-    return request<T>(`/api/community/${path}${query.size ? `?${query}` : ""}`);
+    const result = await request<T>(
+      `/api/community/${path}${query.size ? `?${query}` : ""}`,
+    );
+    if (view === "me" && result && typeof result === "object") {
+      const me = result as unknown as CommunityMe;
+      me.accountType = normalizeAccountType(me.accountType, me.brand);
+    }
+    return result;
   },
   mutate: async <T>(
     action: CommunityAction,

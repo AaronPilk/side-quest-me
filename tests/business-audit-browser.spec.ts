@@ -2,6 +2,18 @@ import { expect, test, type Page } from "@playwright/test";
 import { DEFAULT_PREFERENCES } from "../shared/domain";
 import type { Redemption } from "../src/lib/types";
 import { selectDemoPersona } from "./demo-persona-helper";
+import {
+  openPartOptions,
+  reachSeriesParts,
+  reviewSeries,
+} from "./series-authoring-helpers";
+import {
+  acceptQuest,
+  createNextPart,
+  DEMO_DATA_KEY,
+  markRunFinalized,
+  turnIntoSeries,
+} from "./series-growth-helpers";
 
 test.use({ actionTimeout: 15_000 });
 
@@ -190,49 +202,37 @@ test("reward retries preserve reservation identity, new rewards use new keys, an
   await expect(page.locator(".redemption")).toHaveCount(2);
 });
 
-test("Series search keeps selections and editing cannot orphan or reorder a prerequisite", async ({
+test("Series editing keeps the source quest first and preserves accepted part history after cancellation", async ({
   page,
 }) => {
-  await openDemo(page, "/series/new");
-  await page.getByLabel("Series title", { exact: true }).fill("A linked story");
+  await page.addInitScript(() =>
+    sessionStorage.setItem("sq-demo-started", "1"),
+  );
+  const first = await acceptQuest(page);
+  await markRunFinalized(page, first);
+  await page.reload();
+  const seriesUrl = await turnIntoSeries(page, "A linked story");
+  const second = await createNextPart(page, 2);
+  await page.goto(seriesUrl);
+  await page.getByRole("link", { name: "Edit series", exact: true }).click();
   await page
     .getByLabel("Premise", { exact: true })
     .fill("Two discoveries linked by the first result.");
+  await reachSeriesParts(page);
   const parts = page.locator(".series-edit-part");
-  await parts
-    .nth(0)
-    .getByLabel("Part title", { exact: true })
-    .fill("First discovery");
-  await page
-    .getByLabel("Find a reviewed quest", { exact: true })
-    .fill("never noticed");
-  await page
-    .getByLabel("Filter quest intensity", { exact: true })
-    .selectOption("chill");
-  await parts
-    .nth(0)
-    .getByLabel("Reviewed quest", { exact: true })
-    .selectOption("day_tiny_discovery_chill_v1");
-  await page
-    .getByLabel("Find a reviewed quest", { exact: true })
-    .fill("no matching quest fixture");
-  await expect(page.getByRole("status")).toContainText("0 matching quests");
+  await expect(parts).toHaveCount(2);
   await expect(
-    parts.nth(0).getByLabel("Reviewed quest", { exact: true }),
-  ).toHaveValue("day_tiny_discovery_chill_v1");
-  await page.getByLabel("Find a reviewed quest", { exact: true }).fill("");
-  await page
-    .getByLabel("Filter quest intensity", { exact: true })
-    .selectOption("");
-  await page.getByRole("button", { name: "Add part", exact: true }).click();
+    parts.nth(0).getByLabel("Part title", { exact: true }),
+  ).toBeDisabled();
+  await expect(parts.nth(0)).toContainText("Three Things You Never Noticed");
+  await expect(
+    page.getByRole("button", { name: /Choose a quest|Change quest|Add part/ }),
+  ).toHaveCount(0);
   await parts
     .nth(1)
     .getByLabel("Part title", { exact: true })
     .fill("Build on it");
-  await parts
-    .nth(1)
-    .getByLabel("Reviewed quest", { exact: true })
-    .selectOption("day_pitch_swap_bold_v1");
+  await openPartOptions(parts.nth(1));
   await parts
     .nth(1)
     .getByLabel("Prerequisite", { exact: true })
@@ -241,6 +241,7 @@ test("Series search keeps selections and editing cannot orphan or reorder a prer
     .nth(1)
     .getByLabel("Why is that part required?", { exact: true })
     .fill("Use the discovery from the first part.");
+  await openPartOptions(parts.nth(0));
   await expect(
     page.getByRole("button", { name: "Remove part 1", exact: true }),
   ).toBeDisabled();
@@ -250,12 +251,23 @@ test("Series search keeps selections and editing cannot orphan or reorder a prer
   await expect(
     page.getByRole("button", { name: "Move part 2 up", exact: true }),
   ).toBeDisabled();
+  // Part 2 is being filmed, so it cannot be dropped either.
+  await expect(
+    page.getByRole("button", { name: "Remove part 2", exact: true }),
+  ).toBeDisabled();
+  await reviewSeries(page);
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page).toHaveURL(seriesUrl);
   await expect(
     page.getByRole("heading", { name: "A linked story", exact: true }),
   ).toBeVisible();
+  await expect(page.locator(".series-part").nth(1)).toContainText(
+    "Requires an earlier part: Use the discovery from the first part.",
+  );
   await page.reload();
   await page.getByRole("link", { name: "Edit series", exact: true }).click();
+  await reachSeriesParts(page);
+  await openPartOptions(parts.nth(1));
   await expect(
     parts.nth(1).getByLabel("Why is that part required?", { exact: true }),
   ).toHaveValue("Use the discovery from the first part.");
@@ -263,34 +275,83 @@ test("Series search keeps selections and editing cannot orphan or reorder a prer
     .nth(1)
     .getByLabel("Prerequisite", { exact: true })
     .selectOption("");
-  await page
-    .getByRole("button", { name: "Move part 2 up", exact: true })
-    .click();
+  // The source quest stays Part 1 whatever happens to later parts.
   await expect(
-    parts.nth(0).getByLabel("Part title", { exact: true }),
-  ).toHaveValue("Build on it");
-  await page
-    .getByRole("button", { name: "Remove part 2", exact: true })
-    .click();
-  await expect(parts).toHaveCount(1);
+    page.getByRole("button", { name: "Move part 2 up", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Remove part 2", exact: true }),
+  ).toBeDisabled();
+  // Canceling an attempt retains its attribution and part identity.
+  await page.evaluate(
+    ({ key, runId }) => {
+      const data = JSON.parse(localStorage.getItem(key)!);
+      const run = data.runs.find((item: { id: string }) => item.id === runId);
+      run.status = "abandoned";
+      localStorage.setItem(key, JSON.stringify(data));
+    },
+    { key: DEMO_DATA_KEY, runId: second },
+  );
+  await page.goto(`${seriesUrl}/edit`);
+  // The unsaved edit resumes where it left off: on the parts step.
+  await expect(page.locator(".series-editor-footnote")).toContainText(
+    "Your draft was restored.",
+  );
+  await expect(parts).toHaveCount(2);
+  await openPartOptions(parts.nth(1));
+  await expect(
+    parts.nth(1).getByLabel("Prerequisite", { exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: "Remove part 2", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Move part 2 up", exact: true }),
+  ).toBeDisabled();
+  await expect(parts.nth(1)).toContainText("This part has a saved attempt");
+  await parts
+    .nth(1)
+    .getByLabel("Part title", { exact: true })
+    .fill("Try again later");
+  await reviewSeries(page);
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "A linked story", exact: true }),
   ).toBeVisible();
   await page.reload();
-  await expect(page.locator(".series-part")).toHaveCount(1);
+  await expect(page.locator(".series-part")).toHaveCount(2);
+  await expect(page.locator(".series-part").nth(1)).toContainText(
+    "Try again later",
+  );
+  const canceled = await page.evaluate(
+    ({ key, runId }) =>
+      JSON.parse(localStorage.getItem(key)!).runs.find(
+        (run: { id: string }) => run.id === runId,
+      ),
+    { key: DEMO_DATA_KEY, runId: second },
+  );
+  expect(canceled.series.partTitle).toBe("Part 2");
+  expect(canceled.series.position).toBe(2);
 });
 
 test("business registration is reviewed before available videos and requests are enabled", async ({
   page,
 }) => {
-  await openDemo(page, "/business");
+  await openDemo(page, "/onboarding");
+  await page.getByRole("radio", { name: /Brand account/ }).check();
+  await page
+    .getByRole("button", { name: "Continue to brand setup", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", {
       name: "Start with your business profile",
       exact: true,
     }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Set up business profile", exact: true })
+    .click();
+  await expect(page.getByLabel("Business name", { exact: true })).toBeFocused();
   await page
     .getByLabel("Business name", { exact: true })
     .fill("Sidequest audit business");
@@ -443,13 +504,21 @@ test("creator, business and Series editor failures have working local retry acti
   await expect(
     page.getByRole("button", { name: "Edit profile", exact: true }),
   ).toBeVisible();
+  await page.goto("/account");
+  await page.getByRole("radio", { name: /^Brand account/ }).check();
+  await page
+    .getByRole("button", { name: "Save account type", exact: true })
+    .click();
+  await expect(
+    page.getByText("Account type saved.", { exact: true }),
+  ).toBeVisible();
   await page.goto("/business");
   await expect(
-    page.getByRole("button", { name: "Retry workspace", exact: true }),
+    page.getByRole("button", { name: "Retry account access", exact: true }),
   ).toBeVisible();
   await page.evaluate(() => Reflect.set(window, "__auditReadRetry", true));
   await page
-    .getByRole("button", { name: "Retry workspace", exact: true })
+    .getByRole("button", { name: "Retry account access", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Business workspace", exact: true }),
@@ -463,6 +532,9 @@ test("creator, business and Series editor failures have working local retry acti
     .getByRole("button", { name: "Retry series editor", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Start a series", exact: true }),
+    page.getByRole("heading", {
+      name: "A series starts with a quest you did.",
+      exact: true,
+    }),
   ).toBeVisible();
 });

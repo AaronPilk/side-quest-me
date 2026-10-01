@@ -11,6 +11,7 @@ import { useCommunity, money, words } from "../components/Community";
 import { Button, Empty, Loading, Notice, PageTitle } from "../components/ui";
 import { creatorEarnings } from "../lib/creator-earnings";
 import { DEMO } from "../lib/auth";
+import { hasBusinessWorkspace } from "../../shared/account";
 import Perks from "./Perks";
 import "../rewards-design.css";
 
@@ -224,15 +225,17 @@ export default function Rewards() {
                     advertising permission is granted.
                   </Empty>
                 )}
-                <Link className="rewards-next" to="/business">
-                  <span>
-                    <strong>Here on behalf of a business?</strong>
-                    <small>
-                      Manage your licensing requests in Business workspace.
-                    </small>
-                  </span>
-                  <ArrowUpRight size={20} />
-                </Link>
+                {me.data && hasBusinessWorkspace(me.data) && (
+                  <Link className="rewards-next" to="/business">
+                    <span>
+                      <strong>Here on behalf of a business?</strong>
+                      <small>
+                        Manage your licensing requests in Business workspace.
+                      </small>
+                    </span>
+                    <ArrowUpRight size={20} />
+                  </Link>
+                )}
               </>
             )}
             <p className="fine-print rewards-separation">

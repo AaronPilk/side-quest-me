@@ -48,6 +48,8 @@ jobs:
           SIDEQUEST_ORIGIN: ${{ vars.SIDEQUEST_ORIGIN }}
           SIDEQUEST_NATIVE_ORIGIN: ${{ vars.SIDEQUEST_NATIVE_ORIGIN }}
           SIDEQUEST_AREA: ${{ vars.SIDEQUEST_AREA }}
+          AI_QUEST_PROVIDER: ${{ vars.AI_QUEST_PROVIDER }}
+          AI_QUEST_MODEL: ${{ vars.AI_QUEST_MODEL }}
       - name: Build configured target
         run: npm run build
         env:

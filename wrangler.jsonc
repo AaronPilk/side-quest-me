@@ -77,6 +77,14 @@
   ],
   "ratelimits": [
     {
+      "name": "AI_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": {
+        "limit": 3,
+        "period": 60,
+      },
+    },
+    {
       "name": "API_RATE_LIMITER",
       "namespace_id": "1001",
       "simple": {

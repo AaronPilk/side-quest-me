@@ -4,6 +4,8 @@ import { DEFAULT_PREFERENCES } from "../shared/domain";
 async function startSurvey(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "Find my first quest" }).click();
+  await page.getByRole("radio", { name: /^Personal account/ }).check();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("button", { name: "Skip for now" }).click();
 }
 async function storedProfile(page: Page) {
@@ -178,12 +180,58 @@ test("manual summary review, immediate removal and error feedback preserve separ
   });
 });
 
-test("profile setup returns to the exact selected quest after Back, Cancel, completion and refresh", async ({
+test("a first-run account reaches the account choice from Create before any preference question", async ({
   page,
 }) => {
   await page.addInitScript(() =>
     sessionStorage.setItem("sq-demo-started", "1"),
   );
+  const target = "/create?template=date_pit_crew_chill_v1";
+  await page.goto(target);
+  await page.getByRole("button", { name: "Friends", exact: true }).click();
+  await page
+    .getByRole("link", { name: "Make it your kind of quest", exact: false })
+    .click();
+  await expect(page.getByText("Your account", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Make Sidequest yours." }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
+  await page
+    .getByRole("link", { name: "Make it your kind of quest", exact: false })
+    .click();
+  await page.getByRole("radio", { name: /^Personal account/ }).check();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByText("Optional context", { exact: true }),
+  ).toBeVisible();
+  expect((await storedProfile(page)).accountType).toBe("personal");
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await expect(page.getByText("1 of 10", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
+  // With a stated account type the same nudge opens the direct editor.
+  await page
+    .getByRole("link", { name: "Make it your kind of quest", exact: false })
+    .click();
+  await expect(page.getByText("1 of 11", { exact: true })).toBeVisible();
+});
+
+test("guided preferences return to the exact selected quest after Back, saving, completion and refresh", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    sessionStorage.setItem("sq-demo-started", "1"),
+  );
+  // State the account type first: the direct editor is for accounts that
+  // already made that choice; first-run accounts start with it.
+  await page.goto("/onboarding");
+  await page.getByRole("radio", { name: /^Personal account/ }).check();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByText("Optional context", { exact: true }),
+  ).toBeVisible();
   const target =
     "/create?template=date_pit_crew_chill_v1&from=55555555-5555-4555-8555-555555555555";
   await page.goto(target);
@@ -200,16 +248,27 @@ test("profile setup returns to the exact selected quest after Back, Cancel, comp
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
   await enterProfile();
-  await page.getByRole("button", { name: "Skip for now", exact: true }).click();
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByText("1 of 11", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", {
+      name: "No preference for this question",
+      exact: true,
+    })
+    .click();
+  await page.getByRole("button", { name: "Save & leave", exact: true }).click();
   await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
   await enterProfile();
-  await page.getByRole("button", { name: "Skip for now", exact: true }).click();
-  for (let step = 0; step < 10; step++)
+  await expect(page.getByText("2 of 11", { exact: true })).toBeVisible();
+  await page.reload();
+  for (let step = 1; step < 11; step++) {
+    await expect(
+      page.getByText(`${step + 1} of 11`, { exact: true }),
+    ).toBeVisible();
     await page
       .getByRole("button", { name: "Skip this question", exact: true })
       .click();
-  await page.getByRole("button", { name: "Looks right", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Looks right" }).click();
   await expect(page).toHaveURL(`http://127.0.0.1:5173${target}`);
   await page.reload();
   await expect(

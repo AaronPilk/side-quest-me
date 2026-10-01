@@ -1,4 +1,14 @@
+import { useRef } from "react";
 import { Link, Navigate } from "react-router-dom";
+import {
+  ArrowUpRight,
+  BriefcaseBusiness,
+  FileVideo,
+  PenLine,
+  Settings2,
+  UserRound,
+} from "lucide-react";
+import { hasBusinessWorkspace } from "../../shared/account";
 import type { CommunityReport, LicenseOffer } from "../../shared/community";
 import { Button, Empty, Loading, Notice, PageTitle } from "../components/ui";
 import { LicenseTermsView } from "../components/LicenseTermsForm";
@@ -10,6 +20,7 @@ import {
   words,
 } from "../components/Community";
 import { DiscoverPostCard } from "./Discover";
+import "./business-workspace.css";
 
 function FulfillmentForm({
   offer,
@@ -166,7 +177,7 @@ export default function CommunityStudio() {
       to={
         me.data.roles.includes("operator")
           ? "/admin"
-          : me.data.brand
+          : hasBusinessWorkspace(me.data)
             ? "/business"
             : "/rewards?tab=offers"
       }
@@ -181,6 +192,7 @@ export function CommunityAdmin() {
 }
 function WorkspacePage({ workspace }: { workspace: Workspace }) {
   const me = useCommunity("me");
+  const profileForm = useRef<HTMLDetailsElement>(null);
   const operator = useCommunity(
     "operator",
     {},
@@ -219,7 +231,11 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
     );
   const brand = me.data.brand;
   return (
-    <>
+    <div
+      className={
+        workspace === "business" ? "business-workspace" : "admin-workspace"
+      }
+    >
       <PageTitle
         eyebrow="CLEAR TERMS. GOOD STORIES."
         title={workspace === "admin" ? "Admin" : "Business workspace"}
@@ -228,20 +244,40 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
           ? "Review approvals, reports, and recorded payment evidence."
           : "Find videos, agree usage terms, and manage your business’s licenses."}
       </PageTitle>
-      <div className="community-links">
-        <Link to="/settings">Settings</Link>
-        <Link to="/rewards?tab=offers">Your creator offers</Link>
-        <Link to="/profile">Your public profile</Link>
-        <Link to="/originals/new">Draft an original quest</Link>
+      <nav
+        className="community-links workspace-links"
+        aria-label="Workspace shortcuts"
+      >
+        <Link to="/settings">
+          <Settings2 size={16} /> Settings
+        </Link>
+        <Link to="/rewards?tab=offers">
+          <FileVideo size={16} /> Your creator offers
+        </Link>
+        <Link to="/profile">
+          <UserRound size={16} /> Your public profile
+        </Link>
+        <Link to="/originals/new">
+          <PenLine size={16} /> Draft an original quest
+        </Link>
         {workspace === "admin" && me.data.roles.includes("operator") && (
           <Link to="/operator">Funded quests & rewards tools</Link>
         )}
-      </div>
+      </nav>
       {workspace === "business" && (
         <section
-          className="community-card"
+          className="community-card business-next-step"
           aria-labelledby="business-next-step"
         >
+          <div className="business-identity">
+            <span className="business-workspace-icon">
+              <BriefcaseBusiness size={25} />
+            </span>
+            <div>
+              <span className="eyebrow">{brand?.name || "YOUR BUSINESS"}</span>
+              {brand && <StateTag state={brand.state} />}
+            </div>
+          </div>
           <h2 id="business-next-step">
             {brand?.state === "approved"
               ? "Find your next story"
@@ -256,11 +292,35 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
                 ? "An operator will review your business before licensing requests become available. Your existing requests remain below."
                 : "Tell us about your business, then submit it for review. Once approved, you can propose terms on videos that creators make available."}
           </p>
-          {brand?.state === "approved" && (
-            <a className="button" href="#brand-videos">
-              Explore available videos
-            </a>
-          )}
+          <div className="business-next-actions">
+            {brand?.state === "approved" && (
+              <a className="button" href="#brand-videos">
+                Explore available videos <ArrowUpRight size={18} />
+              </a>
+            )}
+            <Button
+              secondary={brand?.state === "approved"}
+              onClick={() => {
+                if (!profileForm.current) return;
+                profileForm.current.open = true;
+                profileForm.current.scrollIntoView({
+                  block: "start",
+                  behavior: "smooth",
+                });
+                profileForm.current
+                  .querySelector<HTMLInputElement>('input[name="name"]')
+                  ?.focus({ preventScroll: true });
+              }}
+            >
+              {brand?.state === "approved"
+                ? "Edit business profile"
+                : brand?.state === "pending"
+                  ? "Review submitted details"
+                  : brand
+                    ? "Update business profile"
+                    : "Set up business profile"}
+            </Button>
+          </div>
           <p className="support">
             Payments and permissions are verified manually before licensed
             downloads become available. Ad launching and sales tracking are not
@@ -269,8 +329,16 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
         </section>
       )}
       {workspace === "business" && (
-        <section className="section">
-          <h2>Your business’s licensing requests</h2>
+        <section
+          className="section business-requests"
+          aria-labelledby="business-requests-heading"
+        >
+          <h2 id="business-requests-heading">
+            Your business’s licensing requests
+          </h2>
+          <p className="support">
+            Review proposals and accepted terms for each exact video.
+          </p>
           {me.data.offers.some((offer) => offer.brandId === brand?.id) ? (
             <div className="community-list">
               {me.data.offers
@@ -301,7 +369,9 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
       )}
       {workspace === "business" && (
         <details
-          className="community-panel"
+          ref={profileForm}
+          id="business-profile"
+          className="community-panel business-profile-form"
           open={!brand || brand.state === "rejected"}
         >
           <summary>
@@ -320,6 +390,12 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
             proposals. Contact details are kept out of public creator and post
             responses.
           </p>
+          {brand?.state === "approved" && (
+            <Notice>
+              Submitting changes sends your business back for review. New
+              licensing proposals pause until it is approved again.
+            </Notice>
+          )}
           <form
             className="community-form"
             key={brand?.version ?? "new"}
@@ -378,8 +454,16 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
       )}
       {action.feedback}
       {workspace === "business" && brand?.state === "approved" && (
-        <section className="section" id="brand-videos">
-          <h2>Videos open to brand inquiries</h2>
+        <section
+          className="section business-available"
+          id="brand-videos"
+          aria-labelledby="brand-videos-heading"
+        >
+          <h2 id="brand-videos-heading">Videos open to brand inquiries</h2>
+          <p className="support">
+            Creators have chosen to make these videos available. Open a video to
+            propose its usage terms.
+          </p>
           {businessFeed.error ? (
             <Notice error>
               {businessFeed.error}{" "}
@@ -636,6 +720,6 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
           )}
         </section>
       )}
-    </>
+    </div>
   );
 }

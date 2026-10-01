@@ -1,74 +1,41 @@
 import { expect, test } from "@playwright/test";
 import { selectDemoPersona } from "./demo-persona-helper";
+import {
+  openPartOptions,
+  reachSeriesParts,
+  reviewSeries,
+} from "./series-authoring-helpers";
+import {
+  acceptQuest,
+  createNextPart,
+  markRunFinalized,
+  turnIntoSeries,
+} from "./series-growth-helpers";
 
 test.use({ actionTimeout: 15_000 });
-
-test("Series authoring, private drafts, prerequisites, following, and participant resume survive refresh", async ({
-  page,
-}) => {
+test.beforeEach(async ({ page }) => {
   await page.addInitScript(() =>
     sessionStorage.setItem("sq-demo-started", "1"),
   );
-  await page.goto("/series/new");
-  await expect(
-    page.getByRole("heading", { name: "Start a series", exact: true }),
-  ).toBeVisible();
-  await page
-    .getByLabel("Series title", { exact: true })
-    .fill("Three small stories");
-  await page
-    .getByLabel("Premise", { exact: true })
-    .fill(
-      "Start with a menu draft, then build on the result or take an independent detour.",
-    );
-  const parts = page.locator(".series-edit-part");
-  await parts
-    .nth(0)
-    .getByLabel("Part title", { exact: true })
-    .fill("The opening menu draft");
-  await parts
-    .nth(0)
-    .getByLabel("Reviewed quest", { exact: true })
-    .selectOption("date_menu_draft_chill_v1");
-  await page.getByRole("button", { name: "Add part", exact: true }).click();
-  await parts
-    .nth(1)
-    .getByLabel("Part title", { exact: true })
-    .fill("Use the first result");
-  await parts
-    .nth(1)
-    .getByLabel("Reviewed quest", { exact: true })
-    .selectOption("day_tiny_discovery_chill_v1");
-  await parts
-    .nth(1)
-    .getByLabel("Prerequisite", { exact: true })
-    .selectOption({ index: 1 });
-  await parts
-    .nth(1)
-    .getByLabel("Why is that part required?", { exact: true })
-    .fill("Bring your first menu choice to inspire the next discovery.");
-  await parts
-    .nth(1)
-    .getByLabel("Include this part when the series is published")
-    .check();
-  await page.getByRole("button", { name: "Add part", exact: true }).click();
-  await parts
-    .nth(2)
-    .getByLabel("Part title", { exact: true })
-    .fill("An independent broadcast");
-  await parts
-    .nth(2)
-    .getByLabel("Reviewed quest", { exact: true })
-    .selectOption("night_pocket_radio_bold_v1");
-  await parts
-    .nth(2)
-    .getByLabel("Include this part when the series is published")
-    .check();
-  await page.getByRole("button", { name: "Save draft", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Three small stories", exact: true }),
-  ).toBeVisible();
-  const seriesUrl = page.url();
+});
+
+test("Series grown from a quest: private drafts, prerequisites, publication, following, and participant resume survive refresh", async ({
+  page,
+}) => {
+  // The author does the quest three times; each attempt becomes a part.
+  const first = await acceptQuest(page);
+  await markRunFinalized(page, first);
+  await page.reload();
+  const seriesUrl = await turnIntoSeries(page, "Three small stories");
+  const second = await createNextPart(page, 2);
+  await markRunFinalized(page, second);
+  await page.goto(seriesUrl);
+  const third = await createNextPart(page, 3);
+  await markRunFinalized(page, third);
+  await page.goto(seriesUrl);
+  await expect(page.locator(".series-progress")).toContainText(
+    "3 parts completed.",
+  );
   await page.reload();
   await expect(page.getByText("PRIVATE DRAFT", { exact: true })).toBeVisible();
   await selectDemoPersona(page, "viewer");
@@ -76,13 +43,60 @@ test("Series authoring, private drafts, prerequisites, following, and participan
   await expect(page.getByRole("alert")).toContainText(
     "This series is not available.",
   );
+  // The editor shapes the story (planned, prerequisites, titles) but adds no quests.
   await selectDemoPersona(page, "creator");
   await page.goto(seriesUrl);
   await page.getByRole("link", { name: "Edit series", exact: true }).click();
   await page
+    .getByLabel("Premise", { exact: true })
+    .fill(
+      "Start with a tiny discovery, then build on the result or take an independent detour.",
+    );
+  await reachSeriesParts(page, "planned");
+  const parts = page.locator(".series-edit-part");
+  await expect(parts).toHaveCount(3);
+  await expect(
+    page.getByRole("button", { name: "Add part", exact: true }),
+  ).toHaveCount(0);
+  await parts
+    .nth(1)
+    .getByLabel("Part title", { exact: true })
+    .fill("Use the first result");
+  await openPartOptions(parts.nth(1));
+  await parts
+    .nth(1)
+    .getByLabel("Prerequisite", { exact: true })
+    .selectOption({ index: 1 });
+  await parts
+    .nth(1)
+    .getByLabel("Why is that part required?", { exact: true })
+    .fill("Bring your first discovery to inspire the next one.");
+  await parts
+    .nth(2)
+    .getByLabel("Part title", { exact: true })
+    .fill("An independent detour");
+  for (const index of [0, 1, 2]) {
+    await openPartOptions(parts.nth(index));
+    await parts
+      .nth(index)
+      .getByLabel("Include this part when the series is published")
+      .check();
+  }
+  await reviewSeries(page);
+  await page
     .getByRole("button", { name: "Publish series", exact: true })
     .click();
+  await expect(page).toHaveURL(seriesUrl);
   await expect(page.getByText("3 PART STORY", { exact: true })).toBeVisible();
+  // A published planned story keeps its part count.
+  await expect(
+    page.getByRole("button", { name: "Create Part 4", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText("A published planned story keeps its part count.", {
+      exact: false,
+    }),
+  ).toBeVisible();
   await selectDemoPersona(page, "viewer");
   await page.goto(seriesUrl);
   const cards = page.locator(".series-part");
@@ -137,45 +151,27 @@ test("Series authoring, private drafts, prerequisites, following, and participan
   await expect(
     page.getByRole("link", { name: "Continue your attempt", exact: true }),
   ).toBeVisible();
+  // The author's own progress is separate from the viewer's.
   await selectDemoPersona(page, "creator");
   await page.goto(seriesUrl);
   await expect(
     page.getByRole("link", { name: "Continue your attempt", exact: true }),
   ).toHaveCount(0);
-  await expect(
-    page.getByRole("link", { name: "Start series", exact: true }),
-  ).toBeVisible();
+  await expect(page.locator(".series-progress")).toContainText(
+    "Series complete.",
+  );
 });
 
 test("Ongoing Series publishes later parts with one Activity update and no invented final count", async ({
   page,
 }) => {
-  await page.addInitScript(() =>
-    sessionStorage.setItem("sq-demo-started", "1"),
-  );
-  await page.goto("/series/new");
+  const first = await acceptQuest(page);
+  await markRunFinalized(page, first);
+  await page.reload();
+  const url = await turnIntoSeries(page, "A story still growing");
   await page
-    .getByLabel("Series title", { exact: true })
-    .fill("A story still growing");
-  await page
-    .getByLabel("Premise", { exact: true })
-    .fill("Independent adventures, published as they become ready.");
-  await page
-    .getByLabel("Story format", { exact: true })
-    .selectOption("ongoing");
-  const parts = page.locator(".series-edit-part");
-  await parts
-    .nth(0)
-    .getByLabel("Part title", { exact: true })
-    .fill("First available chapter");
-  await parts
-    .nth(0)
-    .getByLabel("Reviewed quest", { exact: true })
-    .selectOption("day_tiny_discovery_chill_v1");
-  await page
-    .getByRole("button", { name: "Publish series", exact: true })
+    .getByRole("button", { name: "Publish Part 1", exact: true })
     .click();
-  const url = page.url();
   await expect(
     page.getByText("1 PARTS AVAILABLE · ONGOING", { exact: true }),
   ).toBeVisible();
@@ -189,22 +185,11 @@ test("Ongoing Series publishes later parts with one Activity update and no inven
   ).toBeVisible();
   await selectDemoPersona(page, "creator");
   await page.goto(url);
-  await page.getByRole("link", { name: "Edit series", exact: true }).click();
-  await page.getByRole("button", { name: "Add part", exact: true }).click();
-  await parts
-    .nth(1)
-    .getByLabel("Part title", { exact: true })
-    .fill("A second chapter");
-  await parts
-    .nth(1)
-    .getByLabel("Reviewed quest", { exact: true })
-    .selectOption("day_pitch_swap_bold_v1");
-  await parts
-    .nth(1)
-    .getByLabel("Include this part when the series is published")
-    .check();
+  const second = await createNextPart(page, 2);
+  await markRunFinalized(page, second);
+  await page.goto(url);
   await page
-    .getByRole("button", { name: "Publish series", exact: true })
+    .getByRole("button", { name: "Publish Part 2", exact: true })
     .click();
   await expect(
     page.getByText("2 PARTS AVAILABLE · ONGOING", { exact: true }),

@@ -30,6 +30,7 @@ import {
 } from "../components/ui";
 import Capture from "../components/Capture";
 import { QuestProgress } from "../components/QuestProgress";
+import { AiQuestAssist } from "../components/AiQuestAssist";
 import { hasReadyVideo, SESSION_DRAFT_SLOT } from "../lib/recording-session";
 import { AuthVideo, fetchMediaBlob } from "../components/PrivateMedia";
 export default function ActiveQuest() {
@@ -262,13 +263,31 @@ function ActiveQuestRun({ id }: { id: string }) {
           <p>{run.series.partTitle}</p>
           <Link className="button secondary" to={`/series/${run.series.id}`}>
             {run.status === "finalized"
-              ? "Continue your series"
+              ? `Open series · Create Part ${run.series.position + 1}`
               : "View your series progress"}
             <ArrowRight size={17} />
           </Link>
           <p className="fine-print">
-            Each part has its own attempt. Your videos stay private until you
-            publish them.
+            Each part is the same quest, filmed again. Your videos stay private
+            until you publish them.
+          </p>
+        </section>
+      )}
+      {!run.series && !abandoned && (
+        <section
+          className="series-attempt-link"
+          aria-label="Continue this story"
+        >
+          <h2>This could be part one.</h2>
+          <p>
+            Want to do this quest again as Part 2? Turn it into a series. Your
+            saved video and progress stay with it.
+          </p>
+          <Link className="button secondary" to={`/series/new?run=${run.id}`}>
+            Turn into a series <ArrowRight size={17} />
+          </Link>
+          <p className="fine-print">
+            Starts private. You choose when to publish each part.
           </p>
         </section>
       )}
@@ -565,6 +584,9 @@ function ActiveQuestRun({ id }: { id: string }) {
             </details>
           )}
         </details>
+      )}
+      {!done && !abandoned && (
+        <AiQuestAssist quest={run.quest} outing={run.outing} />
       )}
       {(done || abandoned) && recordingCard}
       {!done && !abandoned && (

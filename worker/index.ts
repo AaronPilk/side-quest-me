@@ -18,6 +18,7 @@ import { assessViability } from "../shared/viability";
 import { nearbyQuerySchema } from "../shared/events";
 import { searchNearbyEvents } from "./events";
 import { publishedQuests } from "./catalog";
+import { registerAiQuestPublic, registerAiQuestPrivate } from "./ai-quest";
 import { recommend, ineligibilityReasons } from "../shared/recommend";
 import {
   ApiError,
@@ -170,6 +171,7 @@ app.post("/api/events/nearby", async (c) => {
     );
   }
 });
+registerAiQuestPublic(app);
 app.get("/api/quests/:templateId", async (c) => {
   const db = serviceDb(c.env);
   let query = db
@@ -195,7 +197,7 @@ app.use("/api/*", async (c, next) => {
     COMMUNITY_PRIVATE_ROUTE,
     SOCIAL_PRIVATE_ROUTE,
     SERIES_PRIVATE_ROUTE,
-    /^\/api\/(me|wallet|quests|quests\/recommend|quests\/viability|quest-runs|quest-runs\/active|rewards|redemptions|operator)$/,
+    /^\/api\/(me|wallet|quests|quests\/recommend|quests\/viability|quests\/ai-assist|quests\/ai-draft|quest-runs|quest-runs\/active|rewards|redemptions|operator)$/,
     /^\/api\/quest-runs\/[^/]+(?:\/(abandon|uploads|clips|compose|complete|renders|share|share-links|media))?$/,
     /^\/api\/media\/[^/]+(?:\/(upload|finalize|playback))?$/,
     /^\/api\/render-jobs\/[^/]+$/,
@@ -257,6 +259,7 @@ app.use("/api/*", async (c, next) => {
 registerCommunityPrivate(app);
 registerSocialPrivate(app);
 registerSeriesPrivate(app);
+registerAiQuestPrivate(app);
 async function me(c: AppContext) {
   const db = c.get("serviceDb");
   const init = await db.rpc("sq_upsert_profile", {
@@ -273,7 +276,7 @@ async function me(c: AppContext) {
       .get("userDb")
       .from("profiles")
       .select(
-        "display_name,timezone,locale,preferences,imported_summary,onboarding_complete",
+        "display_name,timezone,locale,preferences,imported_summary,onboarding_complete,account_type",
       )
       .eq("id", c.get("actor"))
       .single(),
@@ -300,8 +303,12 @@ async function me(c: AppContext) {
 app.get("/api/me", async (c) => {
   const [current, completed] = await Promise.all([
     me(c),
-    c.get("userDb").from("quest_runs").select("id", { count: "exact", head: true })
-      .eq("owner_id", c.get("actor")).eq("status", "finalized")
+    c
+      .get("userDb")
+      .from("quest_runs")
+      .select("id", { count: "exact", head: true })
+      .eq("owner_id", c.get("actor"))
+      .eq("status", "finalized")
       .in("reward_decision->>reason", COMPLETION_REASONS),
   ]);
   if (completed.error) dbError(completed.error.message);
@@ -313,6 +320,7 @@ app.patch("/api/me", async (c) => {
     .get("userDb")
     .from("profiles")
     .update({
+      ...(p.accountType !== undefined ? { account_type: p.accountType } : {}),
       ...(p.displayName !== undefined ? { display_name: p.displayName } : {}),
       ...(p.timezone !== undefined ? { timezone: p.timezone } : {}),
       ...(p.locale !== undefined ? { locale: p.locale } : {}),

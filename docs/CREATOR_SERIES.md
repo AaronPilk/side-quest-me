@@ -48,30 +48,49 @@ transfer or payout controls. The agreed platform fee is displayed separately;
 the app does not invent a net payout calculation. Perks retains quest points,
 reward inventory, and truthful demo availability. Points do not convert to cash.
 
-## Authoring a Series
+## Growing a Series from a quest
 
-Create → Start a series opens the authoring flow. A Series has a stable ID, title,
-premise, selectable cover, author, finite/ongoing type, and ordered parts. Each part
-references a published, reviewed quest version and stores that version's content.
-Original quests still need approval through the existing review process first.
+A Series is not written from scratch. It grows out of a quest a person already
+did: find a quest in Create, accept it, film it, then choose **Turn into a
+series** on that quest or in the journal. That one screen is prefilled with the
+quest's title and hook, and saving it makes the finished quest Part 1 of a
+private series. Nothing about the original attempt changes: its clips, render,
+rewards, and any publication stay exactly as they were.
 
-Drafts can be reordered and edited. A prerequisite must reference an earlier part
-and explain why it is needed. Independent parts remain independently available.
-A finite Series publishes all its planned parts; an ongoing Series can publish
-one or more parts and add later parts as drafts. Previously published parts keep
-their identity, order, title, quest version, and prerequisite rule. A changed or
-withdrawn underlying quest version becomes unavailable with an explanation.
-It does not silently change an already authored part or accepted attempt.
+Each later part is the same quest, filmed again. On the series page the author
+chooses **Create Part N**, which adds a private part for the same reviewed quest
+version and opens Create to accept it with the author's own outing. The attempt
+is stamped as that part, so the series page and journal show which part a video
+belongs to. The author may film the next part of their own series before
+anything is published; nobody else can see or start an unpublished part. Doing
+the same quest again inside its family cooldown earns no second award, which the
+run reports honestly.
+
+There is no "Create a series" or "Add part" entry anywhere, and `/series/new`
+without a quest explains that a series starts with a quest you did. The editor
+still shapes the story: title, premise, cover, growing or planned format, part
+titles, prerequisites, and which parts are included when the series is published.
+It never adds an unrelated quest. Part 1 keeps its locked source identity, and a
+part the author has already filmed (or is filming) cannot be removed.
+
+A growing (ongoing) series goes public with its first published part; later parts
+stay private until the author publishes each one. **Publish Part N** appears on
+the series page once that part's video is finished. A planned (finite) series
+publishes all of its parts at once and then keeps its part count. Previously
+published parts keep their identity, order, title, quest version, and
+prerequisite rule. A changed or withdrawn underlying quest version becomes
+unavailable with an explanation rather than silently changing an authored part
+or accepted attempt.
 
 The owner can take a Series or part back to draft to stop new starts. Existing
 attempts retain their accepted snapshots. Republishing an already published part
-does not generate another new-part notification. Version checks prevent concurrent
-editors from overwriting each other's changes.
+does not generate another new-part notification. Version checks prevent
+concurrent editors from overwriting each other's changes.
 
 ## Participation and publication
 
-Starting a part opens the existing guided Create flow with its quest and source
-part. The participant supplies their own time, budget, group, setting, and necessary
+Starting a part (Try your own version) opens the existing guided Create flow with
+its quest and source part. The participant supplies their own time, budget, group, setting, and necessary
 permissions. Existing hard boundaries and eligibility checks still apply. The
 server verifies the source part, exact quest version, and any prerequisite before
 stamping the immutable run snapshot. An alternative quest is a standalone attempt.
@@ -98,9 +117,11 @@ parts require their own agreement.
 
 ## Data and configuration
 
-Two additive migrations introduce social identities/follows/photo cleanup and
-authored Series/parts/follows. Both use RLS, deny browser table/RPC privileges,
-and expose narrow service-only functions. The existing profile, quest run,
+Three additive migrations introduce social identities/follows/photo cleanup,
+authored Series/parts/follows, and the grow-from-quest rule
+(`20261001173101_series_grow_from_quest.sql`, which lets an author accept their
+own unpublished part and must run after `20261001173049`). All use RLS, deny
+browser table/RPC privileges, and expose narrow service-only functions. The existing profile, quest run,
 publication, licensing, media, and reward records remain the source of truth.
 Local database tests reconstruct every migration and exercise real transactions,
 permissions, completion retries, source snapshots, and private/public responses.

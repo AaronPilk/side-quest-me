@@ -1,0 +1,132 @@
+.business-workspace {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}
+.business-workspace .page-title {
+  margin-bottom: 22px;
+}
+.workspace-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 28px;
+}
+.workspace-links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--divider);
+  border-radius: 999px;
+  background: white;
+  color: var(--text);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  text-align: center;
+}
+.workspace-links svg {
+  flex-shrink: 0;
+  color: var(--action);
+}
+.business-next-step {
+  padding: clamp(20px, 4vw, 30px);
+  border-radius: 26px;
+  background: linear-gradient(140deg, white, #f2ecff);
+}
+.business-identity {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 22px;
+}
+.business-workspace-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 17px;
+  background: #eae1ff;
+  color: #6240c6;
+}
+.business-identity .eyebrow {
+  display: block;
+  margin-bottom: 5px;
+  overflow-wrap: anywhere;
+}
+.business-identity .community-state {
+  margin: 0;
+}
+.business-next-step h2 {
+  font-size: clamp(1.375rem, 4vw, 1.75rem);
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+}
+.business-next-step > p {
+  line-height: 1.65;
+}
+.business-next-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+.business-next-actions .button {
+  min-width: 0;
+  flex: 1 1 210px;
+  /* The global .button + .button stacking margin would push the second pill down. */
+  margin: 0;
+}
+.business-next-step > .support {
+  margin: 18px 0 0;
+  font-size: 0.75rem;
+}
+.business-requests,
+.business-available {
+  margin-top: 32px;
+}
+.business-requests h2,
+.business-available h2 {
+  font-size: 1.25rem;
+  line-height: 1.35;
+}
+.business-workspace .community-list-link {
+  gap: 12px;
+  align-items: flex-start;
+}
+.business-workspace .community-list-link > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.business-workspace .community-list-link small {
+  margin-top: 7px;
+  line-height: 1.5;
+}
+.business-profile-form,
+.business-available {
+  scroll-margin-top: 24px;
+}
+.business-profile-form > summary {
+  min-height: 44px;
+  align-content: center;
+  font-weight: 650;
+}
+.business-profile-form .community-form {
+  margin-top: 18px;
+}
+@media (max-width: 420px) {
+  .business-workspace .workspace-links a {
+    flex: 1 1 calc(50% - 8px);
+    padding-inline: 10px;
+  }
+  .business-next-actions {
+    flex-direction: column;
+  }
+  .business-next-actions .button {
+    flex-basis: auto;
+    width: 100%;
+  }
+}

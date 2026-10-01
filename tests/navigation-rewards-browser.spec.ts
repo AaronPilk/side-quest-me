@@ -194,19 +194,22 @@ test("five primary destinations work and local identity tools stay in Settings w
     ).toHaveCount(0);
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.locator('.space-menu summary[aria-label="Your space"]').click();
-  await expect(
-    page
-      .locator(".space-menu")
-      .getByRole("link", { name: "Admin", exact: true }),
-  ).toHaveCount(0);
+  await expect(page.locator(".space-menu")).toHaveCount(0);
   await page
-    .locator(".space-menu")
-    .getByRole("link", { name: "Settings", exact: true })
+    .getByRole("navigation", { name: "Primary" })
+    .getByRole("link", { name: "Profile", exact: true })
+    .click();
+  await page
+    .getByRole("link", { name: "Profile settings", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Settings", exact: true }),
   ).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Settings", exact: true })
+      .getByRole("link", { name: /^Admin|Business workspace/ }),
+  ).toHaveCount(0);
   await expect(
     page
       .getByRole("navigation", { name: "Settings", exact: true })

@@ -41,6 +41,12 @@ if (parsed.error)
     ts.flattenDiagnosticMessageText(parsed.error.messageText, "\n"),
   );
 const config = parsed.config;
+const aiProvider = process.env.AI_QUEST_PROVIDER;
+const aiModel = process.env.AI_QUEST_MODEL;
+if (aiProvider && !["openai", "xai", "anthropic"].includes(aiProvider))
+  throw new Error("AI_QUEST_PROVIDER must be openai, xai, or anthropic");
+if (aiModel && !/^[a-zA-Z0-9._-]{1,80}$/.test(aiModel))
+  throw new Error("AI_QUEST_MODEL must be a valid provider model identifier");
 config.account_id = process.env.CLOUDFLARE_ACCOUNT_ID;
 config.name = process.env.SIDEQUEST_WORKER;
 config.main = "../worker/index.ts";
@@ -52,6 +58,8 @@ config.vars = {
   LAUNCH_AREA: process.env.SIDEQUEST_AREA,
   APP_ORIGIN: origin.origin,
   ...(nativeOrigin ? { NATIVE_APP_ORIGIN: nativeOrigin } : {}),
+  ...(aiProvider ? { AI_QUEST_PROVIDER: aiProvider } : {}),
+  ...(aiModel ? { AI_QUEST_MODEL: aiModel } : {}),
 };
 config.r2_buckets = [
   { binding: "MEDIA", bucket_name: process.env.SIDEQUEST_BUCKET },

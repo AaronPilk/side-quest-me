@@ -151,6 +151,7 @@ export function QuestWizard({
   busy,
   error,
   needsProfile,
+  firstRun = false,
 }: {
   outing: Outing;
   update: (patch: Partial<Outing>) => void;
@@ -160,6 +161,10 @@ export function QuestWizard({
   busy: boolean;
   error: string;
   needsProfile: boolean;
+  /** No account type and never onboarded: the nudge opens the full first
+   * onboarding (account choice, optional context, questions) instead of the
+   * direct preference editor. */
+  firstRun?: boolean;
 }) {
   const [progress, setProgress] = useState(() =>
     restoreProgress(outing, targetId),
@@ -772,7 +777,7 @@ export function QuestWizard({
           {needsProfile && (
             <Link
               className="profile-nudge"
-              to="/onboarding"
+              to={firstRun ? "/onboarding" : "/onboarding?preferences=1"}
               onClick={() =>
                 rememberReturnTo(location.pathname + location.search)
               }
@@ -786,8 +791,10 @@ export function QuestWizard({
             </Link>
           )}
           <div className="create-links">
+            <Link to="/originals/new?ai=1" state={{ outing }}>
+              Draft with AI
+            </Link>
             <Link to="/originals/new">Draft an original quest</Link>
-            <Link to="/series/new">Start a series</Link>
             <Link to="/discover">Find inspiration</Link>
           </div>
         </div>

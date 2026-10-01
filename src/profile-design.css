@@ -82,7 +82,16 @@
   min-height: 43px;
   padding: 10px 8px;
   font-size: 14px;
-  border-radius: 12px;
+  border-radius: 999px;
+}
+.profile-preferences-shortcut {
+  width: 100%;
+  min-height: 46px;
+  margin: 0 0 14px;
+  gap: 10px;
+}
+.profile-preferences-shortcut svg:last-child {
+  margin-left: auto;
 }
 .social-edit-panel {
   margin-bottom: 20px;
@@ -185,6 +194,61 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+.social-private-space > .support svg {
+  flex-shrink: 0;
+}
+.social-profile-recovery {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+.social-profile-recovery .button {
+  width: auto;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 10px 16px;
+}
+.social-private-links {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 24px;
+}
+.social-private-links .button,
+.social-private-empty .button {
+  justify-content: flex-start;
+  gap: 10px;
+  margin: 0;
+  min-width: 0;
+  min-height: 48px;
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 0.9375rem;
+}
+.social-private-links .button span,
+.social-private-empty .button span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.social-private-links .button svg,
+.social-private-empty .button svg,
+.social-profile-recovery .button svg {
+  flex-shrink: 0;
+}
+.social-private-space .community-list-link {
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 10px 14px;
+}
+.social-private-space .community-list-link strong {
+  flex: 1 1 11rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.social-private-space .community-list-link > span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .social-private-space h2 {
   font-size: 20px;

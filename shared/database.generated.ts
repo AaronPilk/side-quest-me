@@ -425,6 +425,7 @@ export interface Database {
           account_status: string
           created_at: string
           updated_at: string
+          account_type: string | null
         }
         Insert: {
           id: string
@@ -438,6 +439,7 @@ export interface Database {
           account_status?: string
           created_at?: string
           updated_at?: string
+          account_type?: string | null
         }
         Update: {
           id?: string
@@ -451,6 +453,7 @@ export interface Database {
           account_status?: string
           created_at?: string
           updated_at?: string
+          account_type?: string | null
         }
         Relationships: [{"columns":["auth_user_id"],"isOneToOne":true,"foreignKeyName":"profiles_auth_user_id_fkey","referencedColumns":["id"],"referencedRelation":"users"}]
       }
@@ -696,6 +699,8 @@ export interface Database {
           published: boolean
           first_published_at: string | null
           privacy_redacted_at: string | null
+          source_run_id: string | null
+          source_context: Json | null
         }
         Insert: {
           id: string
@@ -710,6 +715,8 @@ export interface Database {
           published?: boolean
           first_published_at?: string | null
           privacy_redacted_at?: string | null
+          source_run_id?: string | null
+          source_context?: Json | null
         }
         Update: {
           id?: string
@@ -724,8 +731,10 @@ export interface Database {
           published?: boolean
           first_published_at?: string | null
           privacy_redacted_at?: string | null
+          source_run_id?: string | null
+          source_context?: Json | null
         }
-        Relationships: [{"columns":["prerequisite_part_id"],"isOneToOne":false,"foreignKeyName":"quest_series_parts_prerequisite_part_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_series_parts"},{"columns":["series_id"],"isOneToOne":false,"foreignKeyName":"quest_series_parts_series_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_series"},{"columns":["template_id"],"isOneToOne":false,"foreignKeyName":"quest_series_parts_template_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_templates"}]
+        Relationships: [{"columns":["prerequisite_part_id"],"isOneToOne":false,"foreignKeyName":"quest_series_parts_prerequisite_part_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_series_parts"},{"columns":["series_id"],"isOneToOne":false,"foreignKeyName":"quest_series_parts_series_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_series"},{"columns":["source_run_id"],"isOneToOne":false,"foreignKeyName":"quest_series_parts_source_run_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_runs"},{"columns":["template_id"],"isOneToOne":false,"foreignKeyName":"quest_series_parts_template_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_templates"}]
       }
       quest_templates: {
         Row: {

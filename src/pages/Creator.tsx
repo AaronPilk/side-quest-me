@@ -10,6 +10,7 @@ import {
 import {
   BookOpen,
   Camera,
+  ChevronRight,
   Film,
   Grid2X2,
   LockKeyhole,
@@ -32,7 +33,9 @@ import { socialApi } from "../lib/social-api";
 import { api } from "../lib/api";
 import { DEMO } from "../lib/auth";
 import { QuestProgress } from "../components/QuestProgress";
-import { rememberReturnTo } from "../lib/internal-return";
+import { PreferenceReminder } from "../components/PreferenceReminder";
+import { preferenceProgress } from "../../shared/preference-progress";
+import { rememberReturnTo, validateReturnTo } from "../lib/internal-return";
 import type { SocialProfile } from "../../shared/social";
 import type { CreatorProfile } from "../../shared/community";
 import { SeriesProfileList } from "./Series";
@@ -104,6 +107,7 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
       ? requested
       : "videos";
   const creatorId = id || social?.creatorId || me.data?.userId;
+  const seriesReturn = validateReturnTo(location.state?.seriesReturn);
   async function mutate(
     operation: () => Promise<SocialProfile>,
     success: string,
@@ -122,21 +126,43 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
       setBusy(false);
     }
   }
-  if (loadError)
+  if (loadError || loading)
     return (
-      <Notice error>
-        {loadError}{" "}
-        <button
-          className="text-button"
-          onClick={() => (id ? publicProfile.refresh() : me.refresh())}
-        >
-          Retry profile
-        </button>
-      </Notice>
+      <div className="social-profile-page">
+        {own && (
+          <div className="social-profile-recovery">
+            <Link
+              className="button secondary"
+              to="/settings"
+              aria-label="Profile settings"
+            >
+              <SlidersHorizontal size={18} aria-hidden="true" />
+              Settings
+            </Link>
+          </div>
+        )}
+        {loadError ? (
+          <Notice error>
+            {loadError}{" "}
+            <button
+              className="text-button"
+              onClick={() => (id ? publicProfile.refresh() : me.refresh())}
+            >
+              Retry profile
+            </button>
+          </Notice>
+        ) : (
+          <Loading />
+        )}
+      </div>
     );
-  if (loading) return <Loading />;
   return (
     <div className="social-profile-page creator-profile-page">
+      {own && creator && seriesReturn?.startsWith("/series/new") && (
+        <Link className="button secondary" to={seriesReturn}>
+          Continue series setup <ChevronRight size={18} aria-hidden="true" />
+        </Link>
+      )}
       <section
         className="social-profile-identity"
         aria-labelledby="creator-name"
@@ -281,6 +307,22 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
         )}
         {message && <Notice>{message}</Notice>}
       </section>
+      {own && progress.data && (
+        <>
+          <Link
+            className="button secondary profile-preferences-shortcut"
+            to="/onboarding?preferences=1&returnTo=%2Fprofile"
+            onClick={() => rememberReturnTo("/profile")}
+          >
+            <SlidersHorizontal size={18} aria-hidden="true" />
+            Quest preferences
+            <ChevronRight size={18} aria-hidden="true" />
+          </Link>
+          {!preferenceProgress(progress.data.profile.preferences).complete && (
+            <PreferenceReminder profile={progress.data.profile} compact />
+          )}
+        </>
+      )}
       {own && progress.data?.completedQuestCount !== undefined && (
         <QuestProgress
           completedQuestCount={progress.data.completedQuestCount}
@@ -447,14 +489,16 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
             <LockKeyhole size={15} />
             Only you can see this tab.
           </p>
-          <div className="community-links">
-            <Link to="/journal">
-              <BookOpen size={17} />
-              Private journal
+          <div className="social-private-links">
+            <Link className="button secondary" to="/journal">
+              <BookOpen size={18} aria-hidden="true" />
+              <span>Private journal</span>
+              <ChevronRight size={18} aria-hidden="true" />
             </Link>
-            <Link to="/account">
-              <SlidersHorizontal size={17} />
-              Account & preferences
+            <Link className="button secondary" to="/account">
+              <SlidersHorizontal size={18} aria-hidden="true" />
+              <span>Account & preferences</span>
+              <ChevronRight size={18} aria-hidden="true" />
             </Link>
           </div>
           <h2>Drafts & submissions</h2>
@@ -470,10 +514,14 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
               </Link>
             ))
           ) : (
-            <p className="support">
-              No quest drafts.{" "}
-              <Link to="/originals/new">Start an original.</Link>
-            </p>
+            <div className="social-private-empty">
+              <p className="support">No quest drafts.</p>
+              <Link className="button secondary" to="/originals/new">
+                <PenLine size={18} aria-hidden="true" />
+                <span>Start an original</span>
+                <ChevronRight size={18} aria-hidden="true" />
+              </Link>
+            </div>
           )}
           <PrivateEntries />
         </section>

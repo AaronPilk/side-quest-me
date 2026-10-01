@@ -1,3 +1,4 @@
+import { accountTypeSchema } from "./account";
 import { applePlaceIdSchema } from "./places";
 import { z } from "zod";
 
@@ -259,6 +260,7 @@ export function normalizePreferences(input: unknown): Preferences {
 }
 export const profileSchema = z
   .object({
+    accountType: accountTypeSchema.nullable().default(null),
     displayName: boundedText(60),
     timezone: boundedText(80),
     locale: boundedText(35),
@@ -270,6 +272,9 @@ export const profileSchema = z
 export type Profile = z.infer<typeof profileSchema>;
 export const profilePatchSchema = profileSchema
   .partial()
+  // Defaults belong to reads, not partial writes: editing a summary must never
+  // reset a separately selected account type.
+  .extend({ accountType: accountTypeSchema.nullable().optional() })
   .refine(
     (value) => Object.keys(value).length > 0,
     "Choose a profile field to update.",
@@ -350,6 +355,20 @@ export const DEFAULT_OUTING: Outing = {
   adultContext: false,
   confirmedVenueCostMinor: null,
 };
+
+/** Every key `outingSchema` accepts. Stored run outings carry extra server
+ * fields (such as the assigned role), so anything re-validated against the
+ * strict schema must be projected first. */
+export const OUTING_KEYS = [
+  ...(Object.keys(DEFAULT_OUTING) as (keyof Outing)[]),
+  "applePlaceId",
+] as const;
+export function pickOuting(value: Outing & Record<string, unknown>): Outing {
+  const outing: Record<string, unknown> = {};
+  for (const key of OUTING_KEYS)
+    if (value[key] !== undefined) outing[key] = value[key];
+  return outing as Outing;
+}
 
 export const beatSchema = z
   .object({
