@@ -24,13 +24,17 @@ export default function PublishReel({ run }: { run: Run }) {
       <p className="support">
         Keeping it private earns the same progress. Publishing shares this
         finished video, your public creator profile, caption and quest
-        instructions. Raw clips, profile answers and outing details stay
-        private.
+        instructions after publication review. Raw clips, profile answers and
+        outing details stay private.
       </p>
       {existing ? (
         <Notice>
-          This run already has a {existing.state} post. It keeps the exact reel
-          version you published.{" "}
+          {existing.state === "pending"
+            ? "Submitted for publication review. Your video stays private until approved. "
+            : existing.state === "rejected"
+              ? `Changes are needed before publication. ${existing.reviewNotes || "Review your post and submit it again."} `
+              : `This run has a ${existing.state} post. `}
+          Your original reel stays in your private journal.{" "}
           <Link to={`/posts/${existing.id}`}>
             Edit caption or manage publication
           </Link>
@@ -54,8 +58,9 @@ export default function PublishReel({ run }: { run: Run }) {
             <details className="community-panel">
               <summary>Publish to Sidequest</summary>
               <p>
-                Published videos can appear in Discover and inspire other
-                attempts.
+                Submit your finished video for review before it appears in
+                Discover. Edits are reviewed again. You can keep filming and use
+                your private journal while it is pending.
               </p>
               <label>
                 Public caption
@@ -90,12 +95,12 @@ export default function PublishReel({ run }: { run: Run }) {
                       caption,
                       brandOptIn,
                     },
-                    "Published to Sidequest.",
+                    "Submitted for publication review. Your original stays private.",
                   );
                   if (saved) setPost(saved);
                 }}
               >
-                Publish
+                Submit for review
               </Button>
             </details>
           )}

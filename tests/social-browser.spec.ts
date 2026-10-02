@@ -1,3 +1,4 @@
+import { allowContentReview } from "./content-review-helper";
 import { expect, test, type Page } from "@playwright/test";
 import sharp from "sharp";
 import { DEFAULT_PREFERENCES } from "../shared/domain";
@@ -38,6 +39,7 @@ test("public identity and actual photo persist, removal saves immediately, and p
   await page
     .getByRole("textbox", { name: "Short public bio", exact: true })
     .fill("Small adventures, remembered well.");
+  await allowContentReview(page);
   await page
     .getByRole("button", { name: "Save public profile", exact: true })
     .click();
@@ -62,6 +64,7 @@ test("public identity and actual photo persist, removal saves immediately, and p
     exact: true,
   });
   await bio.fill("An unfinished bio edit survives a photo upload.");
+  await allowContentReview(editor);
   await editor.getByLabel("Profile photo", { exact: true }).setInputFiles({
     name: "photo.jpg",
     mimeType: "image/jpeg",
@@ -340,6 +343,7 @@ test("username collisions and unsupported photos show errors without false succe
   await page
     .getByRole("textbox", { name: "Username", exact: true })
     .fill("unique_handle");
+  await allowContentReview(page);
   await page
     .getByRole("button", { name: "Save public profile", exact: true })
     .click();
@@ -352,6 +356,7 @@ test("username collisions and unsupported photos show errors without false succe
   });
   await expect(editor).not.toBeVisible();
   await page.getByRole("button", { name: "Edit profile", exact: true }).click();
+  await allowContentReview(editor);
   await editor.getByLabel("Profile photo", { exact: true }).setInputFiles({
     name: "unsafe.svg",
     mimeType: "image/svg+xml",
@@ -364,6 +369,7 @@ test("username collisions and unsupported photos show errors without false succe
   await page
     .getByRole("textbox", { name: "Username", exact: true })
     .fill("UNIQUE_HANDLE");
+  await allowContentReview(page);
   await page
     .getByRole("button", { name: "Save public profile", exact: true })
     .click();
@@ -375,4 +381,42 @@ test("username collisions and unsupported photos show errors without false succe
   await expect(page.getByText("@unique_handle", { exact: true })).toHaveCount(
     0,
   );
+});
+
+test("public profile sharing needs fresh explicit content-review permission while cancellation and photo removal remain available", async ({
+  page,
+}) => {
+  await start(page);
+  await page.getByRole("button", { name: "Edit profile", exact: true }).click();
+  const editor = page.getByRole("dialog", {
+    name: "Edit profile",
+    exact: true,
+  });
+  const permission = editor.getByRole("checkbox", {
+    name: /^I allow my submitted public/,
+  });
+  await expect(permission).not.toBeChecked();
+  await expect(
+    editor.getByRole("button", { name: "Save public profile", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    editor.getByLabel("Profile photo", { exact: true }),
+  ).toBeDisabled();
+  await expect(
+    editor.getByRole("link", { name: "Privacy policy", exact: true }),
+  ).toBeVisible();
+  await allowContentReview(editor);
+  await expect(
+    editor.getByRole("button", { name: "Save public profile", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    editor.getByLabel("Profile photo", { exact: true }),
+  ).toBeEnabled();
+  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Edit profile", exact: true }).click();
+  await expect(permission).not.toBeChecked();
+  await expect(
+    editor.getByRole("button", { name: "Save public profile", exact: true }),
+  ).toBeDisabled();
+  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
 });

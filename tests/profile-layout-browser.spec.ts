@@ -1,3 +1,4 @@
+import { allowContentReview } from "./content-review-helper";
 import { expect, test, type Page } from "@playwright/test";
 import { DEFAULT_OUTING, DEFAULT_PREFERENCES } from "../shared/domain";
 import { catalog } from "../shared/catalog";
@@ -35,6 +36,20 @@ async function expectEditorInViewport(page: Page) {
     exact: true,
   });
   await expect(dialog).toBeVisible();
+  if (
+    !(await dialog
+      .getByRole("checkbox", { name: /^I allow my submitted public/ })
+      .isChecked())
+  ) {
+    const activeField = dialog.locator(
+      "input:focus, textarea:focus, select:focus",
+    );
+    const name = (await activeField.count())
+      ? await activeField.getAttribute("name")
+      : null;
+    await allowContentReview(dialog);
+    if (name) await dialog.locator(`[name="${name}"]`).focus();
+  }
   await expect(
     dialog.getByRole("button", { name: "Save public profile", exact: true }),
   ).toBeInViewport({ ratio: 1 });
@@ -241,9 +256,9 @@ test("profile editor remains modal and returns focus without native dialog suppo
       response,
       body: `${await response.text()}
       const originalHeldProfileSave = socialApi.save;
-      socialApi.save = async input => {
+      socialApi.save = async (input, consent) => {
         await new Promise(resolve => { window.__finishProfileSave = resolve; });
-        return originalHeldProfileSave(input);
+        return originalHeldProfileSave(input, consent);
       };`,
     });
   });
@@ -267,6 +282,7 @@ test("profile editor remains modal and returns focus without native dialog suppo
   );
   await expect(edit).toBeFocused();
   await edit.click();
+  await allowContentReview(dialog);
   await dialog
     .getByRole("textbox", { name: "Username", exact: true })
     .fill("pending_profile");
@@ -321,6 +337,7 @@ test("visible profile editor saves, reloads, discards cancellation and stays usa
   await expect(bio).toBeFocused();
   await expectEditorInViewport(page);
   await expect(bio).toBeInViewport({ ratio: 1 });
+  await allowContentReview(page);
   await dialog
     .getByRole("button", { name: "Save public profile", exact: true })
     .click();

@@ -6,6 +6,11 @@ export async function runAccountTypeTests(sql) {
   console.log(
     "Checking account intent upgrade, owner persistence and unchanged brand approval…",
   );
+  // Replaying an old upgrade must not erase later publication authorization.
+  const latestCommunityRead = await sql(
+    "select pg_get_functiondef('public.sq_community_read(uuid,text,jsonb)'::regprocedure);",
+    null,
+  );
   const q = (value) => `'${String(value).replaceAll("'", "''")}'`;
   const users = Array.from({ length: 6 }, () => randomUUID());
   const [approved, pending, rejected, operator, disabled, personal] = users;
@@ -106,6 +111,7 @@ export async function runAccountTypeTests(sql) {
       .accountType,
     "personal",
   );
+  await sql(latestCommunityRead, null);
   const ids = users.map(q).join(",");
   await sql(
     `delete from private.role_memberships where user_id in (${ids}); delete from business_profiles where user_id in (${ids}); delete from wallets where owner_id in (${ids}); delete from profiles where id in (${ids}); delete from auth.users where id in (${ids});`,

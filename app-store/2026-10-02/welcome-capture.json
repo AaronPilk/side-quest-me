@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "locale": "en-US",
+  "captures": [
+    {
+      "id": "07-great-stories-start-here",
+      "capture": "raw/welcome.png",
+      "headline": [
+        "Great stories",
+        "start here."
+      ],
+      "subtitle": "A little detour. A memory worth keeping.",
+      "background": "#EEE9FF"
+    }
+  ]
+}

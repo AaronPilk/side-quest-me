@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { DEMO, supabase } from "../lib/auth";
 import { rememberReturnTo, validateReturnTo } from "../lib/internal-return";
+import { isPublicInformationPath } from "../lib/public-information";
 import { Button, Loading, Notice } from "./ui";
 
 const SETUP_PATHS = new Set([
@@ -14,7 +15,10 @@ const SETUP_PATHS = new Set([
 
 /** Account safety controls stay reachable even when setup cannot be checked. */
 export function isOnboardingSetupPath(pathname: string): boolean {
-  return SETUP_PATHS.has(pathname.replace(/\/+$/, "") || "/");
+  return (
+    SETUP_PATHS.has(pathname.replace(/\/+$/, "") || "/") ||
+    isPublicInformationPath(pathname)
+  );
 }
 
 type SetupStatus =

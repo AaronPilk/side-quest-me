@@ -1,0 +1,137 @@
+.information-page {
+  width: 100%;
+  max-width: 680px;
+  margin-inline: auto;
+  padding-bottom: 24px;
+}
+.information-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-bottom: 16px;
+  color: var(--action-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.information-heading h1 {
+  margin: 10px 0 8px;
+  font-size: clamp(1.875rem, 6vw, 2.5rem);
+  line-height: 1.13;
+  letter-spacing: -0.04em;
+}
+.information-heading .eyebrow {
+  font-size: 0.6875rem;
+  line-height: 1.5;
+}
+.information-updated {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 0.75rem;
+}
+.information-intro {
+  margin: 20px 0 28px;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+.information-section {
+  margin: 16px 0;
+  padding: 20px;
+  border: 1px solid rgb(121 80 232 / 12%);
+  border-radius: 22px;
+  background: rgb(255 255 255 / 76%);
+  box-shadow: 0 4px 18px rgb(57 39 94 / 4%);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+.information-section h2 {
+  margin: 0 0 12px;
+  font-size: 1.0625rem;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+.information-section p {
+  margin: 12px 0;
+  color: var(--secondary);
+  font-size: 0.875rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.information-section p:last-child {
+  margin-bottom: 0;
+}
+.information-contact,
+.information-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid rgb(121 80 232 / 20%);
+  border-radius: 999px;
+  background: rgb(121 80 232 / 6%);
+  color: var(--action-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.information-contact span {
+  min-width: 0;
+  flex: 1;
+}
+.information-contact svg,
+.information-action svg {
+  flex-shrink: 0;
+}
+.information-action {
+  justify-content: space-between;
+}
+.information-contact:focus-visible,
+.information-action:focus-visible,
+.information-back:focus-visible,
+.information-footer a:focus-visible,
+.welcome-policies a:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 3px;
+}
+.information-contact-pending {
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: rgb(121 80 232 / 6%);
+}
+.information-footer,
+.welcome-policies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 28px;
+}
+.information-footer a,
+.welcome-policies a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--action-ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.information-footer a[aria-current="page"] {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.welcome-policies {
+  justify-content: center;
+  margin-top: 16px;
+}
+@media (max-width: 360px) {
+  .information-section {
+    padding: 16px;
+  }
+  .information-contact,
+  .information-action {
+    padding-inline: 12px;
+  }
+}

@@ -1,3 +1,4 @@
+import { allowContentReview } from "./content-review-helper";
 import { expect, test, type Page } from "@playwright/test";
 import { DEFAULT_PREFERENCES } from "../shared/domain";
 
@@ -145,6 +146,7 @@ async function saveProfile(page: Page) {
   await page
     .getByRole("textbox", { name: "Username", exact: true })
     .fill("updated_creator");
+  await allowContentReview(page);
   await page
     .getByRole("button", { name: "Save public profile", exact: true })
     .click();

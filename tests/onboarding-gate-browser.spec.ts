@@ -69,7 +69,7 @@ async function gateFixture(
           useEffect(()=>{const listener=event=>setActor(event.detail);addEventListener("gate-test-account",listener);return()=>removeEventListener("gate-test-account",listener)},[]);
           return h("main",null,h(OnboardingGate,{signedIn:Boolean(actor),identity:actor,demo:${Boolean(options.demo)}},
             h(Routes,null,h(Route,{path:"/onboarding",element:h(Onboarding)}),
-              ...["/preferences","/settings","/account/security"].map(path=>h(Route,{key:path,path,element:h(Setup)})),
+              ...["/preferences","/settings","/account/security","/privacy","/support","/terms","/community-guidelines"].map(path=>h(Route,{key:path,path,element:h(Setup)})),
               h(Route,{path:"*",element:h(Content)}))))}`,
     });
   });
@@ -249,6 +249,10 @@ test("setup, preferences, settings, and account safety remain reachable without 
     "/preferences",
     "/settings",
     "/account/security",
+    "/privacy",
+    "/support",
+    "/terms",
+    "/community-guidelines",
   ]) {
     await page.goto(path);
     await expect(

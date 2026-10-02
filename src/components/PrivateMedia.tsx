@@ -14,6 +14,7 @@ export function mediaNeedsAuth(src: string) {
     isTrustedApiUrl(src) &&
     (url.pathname.startsWith("/api/media/") ||
       /^\/api\/community\/offers\/[^/]+\/media$/.test(url.pathname) ||
+      /^\/api\/community\/reviews\/[^/]+\/media$/.test(url.pathname) ||
       /^\/api\/operator\/reviews\/[^/]+\/media\//.test(url.pathname))
   );
 }

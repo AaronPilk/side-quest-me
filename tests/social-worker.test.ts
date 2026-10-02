@@ -6,9 +6,16 @@ import type { AppBindings, AppContext, AppEnv } from "../worker/services";
 import { PHOTO_BYTES } from "../shared/social";
 const state = vi.hoisted(() => ({
   rpc: vi.fn(),
+  reviewText: vi.fn(),
+  reviewImage: vi.fn(),
   put: vi.fn(),
   get: vi.fn(),
   remove: vi.fn(),
+}));
+vi.mock("../worker/content-moderation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../worker/content-moderation")>()),
+  assertPublicTextAllowed: state.reviewText,
+  assertPublicImageAllowed: state.reviewImage,
 }));
 vi.mock("../worker/services", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../worker/services")>();
@@ -52,6 +59,8 @@ function app() {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  state.reviewText.mockResolvedValue(undefined);
+  state.reviewImage.mockResolvedValue(undefined);
   state.rpc.mockResolvedValue({ data: { creatorId: actor }, error: null });
   state.put.mockResolvedValue({});
   state.remove.mockResolvedValue(undefined);
@@ -144,6 +153,7 @@ it("keeps save, follow and photo lookup failures distinct from profile loading",
         method,
         headers: {
           Authorization: "Bearer valid",
+          "X-Content-Review-Consent": "true",
           "Content-Type": "application/json",
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
@@ -179,6 +189,7 @@ it("retains known unavailable and username-conflict responses", async () => {
       method: "POST",
       headers: {
         Authorization: "Bearer valid",
+        "X-Content-Review-Consent": "true",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -211,7 +222,11 @@ it("uploads a bounded raster under the authenticated owner and removes uncommitt
       "/api/social/photo",
       {
         method: "PUT",
-        headers: { Authorization: "Bearer valid", "Content-Type": "image/png" },
+        headers: {
+          Authorization: "Bearer valid",
+          "X-Content-Review-Consent": "true",
+          "Content-Type": "image/png",
+        },
         body: png,
       },
       env,
@@ -240,7 +255,11 @@ it("rejects foreign image bodies and enforces the streamed limit without Content
       "/api/social/photo",
       {
         method: "PUT",
-        headers: { Authorization: "Bearer valid", "Content-Type": "image/png" },
+        headers: {
+          Authorization: "Bearer valid",
+          "X-Content-Review-Consent": "true",
+          "Content-Type": "image/png",
+        },
         body,
       },
       env,
@@ -267,4 +286,83 @@ it("only serves the current photo key returned by the availability RPC", async (
   expect(
     (await app().request(`/api/social/photo/${actor}`, {}, env)).status,
   ).toBe(404);
+});
+
+it("screens only submitted public profile fields after permission and before a database write", async () => {
+  const input = {
+    username: "public_handle",
+    displayName: "Public name",
+    bio: "Public bio",
+    avatarKey: "violet",
+    openToBrands: false,
+    expectedVersion: 2,
+  };
+  const save = (consent?: string) =>
+    app().request(
+      "/api/social/profile",
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer valid",
+          "Content-Type": "application/json",
+          ...(consent ? { "X-Content-Review-Consent": consent } : {}),
+        },
+        body: JSON.stringify(input),
+      },
+      env,
+    );
+  expect((await save()).status).toBe(422);
+  expect(state.reviewText).not.toHaveBeenCalled();
+  expect(state.rpc).not.toHaveBeenCalled();
+  expect((await save("true")).status).toBe(200);
+  expect(state.reviewText).toHaveBeenCalledWith(env, [
+    input.username,
+    input.displayName,
+    input.bio,
+  ]);
+  state.rpc.mockClear();
+  state.reviewText.mockRejectedValue(
+    new ApiError("content_not_allowed", "Edit this content.", 422),
+  );
+  expect((await save("true")).status).toBe(422);
+  expect(state.rpc).not.toHaveBeenCalled();
+});
+
+it("does not upload profile images or change the profile when screening rejects or is unavailable", async () => {
+  const png = new Uint8Array(
+    await sharp({
+      create: { width: 256, height: 256, channels: 4, background: "#7950E8" },
+    })
+      .png()
+      .toBuffer(),
+  );
+  const upload = (consent?: string) =>
+    app().request(
+      "/api/social/photo",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: "Bearer valid",
+          "Content-Type": "image/png",
+          ...(consent ? { "X-Content-Review-Consent": consent } : {}),
+        },
+        body: png,
+      },
+      env,
+    );
+  expect((await upload()).status).toBe(422);
+  expect(state.reviewImage).not.toHaveBeenCalled();
+  for (const status of [422, 503] as const) {
+    state.reviewImage.mockRejectedValue(
+      new ApiError("content_review_unavailable", "Try again.", status),
+    );
+    expect((await upload("true")).status).toBe(status);
+    expect(state.put).not.toHaveBeenCalled();
+    expect(state.rpc).not.toHaveBeenCalled();
+  }
+  state.reviewImage.mockResolvedValue(undefined);
+  expect((await upload("true")).status).toBe(200);
+  const normalized = state.reviewImage.mock.lastCall?.[1];
+  expect(normalized).toBeInstanceOf(Uint8Array);
+  expect(state.put.mock.lastCall?.[1]).toEqual(normalized);
 });

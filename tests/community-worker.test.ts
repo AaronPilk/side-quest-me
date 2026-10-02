@@ -5,8 +5,15 @@ import type { AppBindings, AppContext, AppEnv } from "../worker/services";
 
 const state = vi.hoisted(() => ({
   rpc: vi.fn(),
+  reviewText: vi.fn(),
+  reviewImage: vi.fn(),
   media: vi.fn(),
   authenticate: vi.fn(),
+}));
+vi.mock("../worker/content-moderation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../worker/content-moderation")>()),
+  assertPublicTextAllowed: state.reviewText,
+  assertPublicImageAllowed: state.reviewImage,
 }));
 vi.mock("../worker/services", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../worker/services")>();
@@ -72,6 +79,7 @@ function mutate(input: unknown, key: string | null = "same-request-key") {
       method: "POST",
       headers: {
         Authorization: "Bearer valid-session",
+        "X-Content-Review-Consent": "true",
         "Content-Type": "application/json",
         ...(key === null ? {} : { "Idempotency-Key": key }),
       },
@@ -83,6 +91,8 @@ function mutate(input: unknown, key: string | null = "same-request-key") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  state.reviewText.mockResolvedValue(undefined);
+  state.reviewImage.mockResolvedValue(undefined);
   state.rpc.mockResolvedValue({
     data: { posts: [], nextCursor: null },
     error: null,
@@ -238,6 +248,39 @@ describe("community mutation transport", () => {
     },
   };
 
+  it("requires a complete review declaration and rejects forged approval fields", async () => {
+    const input = {
+      id: postId,
+      expectedVersion: 2,
+      decision: "approve",
+      reviewedContent: true,
+      notes: "Entire video and caption reviewed.",
+    };
+    for (const invalid of [
+      { ...input, reviewedContent: false },
+      { ...input, notes: " " },
+      { ...input, approvedVersion: 3 },
+    ]) {
+      expect(
+        (await mutate({ action: "post_review", input: invalid })).status,
+      ).toBe(422);
+    }
+    expect(state.rpc).not.toHaveBeenCalled();
+    state.rpc.mockResolvedValue({
+      data: null,
+      error: { message: "self_review_forbidden" },
+    });
+    expect((await mutate({ action: "post_review", input })).status).toBe(403);
+    expect(state.rpc).toHaveBeenCalledWith(
+      "sq_community_mutate",
+      expect.objectContaining({
+        p_actor: actor,
+        p_action: "post_review",
+        p_input: input,
+      }),
+    );
+  });
+
   it("uses server identity, exact expected version, and a stable action-inclusive idempotency digest", async () => {
     state.rpc.mockResolvedValue({
       data: { id: postId, state: "unpublished" },
@@ -351,6 +394,48 @@ describe("community media authorization", () => {
     mime: "video/mp4",
     bytes: 1200,
   };
+
+  it("authenticates private publication previews and rechecks the operator role before every range or thumbnail", async () => {
+    const path = `/api/community/reviews/${postId}/media`;
+    expect(COMMUNITY_PRIVATE_ROUTE.test(path)).toBe(true);
+    expect((await app().request(path, {}, env)).status).toBe(401);
+    expect(state.rpc).not.toHaveBeenCalled();
+    state.rpc.mockResolvedValue({ data: grant, error: null });
+    expect(
+      (
+        await app().request(
+          path,
+          {
+            headers: {
+              Authorization: "Bearer valid-session",
+              Range: "bytes=0-99",
+            },
+          },
+          env,
+        )
+      ).status,
+    ).toBe(200);
+    expect(state.rpc).toHaveBeenCalledWith("sq_community_review_media", {
+      p_actor: actor,
+      p_post: postId,
+    });
+    expect(state.media).toHaveBeenCalledOnce();
+    state.media.mockClear();
+    state.rpc.mockResolvedValue({
+      data: null,
+      error: { message: "forbidden" },
+    });
+    expect(
+      (
+        await app().request(
+          `${path}?thumbnail=1`,
+          { headers: { Authorization: "Bearer valid-session" } },
+          env,
+        )
+      ).status,
+    ).toBe(403);
+    expect(state.media).not.toHaveBeenCalled();
+  });
 
   it("streams only an RPC-authorized public reel and never returns private storage keys", async () => {
     state.rpc.mockResolvedValue({ data: grant, error: null });
@@ -480,4 +565,41 @@ describe("community media authorization", () => {
     }
     expect(state.media).not.toHaveBeenCalled();
   });
+});
+
+it("does not let the legacy creator-save route bypass public text screening or permission", async () => {
+  const operation = {
+    action: "creator_save",
+    input: {
+      displayName: "Name",
+      bio: "Bio",
+      avatarKey: "violet",
+      openToBrands: false,
+      expectedVersion: 0,
+    },
+  };
+  const noConsent = await app().request(
+    "/api/community/mutate",
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer valid-session",
+        "Content-Type": "application/json",
+        "Idempotency-Key": "creator-review-request",
+      },
+      body: JSON.stringify(operation),
+    },
+    env,
+  );
+  expect(noConsent.status).toBe(422);
+  expect(state.reviewText).not.toHaveBeenCalled();
+  expect(state.rpc).not.toHaveBeenCalled();
+  expect((await mutate(operation)).status).toBe(200);
+  expect(state.reviewText).toHaveBeenCalledWith(env, ["Name", "Bio"]);
+  state.rpc.mockClear();
+  state.reviewText.mockRejectedValue(
+    new ApiError("content_not_allowed", "Edit this public content.", 422),
+  );
+  expect((await mutate(operation)).status).toBe(422);
+  expect(state.rpc).not.toHaveBeenCalled();
 });

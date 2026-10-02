@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import type { AppBindings, AppEnv } from "./services";
+import { CONTENT_REVIEW_CONSENT_HEADER } from "../shared/content-review";
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"];
 const HEADERS = [
@@ -8,6 +9,7 @@ const HEADERS = [
   "idempotency-key",
   "range",
   "accept",
+  CONTENT_REVIEW_CONSENT_HEADER.toLowerCase(),
 ];
 
 /** Opt-in for our bundled iOS origin only; never reflect arbitrary origins. */

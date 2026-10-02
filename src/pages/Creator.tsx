@@ -28,6 +28,7 @@ import {
   useCommunity,
 } from "../components/Community";
 import { AuthImage } from "../components/PrivateMedia";
+import { ContentReviewPermission } from "../components/ContentReviewPermission";
 import { Button, Empty, Loading, Notice, useResource } from "../components/ui";
 import { socialApi } from "../lib/social-api";
 import { api } from "../lib/api";
@@ -64,6 +65,7 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [edit, setEdit] = useState(false);
+  const [contentReviewConsent, setContentReviewConsent] = useState(false);
   const socialRequest = useRef(0);
   useEffect(() => {
     let active = true;
@@ -71,6 +73,7 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
     setSocial(undefined);
     setSocialError("");
     setEdit(false);
+    setContentReviewConsent(false);
     setMessage("");
     setError("");
     socialApi
@@ -254,6 +257,7 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
               onClick={() => {
                 setError("");
                 setMessage("");
+                setContentReviewConsent(false);
                 setEdit(true);
               }}
             >
@@ -360,7 +364,11 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
           />
         )}
       {own && edit && (
-        <ProfileEditor busy={busy} onClose={() => setEdit(false)}>
+        <ProfileEditor
+          busy={busy}
+          canShare={contentReviewConsent}
+          onClose={() => setEdit(false)}
+        >
           <p className="support" id="profile-editor-privacy">
             Your photo, name, username and bio are public. Your journal and
             preferences stay private.
@@ -375,12 +383,18 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
             onSave={async (input) => {
               if (
                 await mutate(
-                  () => socialApi.save(input),
+                  () => socialApi.save(input, contentReviewConsent),
                   "Public profile saved.",
                 )
               )
                 setEdit(false);
             }}
+          />
+          <ContentReviewPermission
+            scope="profile"
+            checked={contentReviewConsent}
+            onChange={setContentReviewConsent}
+            disabled={busy}
           />
           {creator && (
             <div className="profile-photo-actions">
@@ -391,13 +405,13 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   aria-label="Profile photo"
-                  disabled={busy}
+                  disabled={busy || !contentReviewConsent}
                   onChange={(event) => {
                     const file = event.currentTarget.files?.[0];
                     event.currentTarget.value = "";
                     if (file)
                       void mutate(
-                        () => socialApi.uploadPhoto(file),
+                        () => socialApi.uploadPhoto(file, contentReviewConsent),
                         "Profile photo saved.",
                         false,
                       );
@@ -527,10 +541,12 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
 function ProfileEditor({
   children,
   busy,
+  canShare,
   onClose,
 }: {
   children: ReactNode;
   busy: boolean;
+  canShare: boolean;
   onClose: () => void;
 }) {
   const element = useRef<HTMLDialogElement>(null);
@@ -652,7 +668,12 @@ function ProfileEditor({
           <Button type="button" secondary disabled={busy} onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" form="profile-editor-form" busy={busy}>
+          <Button
+            type="submit"
+            form="profile-editor-form"
+            busy={busy}
+            disabled={!canShare}
+          >
             Save public profile
           </Button>
         </footer>

@@ -1,3 +1,4 @@
+import { reviewPendingReel } from "./reel-publication-helper";
 import { expect, test, type Page } from "@playwright/test";
 import type { Run } from "../src/lib/types";
 import { selectDemoPersona } from "./demo-persona-helper";
@@ -122,10 +123,13 @@ for (const published of [false, true]) {
       await page
         .getByRole("textbox", { name: "Public caption", exact: true })
         .fill("Shared before this became a series.");
-      await page.getByRole("button", { name: "Publish", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Submit for review", exact: true })
+        .click();
       await expect(
         page.getByRole("link", { name: "Edit caption or manage publication" }),
       ).toBeVisible();
+      await reviewPendingReel(page, "creator");
     }
     const before = await savedState(page);
     await page.goto("/journal");

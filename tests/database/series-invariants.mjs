@@ -17,6 +17,11 @@ export async function runSeriesTests(sql) {
     sql(
       `select sq_series_mutate(${q(actor)},${q(action)},${j(input)},${q(key)},${q(hash({ action, input }))});`,
     ).then(JSON.parse);
+  const preflight = (actor, input, key = randomUUID(), role = "service_role") =>
+    sql(
+      `select sq_series_review_preflight(${q(actor)},${j(input)},${q(key)},${q(hash({ action: "save", input }))});`,
+      role,
+    ).then(JSON.parse);
   const rpc = (name, actor, input, key = randomUUID()) =>
     sql(
       `select ${name}(${q(actor)},${j(input)},${q(key)},${q(hash(input))});`,
@@ -104,7 +109,49 @@ export async function runSeriesTests(sql) {
     expectedVersion: draft.version,
     state: "published",
   };
-  const published = await mutate(author, "save", input);
+  for (const role of ["anon", "authenticated"])
+    await assert.rejects(
+      () => preflight(author, input, randomUUID(), role),
+      /permission denied/,
+    );
+  await assert.rejects(
+    () => preflight(other, input),
+    /creator_profile_required|forbidden/,
+  );
+  const publicationKey = randomUUID();
+  const review = await preflight(author, input, publicationKey);
+  assert.equal(review.requiresReview, true);
+  assert.deepEqual(review.publicContent.parts[0].quest, draft.parts[0].quest);
+  assert.equal(review.publicContent.parts.length, 3);
+  assert.equal(JSON.stringify(review).includes("source_run_id"), false);
+  assert.equal(
+    await sql(
+      `select count(*) from private.idempotency_records where actor_id=${q(author)} and key=${q(publicationKey)};`,
+    ),
+    "0",
+    "review preflight must not reserve/mutate the request",
+  );
+  const published = await mutate(author, "save", input, publicationKey);
+  assert.deepEqual(
+    await preflight(author, input, publicationKey),
+    { replay: published },
+    "completed replay precedes the now-stale expectedVersion",
+  );
+  await assert.rejects(
+    () =>
+      preflight(
+        author,
+        { ...input, premise: "Changed operation" },
+        publicationKey,
+      ),
+    /idempotency_conflict/,
+  );
+  await assert.rejects(() => preflight(author, input), /stale_version/);
+  assert.deepEqual(
+    await preflight(author, { ...input, expectedVersion: published.version }),
+    { requiresReview: false },
+    "unchanged canonical public content does not require redisclosure",
+  );
   assert.equal(published.parts[0].templateVersion, first.version);
   assert.equal(published.parts[0].locked, true);
   assert.equal((await read(null, "detail", { id: draft.id })).progress, null);
@@ -355,6 +402,13 @@ export async function runSeriesTests(sql) {
     await sql(
       `select sq_community_mutate(${q(participant)},'post_publish',${j(publicationInput)},${q(randomUUID())},${q(hash(publicationInput))});`,
     ),
+  );
+  assert.equal(publication.state, "pending");
+  await sql(
+    `insert into private.role_memberships(user_id,role) values(${q(other)},'operator');`,
+  );
+  await sql(
+    `select sq_community_mutate(${q(other)},'post_review',${j({ id: publication.id, expectedVersion: publication.version, decision: "approve", reviewedContent: true, notes: "Video and shared quest reviewed." })},${q(randomUUID())},'hash');`,
   );
   assert.equal(publication.series.partId, ids[0]);
   const created = await mutate(author, "save", ongoing);

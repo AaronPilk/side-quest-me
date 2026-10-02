@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "locale": "en-US",
+  "size": {
+    "width": 1320,
+    "height": 2868
+  },
+  "method": "Deterministic SVG typography and vector phone frame around unchanged native captures.",
+  "brandSource": "shared/brand.mjs (approved owner-supplied violet direction)",
+  "capturesManifest": "/Users/pilksclaes/Side Quest Me/app-store/2026-10-02/welcome-capture.json",
+  "files": [
+    {
+      "id": "07-great-stories-start-here",
+      "file": "07-great-stories-start-here.png",
+      "width": 1320,
+      "height": 2868,
+      "source": "/Users/pilksclaes/Side Quest Me/app-store/2026-10-02/raw/welcome.png",
+      "sourceWidth": 1320,
+      "sourceHeight": 2868,
+      "sourceSha256": "22af73204668916a882eeb0086b185d1d882eaf508a23fe1d7026e2d61ec3706",
+      "sha256": "aace98f4fb43a78e368753119f178ecd8777957ea147d78818ef7701ab367b42",
+      "headline": [
+        "Great stories",
+        "start here."
+      ],
+      "subtitle": "A little detour. A memory worth keeping."
+    }
+  ]
+}

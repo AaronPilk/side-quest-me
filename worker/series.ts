@@ -1,6 +1,16 @@
 import type { Hono } from "hono";
 import { z } from "zod";
-import { seriesSaveSchema, seriesStartFromRunSchema } from "../shared/series";
+import {
+  seriesSaveSchema,
+  seriesStartFromRunSchema,
+  type SeriesSave,
+} from "../shared/series";
+import { CONTENT_REVIEW_CONSENT_HEADER } from "../shared/content-review";
+import { questVariantSchema, type QuestVariant } from "../shared/domain";
+import {
+  assertPublicTextAllowed,
+  requireContentReviewPermission,
+} from "./content-moderation";
 import {
   ApiError,
   authenticate,
@@ -29,6 +39,89 @@ const mutationSchema = z.discriminatedUnion("action", [
     })
     .strict(),
 ]);
+const publicReviewSchema = z.object({
+  title: z.string(),
+  premise: z.string(),
+  parts: z.array(
+    z.object({
+      title: z.string(),
+      prerequisiteReason: z.string(),
+      quest: questVariantSchema,
+    }),
+  ),
+});
+const reviewPreflightSchema = z.union([
+  z.object({ replay: z.record(z.string(), z.unknown()) }),
+  z.object({ requiresReview: z.literal(false) }),
+  z.object({
+    requiresReview: z.literal(true),
+    publicContent: publicReviewSchema,
+  }),
+]);
+function questText(quest: QuestVariant) {
+  return [
+    quest.title,
+    quest.hook,
+    quest.sponsorDisclosure ?? "",
+    quest.cost.note,
+    ...quest.interests,
+    ...quest.beats.flatMap((beat) => [
+      beat.label,
+      beat.action,
+      beat.filming,
+      beat.caption,
+    ]),
+    ...quest.materials,
+    ...quest.requirements,
+    ...quest.completionQuestions,
+    quest.fallback,
+  ];
+}
+function publicText(input: z.infer<typeof publicReviewSchema>) {
+  return [
+    input.title,
+    input.premise,
+    ...input.parts.flatMap((part) => [
+      part.title,
+      part.prerequisiteReason,
+      ...questText(part.quest),
+    ]),
+  ];
+}
+async function reviewPublicSeries(
+  c: AppContext,
+  input: SeriesSave,
+  key: string,
+  requestHash: string,
+) {
+  if (input.state !== "published") return;
+  // This service-only RPC checks completed replay before versions, then derives
+  // the exact canonical quest snapshots that the mutation will make public.
+  // Client-selected private/foreign snapshots never enter the provider request.
+  const { data, error } = await c
+    .get("serviceDb")
+    .rpc("sq_series_review_preflight", {
+      p_actor: c.get("actor"),
+      p_input: input,
+      p_key: key,
+      p_hash: requestHash,
+    });
+  if (error) seriesError(error.message);
+  const preflight = reviewPreflightSchema.safeParse(data);
+  if (!preflight.success)
+    throw new ApiError(
+      "series_unavailable",
+      "This series is not available.",
+      404,
+    );
+  if ("replay" in preflight.data) return preflight.data.replay;
+  if (!preflight.data.requiresReview) return;
+  requireContentReviewPermission(c.req.header(CONTENT_REVIEW_CONSENT_HEADER));
+  await assertPublicTextAllowed(
+    c.env,
+    publicText(preflight.data.publicContent),
+  );
+}
 export function seriesError(message: string): never {
   const mapping: Record<string, string> = {
     series_unavailable: "This series or part is not available.",
@@ -127,12 +220,22 @@ export function registerSeriesPrivate(app: Hono<AppBindings>) {
         "Refresh and try again.",
         422,
       );
+    const requestHash = await hash(operation);
+    if (operation.action === "save") {
+      const replay = await reviewPublicSeries(
+        c,
+        operation.input,
+        key,
+        requestHash,
+      );
+      if (replay) return c.json(replay);
+    }
     const { data, error } = await c.get("serviceDb").rpc("sq_series_mutate", {
       p_actor: c.get("actor"),
       p_action: operation.action,
       p_input: operation.input,
       p_key: key,
-      p_hash: await hash(operation),
+      p_hash: requestHash,
     });
     if (error) seriesError(error.message);
     return c.json(data);

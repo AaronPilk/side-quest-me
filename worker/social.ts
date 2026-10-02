@@ -1,6 +1,12 @@
 import type { Hono } from "hono";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { CONTENT_REVIEW_CONSENT_HEADER } from "../shared/content-review";
+import {
+  assertPublicImageAllowed,
+  assertPublicTextAllowed,
+  requireContentReviewPermission,
+} from "./content-moderation";
 import {
   PHOTO_BYTES,
   followInput,
@@ -180,14 +186,21 @@ export function registerSocialPrivate(app: Hono<AppBindings>) {
       }),
     ),
   );
-  app.post("/api/social/profile", async (c) =>
-    c.json(
+  app.post("/api/social/profile", async (c) => {
+    const input = await json(c, socialProfileInput);
+    requireContentReviewPermission(c.req.header(CONTENT_REVIEW_CONSENT_HEADER));
+    await assertPublicTextAllowed(c.env, [
+      input.username,
+      input.displayName,
+      input.bio,
+    ]);
+    return c.json(
       await call(c, "sq_social_save", {
         p_actor: c.get("actor"),
-        p_input: await json(c, socialProfileInput),
+        p_input: input,
       }),
-    ),
-  );
+    );
+  });
   app.post("/api/social/follow", async (c) => {
     const input = await json(c, followInput);
     return c.json(
@@ -200,6 +213,8 @@ export function registerSocialPrivate(app: Hono<AppBindings>) {
   });
   app.put("/api/social/photo", async (c) => {
     const bytes = await photoBody(c);
+    requireContentReviewPermission(c.req.header(CONTENT_REVIEW_CONSENT_HEADER));
+    await assertPublicImageAllowed(c.env, bytes);
     const key = `avatars/${c.get("actor")}/${crypto.randomUUID()}.png`;
     await c.env.MEDIA.put(key, bytes, {
       httpMetadata: { contentType: "image/png" },

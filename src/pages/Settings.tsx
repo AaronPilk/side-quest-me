@@ -7,6 +7,8 @@ import {
   ShieldCheck,
   FlaskConical,
   SlidersHorizontal,
+  CircleHelp,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 import { useCommunity, useCommunityAction } from "../components/Community";
@@ -82,6 +84,35 @@ export default function Settings() {
               icon={BookOpen}
               title="Private journal"
               description="Your private quests & videos"
+            />
+          </div>
+        </section>
+        <section className="settings-group" aria-labelledby="settings-help">
+          <h2 id="settings-help">Help & policies</h2>
+          <div className="settings-group-rows">
+            <SettingsRow
+              to="/support"
+              icon={CircleHelp}
+              title="Help & support"
+              description="Contact us or report a concern"
+            />
+            <SettingsRow
+              to="/privacy"
+              icon={ShieldCheck}
+              title="Privacy policy"
+              description="Your data, permissions & choices"
+            />
+            <SettingsRow
+              to="/terms"
+              icon={FileText}
+              title="Terms of use"
+              description="How Sidequest works"
+            />
+            <SettingsRow
+              to="/community-guidelines"
+              icon={BookOpen}
+              title="Community guidelines"
+              description="Respect, consent & safe challenges"
             />
           </div>
         </section>

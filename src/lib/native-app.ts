@@ -8,9 +8,13 @@ export const NATIVE_AUTH_REDIRECT = "com.aaronpilk.sidequest://auth/callback";
 const PENDING_SIGN_IN = "sq-native-sign-in-v1";
 const SIGN_IN_LIFETIME = 24 * 60 * 60 * 1000;
 type StorageAccess = Pick<Storage, "getItem" | "setItem" | "removeItem">;
-type AuthCallback = { kind: "code"; code: string } | { kind: "error" };
+type AuthCallback =
+  { kind: "code"; code: string; flowId?: string } | { kind: "error" };
 type NativeAuth = {
-  exchangeCodeForSession: (code: string) => Promise<{ error: unknown }>;
+  exchangeCodeForSession: (
+    code: string,
+    options?: { flowId?: string },
+  ) => Promise<{ error: unknown }>;
   startAutoRefresh: () => Promise<void>;
   stopAutoRefresh: () => Promise<void>;
 };
@@ -39,17 +43,22 @@ export function parseNativeAuthCallback(value: string): AuthCallback | null {
     for (const [key] of [...parameters, ...fragment]) {
       if (
         seen.has(key) ||
-        (key !== "code" && !allowedErrors.has(key)) ||
-        (key === "code" && fragment.has("code"))
+        (key !== "code" && key !== "sb_flow_id" && !allowedErrors.has(key)) ||
+        ((key === "code" || key === "sb_flow_id") && fragment.has(key))
       )
         return null;
       seen.add(key);
     }
+    const flowId = parameters.get("sb_flow_id");
+    if (flowId !== null && !/^[A-Za-z0-9_-]{8,64}$/.test(flowId)) return null;
     const code = parameters.get("code");
-    if (code) {
-      if (seen.size !== 1 || !/^[A-Za-z0-9._~-]{8,2048}$/.test(code))
+    if (code !== null) {
+      if (
+        seen.size !== (flowId === null ? 1 : 2) ||
+        !/^[A-Za-z0-9._~-]{8,2048}$/.test(code)
+      )
         return null;
-      return { kind: "code", code };
+      return { kind: "code", code, ...(flowId === null ? {} : { flowId }) };
     }
     return [...allowedErrors].some((key) => seen.has(key))
       ? { kind: "error" }
@@ -109,6 +118,18 @@ const exchanges = new Map<
 >();
 const SIGN_IN_ERROR =
   "This sign-in link could not be completed. Request a new link in this app and open it on this device.";
+const EXPIRED_SIGN_IN_ERROR =
+  "Your sign-in link expired. Request a new link in this app, then open the newest email right away on this device.";
+
+function signInFailure(cause: unknown): string {
+  const code =
+    cause && typeof cause === "object" && "code" in cause
+      ? cause.code
+      : undefined;
+  return code === "flow_state_expired" || code === "otp_expired"
+    ? EXPIRED_SIGN_IN_ERROR
+    : SIGN_IN_ERROR;
+}
 
 export function createNativeAuthHandler({
   auth,
@@ -130,15 +151,20 @@ export function createNativeAuthHandler({
       onError(SIGN_IN_ERROR);
       return;
     }
-    let exchange = exchanges.get(callback.code);
+    const exchangeKey = `${callback.flowId ?? ""}:${callback.code}`;
+    let exchange = exchanges.get(exchangeKey);
     if (!exchange) {
       exchange = {
         delivered: false,
         promise: (async (): Promise<ExchangeResult> => {
           try {
             const route = pendingReturnTo(storage);
-            const result = await auth.exchangeCodeForSession(callback.code);
-            if (result.error) return { error: SIGN_IN_ERROR };
+            const result = callback.flowId
+              ? await auth.exchangeCodeForSession(callback.code, {
+                  flowId: callback.flowId,
+                })
+              : await auth.exchangeCodeForSession(callback.code);
+            if (result.error) return { error: signInFailure(result.error) };
             // Failure to clear an optional destination must not undo sign-in.
             try {
               storage.removeItem(PENDING_SIGN_IN);
@@ -146,12 +172,12 @@ export function createNativeAuthHandler({
               /* Session establishment already succeeded. */
             }
             return { route };
-          } catch {
-            return { error: SIGN_IN_ERROR };
+          } catch (cause) {
+            return { error: signInFailure(cause) };
           }
         })(),
       };
-      exchanges.set(callback.code, exchange);
+      exchanges.set(exchangeKey, exchange);
       // Bound in-memory deduplication. Never persist authorization codes.
       if (exchanges.size > 20) exchanges.delete(exchanges.keys().next().value!);
     }

@@ -10,6 +10,9 @@ export const supabase =
           flowType: "pkce",
           // Native callbacks arrive through Capacitor, not the WebView URL.
           detectSessionInUrl: !isNativeApp(),
+          // A failed resend must not erase the verifier for an earlier email.
+          // Native callbacks pass this flow ID back to exchangeCodeForSession.
+          experimental: { appendPkceFlowIdToRedirects: isNativeApp() },
           persistSession: true,
           autoRefreshToken: true,
         },

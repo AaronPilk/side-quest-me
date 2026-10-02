@@ -1,3 +1,4 @@
+import { allowContentReview } from "./content-review-helper";
 import { expect, test } from "@playwright/test";
 import { selectDemoPersona } from "./demo-persona-helper";
 import {
@@ -83,6 +84,7 @@ test("Series grown from a quest: private drafts, prerequisites, publication, fol
       .check();
   }
   await reviewSeries(page);
+  await allowContentReview(page);
   await page
     .getByRole("button", { name: "Publish series", exact: true })
     .click();
@@ -169,6 +171,7 @@ test("Ongoing Series publishes later parts with one Activity update and no inven
   await markRunFinalized(page, first);
   await page.reload();
   const url = await turnIntoSeries(page, "A story still growing");
+  await allowContentReview(page);
   await page
     .getByRole("button", { name: "Publish Part 1", exact: true })
     .click();
@@ -188,6 +191,7 @@ test("Ongoing Series publishes later parts with one Activity update and no inven
   const second = await createNextPart(page, 2);
   await markRunFinalized(page, second);
   await page.goto(url);
+  await allowContentReview(page);
   await page
     .getByRole("button", { name: "Publish Part 2", exact: true })
     .click();

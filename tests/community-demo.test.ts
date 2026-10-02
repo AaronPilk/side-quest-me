@@ -127,11 +127,42 @@ const walletSnapshot = () =>
       localStorage.getItem(keyFor(value as DemoPersona)),
     ]),
   );
-const publish = (key: string = crypto.randomUUID()) =>
-  demoMutate<CommunityPost>(
-    "post_publish",
-    { runId, assetId, caption: "Our version of this quest", brandOptIn: true },
-    key,
+async function approve(post: CommunityPost) {
+  const previous = localStorage.getItem("sidequest-demo-persona") || "creator";
+  const latest = demoRead<CommunityPost>("post", { id: post.id });
+  if (latest.state !== "pending") {
+    const { viewerFollowing: _viewerFollowing, ...post } = latest;
+    return post;
+  }
+  persona("operator");
+  try {
+    return await demoMutate<CommunityPost>(
+      "post_review",
+      {
+        id: latest.id,
+        expectedVersion: latest.version,
+        decision: "approve",
+        notes: "Video, audio, caption and shared instructions reviewed.",
+        reviewedContent: true,
+      },
+      crypto.randomUUID(),
+    );
+  } finally {
+    persona(previous as DemoPersona);
+  }
+}
+const publish = async (key: string = crypto.randomUUID()) =>
+  approve(
+    await demoMutate<CommunityPost>(
+      "post_publish",
+      {
+        runId,
+        assetId,
+        caption: "Our version of this quest",
+        brandOptIn: true,
+      },
+      key,
+    ),
   );
 const createOffer = (postId = DEMO_POST_ID) =>
   demoMutate<LicenseOffer>(
@@ -158,6 +189,142 @@ afterEach(() => {
 });
 
 describe("isolated demo publication", () => {
+  it("keeps pending/rejected reels private, requires independent review, and sends every edit back through review", async () => {
+    seedRuns("creator", [readyRun()]);
+    const original = localStorage.getItem(keyFor("creator"));
+    const input = {
+      runId,
+      assetId,
+      caption: "Our finished outing",
+      brandOptIn: true,
+    };
+    let post = await demoMutate<CommunityPost>(
+      "post_publish",
+      input,
+      "first-submit",
+    );
+    expect(post.state).toBe("pending");
+    expect(feed().posts).toHaveLength(1);
+    expect(me().posts[0].state).toBe("pending");
+    persona("viewer");
+    expect(() => demoRead("post", { id: post.id })).toThrow("unavailable");
+    await expect(
+      demoMutate(
+        "post_review",
+        {
+          id: post.id,
+          expectedVersion: post.version,
+          decision: "approve",
+          reviewedContent: true,
+          notes: "Trying without operator role.",
+        },
+        "forged-review",
+      ),
+    ).rejects.toThrow("Operator access");
+    persona("operator");
+    expect(
+      demoRead<CommunityReadResults["operator"]>("operator").reviewPosts,
+    ).toHaveLength(1);
+    const pending = { ...post };
+    post = await demoMutate<CommunityPost>(
+      "post_review",
+      {
+        id: post.id,
+        expectedVersion: post.version,
+        decision: "reject",
+        reviewedContent: true,
+        notes: "Remove the private address from the caption.",
+      },
+      "reject-first",
+    );
+    expect(post.state).toBe("rejected");
+    persona("creator");
+    expect(
+      demoRead<CommunityPost>("post", { id: post.id }).reviewNotes,
+    ).toContain("private address");
+    expect(
+      (
+        await demoMutate<CommunityPost>(
+          "post_publish",
+          input,
+          "cannot-bypass-rejection",
+        )
+      ).state,
+    ).toBe("rejected");
+    post = await demoMutate<CommunityPost>(
+      "post_update",
+      {
+        id: post.id,
+        expectedVersion: post.version,
+        caption: "No identifying address",
+        brandOptIn: true,
+        published: true,
+      },
+      "resubmit",
+    );
+    post = await approve(post);
+    expect(post.state).toBe("published");
+    expect(feed().posts).toHaveLength(2);
+    persona("operator");
+    await expect(
+      demoMutate(
+        "post_review",
+        {
+          id: pending.id,
+          expectedVersion: pending.version,
+          decision: "approve",
+          reviewedContent: true,
+          notes: "Stale review must fail.",
+        },
+        "stale-review",
+      ),
+    ).rejects.toThrow("changed");
+    persona("creator");
+    post = await demoMutate<CommunityPost>(
+      "post_update",
+      {
+        id: post.id,
+        expectedVersion: post.version,
+        caption: "Another caption",
+        brandOptIn: true,
+        published: true,
+      },
+      "caption-review",
+    );
+    expect(post.state).toBe("pending");
+    expect(feed().posts).toHaveLength(1);
+    persona("brand");
+    await expect(createOffer(post.id)).rejects.toThrow("not available");
+    persona("creator");
+    post = await demoMutate<CommunityPost>(
+      "post_update",
+      {
+        id: post.id,
+        expectedVersion: post.version,
+        caption: post.caption,
+        brandOptIn: false,
+        published: false,
+      },
+      "withdraw",
+    );
+    expect(post.state).toBe("unpublished");
+    persona("operator");
+    await expect(
+      demoMutate(
+        "post_review",
+        {
+          id: post.id,
+          expectedVersion: post.version,
+          decision: "approve",
+          reviewedContent: true,
+          notes: "Withdrawn content cannot be reviewed.",
+        },
+        "approve-withdrawn",
+      ),
+    ).rejects.toThrow("no longer awaiting");
+    expect(localStorage.getItem(keyFor("creator"))).toBe(original);
+  });
+
   it("publishes frozen Series attribution only when the part is public, without exposing personal progress", async () => {
     seedRuns("creator", [readyRun()]);
     const detail = demoSeriesStartFromRun({
@@ -796,7 +963,7 @@ describe("manual demo licensing", () => {
     persona("brand");
     await expect(createOffer()).rejects.toThrow("not available");
     persona("viewer");
-    await demoMutate(
+    const optedIn = await demoMutate<CommunityPost>(
       "post_update",
       {
         id: off.id,
@@ -807,6 +974,7 @@ describe("manual demo licensing", () => {
       },
       "opt-in-video",
     );
+    await approve(optedIn);
     const creator = me().creator!;
     const profile = await demoMutate<CreatorProfile>(
       "creator_save",
@@ -1066,7 +1234,38 @@ describe("manual demo licensing", () => {
       },
       "operator-open-to-brands",
     );
-    const post = await publish("operator-publish");
+    const post = await demoMutate<CommunityPost>(
+      "post_publish",
+      { runId, assetId, caption: "An operator's own reel", brandOptIn: true },
+      "operator-publish",
+    );
+    await expect(
+      demoMutate(
+        "post_review",
+        {
+          id: post.id,
+          expectedVersion: post.version,
+          decision: "approve",
+          notes: "Self approval is forbidden.",
+          reviewedContent: true,
+        },
+        "operator-self-approve",
+      ),
+    ).rejects.toThrow("Another operator");
+    // This demo has one operator identity. Install an independently reviewed
+    // fixture to exercise the separate transaction self-fulfillment rule.
+    const fixture = JSON.parse(
+      localStorage.getItem("sidequest-community-demo-v1")!,
+    );
+    const reviewed = fixture.posts.find(
+      (item: CommunityPost) => item.id === post.id,
+    );
+    reviewed.state = "published";
+    reviewed.approvedVersion = reviewed.version;
+    localStorage.setItem(
+      "sidequest-community-demo-v1",
+      JSON.stringify(fixture),
+    );
     persona("brand");
     const offer = await createOffer(post.id);
     persona("operator");

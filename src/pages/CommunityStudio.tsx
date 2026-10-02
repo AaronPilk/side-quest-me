@@ -9,7 +9,11 @@ import {
   UserRound,
 } from "lucide-react";
 import { hasBusinessWorkspace } from "../../shared/account";
-import type { CommunityReport, LicenseOffer } from "../../shared/community";
+import type {
+  CommunityPost,
+  CommunityReport,
+  LicenseOffer,
+} from "../../shared/community";
 import { Button, Empty, Loading, Notice, PageTitle } from "../components/ui";
 import { LicenseTermsView } from "../components/LicenseTermsForm";
 import {
@@ -20,7 +24,115 @@ import {
   words,
 } from "../components/Community";
 import { DiscoverPostCard } from "./Discover";
+import { AuthVideo } from "../components/PrivateMedia";
 import "./business-workspace.css";
+
+function ReelPublicationReview({
+  post,
+  own,
+  refresh,
+}: {
+  post: CommunityPost;
+  own: boolean;
+  refresh: () => void;
+}) {
+  const action = useCommunityAction(refresh);
+  return (
+    <details className="community-panel reel-publication-review">
+      <summary>
+        {post.quest.title} · {post.creator.displayName}
+      </summary>
+      <p className="support">
+        Private submission · version {post.version}. Approval applies only to
+        this exact reel and caption.
+      </p>
+      <AuthVideo
+        src={post.mediaUrl}
+        poster={post.thumbnailUrl}
+        controls
+        playsInline
+        preload="metadata"
+        eager={false}
+        aria-label={`Review video: ${post.quest.title}`}
+      />
+      <h4>Public caption</h4>
+      <p>{post.caption || "No caption."}</p>
+      <h4>Shared quest instructions</h4>
+      <p>{post.quest.hook}</p>
+      <ol>
+        {post.quest.beats.map((beat, index) => (
+          <li key={index}>
+            <strong>{beat.label}</strong>
+            <p>{beat.action}</p>
+            <p className="support">Film: {beat.filming}</p>
+          </li>
+        ))}
+      </ol>
+      <ul>
+        {post.quest.requirements.map((line, index) => (
+          <li key={index}>{line}</li>
+        ))}
+      </ul>
+      <p className="support">
+        Adults-only quest: {post.quest.adultOnly ? "yes" : "no"}. Reject
+        explicit sexual material, abusive or hateful content, exploitation,
+        dangerous instructions, and videos that expose someone without
+        permission. Review the whole video and its audio, caption, and shared
+        instructions before deciding. Private completion and rewards do not
+        establish publication approval.
+      </p>
+      {own ? (
+        <Notice>Another operator must review your own submission.</Notice>
+      ) : (
+        <form
+          className="community-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            void action.run(
+              "post_review",
+              {
+                id: post.id,
+                expectedVersion: post.version,
+                decision: String(form.get("decision")),
+                notes: String(form.get("notes")),
+                reviewedContent: true,
+              },
+              "Publication review recorded.",
+            );
+          }}
+        >
+          <label>
+            Publication decision
+            <select name="decision">
+              <option value="reject">Return for changes</option>
+              <option value="approve">Approve for public availability</option>
+            </select>
+          </label>
+          <label>
+            Publication review notes
+            <textarea
+              name="notes"
+              rows={3}
+              minLength={3}
+              maxLength={1000}
+              required
+            />
+          </label>
+          <label className="check-row">
+            <input type="checkbox" required />I watched the entire video with
+            audio and reviewed the caption, shared quest instructions and
+            participation consent.
+          </label>
+          <Button secondary type="submit" busy={action.busy}>
+            Record publication review
+          </Button>
+        </form>
+      )}
+      {action.feedback}
+    </details>
+  );
+}
 
 function FulfillmentForm({
   offer,
@@ -510,6 +622,28 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
           {!operator.data && !operator.error && <Loading />}
           {operator.data && (
             <>
+              <h3>Videos awaiting publication review</h3>
+              <p className="support">
+                Submissions stay private until an independent operator approves
+                them. Caption edits and republication return here for a new
+                review.
+              </p>
+              {!operator.data.reviewPosts?.length && (
+                <p className="support">
+                  No videos are awaiting publication review.
+                </p>
+              )}
+              {(operator.data.reviewPosts ?? []).map((post) => (
+                <ReelPublicationReview
+                  key={`${post.id}:${post.version}`}
+                  post={post}
+                  own={post.creator.id === me.data!.userId}
+                  refresh={() => {
+                    operator.refresh();
+                    me.refresh();
+                  }}
+                />
+              ))}
               <h3>Original quests awaiting review</h3>
               {!operator.data.drafts.some(
                 (draft) => draft.state === "submitted",

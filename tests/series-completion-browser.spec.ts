@@ -1,3 +1,5 @@
+import { allowContentReview } from "./content-review-helper";
+import { reviewPendingReel } from "./reel-publication-helper";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import path from "node:path";
 import { reviewQuestPlans } from "./quest-wizard-helpers";
@@ -131,6 +133,7 @@ test("a real Series attempt completes privately, publishes a frozen episode, and
     .getByLabel("Why is that part required?", { exact: true })
     .fill("Use what you found in the middle chapter.");
   await reviewSeries(page);
+  await allowContentReview(page);
   await page
     .getByRole("button", { name: "Publish series", exact: true })
     .click();
@@ -236,6 +239,7 @@ test("a real Series attempt completes privately, publishes a frozen episode, and
     .fill("The renamed three experiments");
   await reachSeriesParts(page);
   await reviewSeries(page);
+  await allowContentReview(page);
   await page
     .getByRole("button", { name: "Publish series", exact: true })
     .click();
@@ -255,11 +259,14 @@ test("a real Series attempt completes privately, publishes a frozen episode, and
   await page
     .getByRole("textbox", { name: "Public caption", exact: true })
     .fill("The middle chapter, shared deliberately.");
-  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Submit for review", exact: true })
+    .click();
   await page
     .getByRole("link", { name: "Edit caption or manage publication" })
     .click();
   const postUrl = page.url();
+  await reviewPendingReel(page, "viewer");
   const postId = new URL(postUrl).pathname.split("/").at(-1);
   await expect(page.locator(".series-post-link")).toContainText(
     "A story in three experiments",

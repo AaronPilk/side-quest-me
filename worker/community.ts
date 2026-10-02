@@ -16,10 +16,15 @@ import {
   type AppContext,
 } from "./services";
 import { servePrivateObject } from "./media";
+import { CONTENT_REVIEW_CONSENT_HEADER } from "../shared/content-review";
+import {
+  assertPublicTextAllowed,
+  requireContentReviewPermission,
+} from "./content-moderation";
 
 /** Include this in the main API allowlist; public routes are registered before its auth middleware. */
 export const COMMUNITY_PRIVATE_ROUTE =
-  /^\/api\/community\/(?:me|activity|offers(?:\/[^/]+(?:\/media)?)?|drafts\/[^/]+|brand|operator|mutate)$/;
+  /^\/api\/community\/(?:me|activity|offers(?:\/[^/]+(?:\/media)?)?|reviews\/[^/]+\/media|drafts\/[^/]+|brand|operator|mutate)$/;
 
 const uuid = z.uuid();
 const empty = z.object({}).strict();
@@ -72,6 +77,14 @@ function communityError(message: string): never {
     post_removed: [
       403,
       "An operator removed this post. It cannot be republished here.",
+    ],
+    post_review_unavailable: [
+      409,
+      "This video is no longer awaiting publication review. Refresh the queue.",
+    ],
+    publication_review_required: [
+      422,
+      "Review the full video, caption and quest instructions, then record a decision and review notes.",
     ],
     draft_locked: [
       409,
@@ -173,13 +186,19 @@ async function media(
   c: AppContext,
   postId: string | null,
   offerId: string | null,
+  review = false,
 ) {
   const query = mediaQuerySchema.parse(c.req.query());
-  const { data, error } = await c.get("serviceDb").rpc("sq_community_media", {
-    p_actor: c.get("actor") || null,
-    p_post: postId,
-    p_offer: offerId,
-  });
+  const { data, error } = review
+    ? await c.get("serviceDb").rpc("sq_community_review_media", {
+        p_actor: c.get("actor"),
+        p_post: postId,
+      })
+    : await c.get("serviceDb").rpc("sq_community_media", {
+        p_actor: c.get("actor") || null,
+        p_post: postId,
+        p_offer: offerId,
+      });
   if (error) communityError(error.message);
   const parsed = mediaGrantSchema.safeParse(data);
   if (!parsed.success)
@@ -268,6 +287,9 @@ export function registerCommunityPrivate(app: Hono<AppBindings>) {
   app.get("/api/community/offers/:id/media", (c) =>
     media(c, null, uuid.parse(c.req.param("id"))),
   );
+  app.get("/api/community/reviews/:id/media", (c) =>
+    media(c, uuid.parse(c.req.param("id")), null, true),
+  );
   app.post("/api/community/mutate", async (c) => {
     const mutation = await json(c, communityMutationSchema);
     const key = c.req.header("Idempotency-Key");
@@ -277,6 +299,16 @@ export function registerCommunityPrivate(app: Hono<AppBindings>) {
         "Refresh and try this action again.",
         422,
       );
+    // Cover the legacy creator endpoint as well as the newer social editor.
+    if (mutation.action === "creator_save") {
+      requireContentReviewPermission(
+        c.req.header(CONTENT_REVIEW_CONSENT_HEADER),
+      );
+      await assertPublicTextAllowed(c.env, [
+        mutation.input.displayName,
+        mutation.input.bio,
+      ]);
+    }
     const { data, error } = await c
       .get("serviceDb")
       .rpc("sq_community_mutate", {

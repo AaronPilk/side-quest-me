@@ -37,6 +37,8 @@ import { Button, Empty, Loading, Notice, useResource } from "../components/ui";
 import { Planning, useCommunity, words } from "../components/Community";
 import "../series-design.css";
 import { DiscoverSections } from "../components/DiscoverSections";
+import { ContentReviewPermission } from "../components/ContentReviewPermission";
+import { CONTENT_REVIEW_PERMISSION_MESSAGE } from "../../shared/content-review";
 
 function SeriesCard({ series }: { series: SeriesSummary }) {
   return (
@@ -227,6 +229,7 @@ function SeriesView({ id, signedIn }: { id: string; signedIn: boolean }) {
   }, [detail.data]);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [contentReviewConsent, setContentReviewConsent] = useState(false);
   if (detail.error)
     return (
       <Notice error>
@@ -279,12 +282,20 @@ function SeriesView({ id, signedIn }: { id: string; signedIn: boolean }) {
   }
   async function publishPart(partId: string) {
     if (busy) return;
+    if (!contentReviewConsent) {
+      setError(CONTENT_REVIEW_PERMISSION_MESSAGE);
+      return;
+    }
     setBusy(true);
     setError("");
     try {
       const key = publishKeys.current.get(partId) ?? crypto.randomUUID();
       publishKeys.current.set(partId, key);
-      await seriesApi.save(withPartPublished(series, partId), key);
+      await seriesApi.save(
+        withPartPublished(series, partId),
+        key,
+        contentReviewConsent,
+      );
       publishKeys.current.delete(partId);
       detail.refresh();
     } catch (cause) {
@@ -395,6 +406,16 @@ function SeriesView({ id, signedIn }: { id: string; signedIn: boolean }) {
         </Notice>
       )}
       {error && <Notice error>{error}</Notice>}
+      {series.isOwner &&
+        signedIn &&
+        series.parts.some((part) => !part.published && finished(part.id)) && (
+          <ContentReviewPermission
+            scope="series"
+            checked={contentReviewConsent}
+            onChange={setContentReviewConsent}
+            disabled={busy}
+          />
+        )}
       {progress && (completed.size > 0 || progress.activeRunId) && (
         <div className="series-progress" role="status">
           <Check size={18} />
@@ -485,6 +506,7 @@ function SeriesView({ id, signedIn }: { id: string; signedIn: boolean }) {
                       <Button
                         secondary
                         busy={busy}
+                        disabled={!contentReviewConsent}
                         onClick={() => void publishPart(part.id)}
                       >
                         Publish Part {part.position}
@@ -684,6 +706,7 @@ function SeriesEditorForm({
   const [step, setStep] = useState(initial.step);
   const [furthestStep, setFurthestStep] = useState(initial.furthestStep);
   const [busy, setBusy] = useState(false);
+  const [contentReviewConsent, setContentReviewConsent] = useState(false);
   const [error, setError] = useState("");
   const [storageError, setStorageError] = useState(false);
   const mounted = useRef(true);
@@ -798,6 +821,10 @@ function SeriesEditorForm({
   async function persist(state: SeriesSave["state"]) {
     if (pendingSave.current) return;
     setError("");
+    if (state === "published" && !sourceRun && !contentReviewConsent) {
+      setError(CONTENT_REVIEW_PERMISSION_MESSAGE);
+      return;
+    }
     if (sourceRun && (!draft.title.trim() || !draft.premise.trim())) {
       setError("Give your series a title and a short premise.");
       return;
@@ -833,7 +860,7 @@ function SeriesEditorForm({
             input as Parameters<typeof seriesApi.startFromRun>[0],
             key,
           )
-        : await seriesApi.save(parsed.data, key);
+        : await seriesApi.save(parsed.data, key, contentReviewConsent);
       if (
         !mounted.current ||
         (await currentProfileDraftOwner()) !== expectedOwner
@@ -1401,15 +1428,24 @@ function SeriesEditorForm({
           )}
         </div>
         {review && !sourceRun && (
-          <Button
-            className="series-publish-action"
-            type="button"
-            secondary
-            busy={busy}
-            onClick={() => persist("published")}
-          >
-            Publish series <ArrowRight size={17} aria-hidden="true" />
-          </Button>
+          <>
+            <ContentReviewPermission
+              scope="series"
+              checked={contentReviewConsent}
+              onChange={setContentReviewConsent}
+              disabled={busy}
+            />
+            <Button
+              className="series-publish-action"
+              type="button"
+              secondary
+              busy={busy}
+              disabled={!contentReviewConsent}
+              onClick={() => persist("published")}
+            >
+              Publish series <ArrowRight size={17} aria-hidden="true" />
+            </Button>
+          </>
         )}
         <p className="series-editor-footnote">
           {initial.restored ? "Your draft was restored. " : ""}

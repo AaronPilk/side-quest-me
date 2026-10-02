@@ -21,6 +21,11 @@ import "./navigation-design.css";
 import { supabase, DEMO } from "./lib/auth";
 import { emailSignInRedirect, startNativeApp } from "./lib/native-app";
 import { isNativeApp } from "./lib/runtime";
+import {
+  INFORMATION_LINKS,
+  isPublicInformationPath,
+} from "./lib/public-information";
+import "./pages/public-information.css";
 import { clearCaptureDrafts } from "./lib/capture-drafts";
 import {
   accountIdentityChanged,
@@ -34,6 +39,7 @@ import {
 } from "./lib/internal-return";
 import { Button, Loading, Notice } from "./components/ui";
 import { AdventureCarousel } from "./components/AdventureCarousel";
+import { EmailPasswordSignIn } from "./components/EmailPasswordSignIn";
 import { OnboardingGate } from "./components/OnboardingGate";
 import { BrandAccountGate } from "./components/BrandAccountGate";
 import Quest from "./pages/Quest";
@@ -67,6 +73,7 @@ const DemoTools = lazy(() =>
 );
 const OriginalQuest = lazy(() => import("./pages/OriginalQuest"));
 const LicenseOffer = lazy(() => import("./pages/LicenseOffer"));
+const PublicInformation = lazy(() => import("./pages/PublicInformation"));
 export default function App() {
   const [signedIn, setSignedIn] = useState(DEMO);
   const [identity, setIdentity] = useState<string | null>(DEMO ? "demo" : null);
@@ -101,7 +108,9 @@ export default function App() {
     [],
   );
   const isReel = /^\/posts\/[^/]+$/.test(location.pathname);
+  const informationPage = isPublicInformationPath(location.pathname);
   const publicPage =
+    informationPage ||
     /^\/(?:discover|posts\/|creators\/|quests\/)/.test(location.pathname) ||
     /^\/series(?:\/[0-9a-f-]{36})?$/i.test(location.pathname);
   useEffect(() => {
@@ -174,6 +183,7 @@ export default function App() {
     ((signedIn && !welcome) || publicPage) &&
     !location.pathname.startsWith("/onboarding") &&
     location.pathname !== "/preferences" &&
+    !informationPage &&
     !isReel;
   const isDiscover = location.pathname === "/discover";
   const isSeriesBrowse = /^\/series(?:\/[0-9a-f-]{36})?$/i.test(
@@ -216,12 +226,14 @@ export default function App() {
             <BrandMark size={34} />
           </span>
           <span className="brand-name">{APP_CONFIG.name}</span>
-          <span
-            className="beta"
-            title={DEMO ? "Local demonstration. No real payments." : "Pilot"}
-          >
-            {DEMO ? "DEMO" : "PILOT"}
-          </span>
+          {DEMO && (
+            <span
+              className="beta"
+              title="Local demonstration. No real payments."
+            >
+              DEMO
+            </span>
+          )}
         </Link>
         {!navigationVisible && (
           <span className="private-note">
@@ -298,6 +310,13 @@ export default function App() {
                 <Route path="/studio" element={<CommunityStudio />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/settings/demo-tools" element={<DemoTools />} />
+                {INFORMATION_LINKS.map(({ path }) => (
+                  <Route
+                    key={path}
+                    path={path}
+                    element={<PublicInformation />}
+                  />
+                ))}
                 <Route
                   path="/business"
                   element={
@@ -391,8 +410,26 @@ function Welcome({ onStart }: { onStart: () => void }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [retryAfter, setRetryAfter] = useState(0);
+  const [clockTime, setClockTime] = useState(Date.now);
+  const retrySeconds = Math.max(0, Math.ceil((retryAfter - clockTime) / 1000));
+  useEffect(() => {
+    if (retryAfter <= Date.now()) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setClockTime(now);
+      if (now >= retryAfter) window.clearInterval(timer);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [retryAfter]);
+  function waitBeforeResending() {
+    const now = Date.now();
+    setClockTime(now);
+    setRetryAfter(now + 60_000);
+  }
   async function signIn(e: React.FormEvent) {
     e.preventDefault();
+    if (busy || Date.now() < retryAfter) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -402,14 +439,23 @@ function Welcome({ onStart }: { onStart: () => void }) {
         options: { emailRedirectTo: emailSignInRedirect() },
       });
       if (error) throw error;
+      waitBeforeResending();
       setMessage(
         isNativeApp()
           ? "Check your email on this phone. Tap the sign-in link to return to Sidequest."
           : "Check your email. Your private sign-in link is on its way.",
       );
-    } catch {
+    } catch (cause) {
+      const rateLimited =
+        cause &&
+        typeof cause === "object" &&
+        "code" in cause &&
+        cause.code === "over_email_send_rate_limit";
+      if (rateLimited) waitBeforeResending();
       setError(
-        "Could not send your sign-in link. Check your email and try again.",
+        rateLimited
+          ? "Email delivery is temporarily limited. Open the newest sign-in link if you have one, or try again later."
+          : "Could not send your sign-in link. Check your email and try again.",
       );
     } finally {
       setBusy(false);
@@ -472,8 +518,11 @@ function Welcome({ onStart }: { onStart: () => void }) {
               placeholder="you@example.com"
             />
           </label>
-          <Button type="submit" busy={busy}>
-            Find my first quest <ArrowUpRight size={20} />
+          <Button type="submit" busy={busy} disabled={retrySeconds > 0}>
+            {retrySeconds
+              ? `Resend in ${retrySeconds}s`
+              : "Find my first quest"}{" "}
+            <ArrowUpRight size={20} />
           </Button>
           <p className="fine-print">
             We’ll send a secure sign-in link. No password to remember.
@@ -487,7 +536,15 @@ function Welcome({ onStart }: { onStart: () => void }) {
       )}
       {message && <Notice>{message}</Notice>}
       {error && <Notice error>{error}</Notice>}
+      {!DEMO && supabase && <EmailPasswordSignIn auth={supabase.auth} />}
       <p className="fine-print">Private by default. No pressure to post.</p>
+      <nav className="welcome-policies" aria-label="Help and policies">
+        {INFORMATION_LINKS.map(({ path, label }) => (
+          <Link key={path} to={path}>
+            {label}
+          </Link>
+        ))}
+      </nav>
     </section>
   );
 }

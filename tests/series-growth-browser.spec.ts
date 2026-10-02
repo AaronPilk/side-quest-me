@@ -1,3 +1,4 @@
+import { allowContentReview } from "./content-review-helper";
 import { expect, test } from "@playwright/test";
 import type { SeriesSave } from "../shared/series";
 import { selectDemoPersona } from "./demo-persona-helper";
@@ -106,6 +107,7 @@ test("do a quest, turn it into a series in one tap, then create Part 2 of the sa
     page.getByRole("button", { name: "Create Part 3", exact: true }),
   ).toBeVisible();
   // Publishing Part 1 makes the growing story public with only that part.
+  await allowContentReview(page);
   await page
     .getByRole("button", { name: "Publish Part 1", exact: true })
     .click();
@@ -128,6 +130,7 @@ test("do a quest, turn it into a series in one tap, then create Part 2 of the sa
   await expect(page.getByText("Part 2", { exact: false })).toHaveCount(0);
   await selectDemoPersona(page, "creator");
   await page.goto(seriesUrl);
+  await allowContentReview(page);
   await page
     .getByRole("button", { name: "Publish Part 2", exact: true })
     .click();

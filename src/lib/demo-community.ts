@@ -33,6 +33,7 @@ type StoredPost = CommunityPost & {
   ownerId: string;
   runId: string;
   assetId: string;
+  approvedVersion?: number;
 };
 type Activity = CommunityActivity & {
   recipientId: string;
@@ -105,6 +106,7 @@ function initial(): State {
         brandOptIn: true,
         state: "published",
         version: 1,
+        approvedVersion: 1,
         createdAt: "2026-09-29T12:00:00.000Z",
         attemptCount: 0,
         mediaUrl: "/api/local-media/demo-reel",
@@ -224,10 +226,20 @@ function hasReel(post: StoredPost) {
   );
 }
 function isPublished(_state: State, post: StoredPost) {
-  return post.state === "published" && hasReel(post);
+  return (
+    post.state === "published" &&
+    post.approvedVersion === post.version &&
+    hasReel(post)
+  );
 }
 function postDto(state: State, item: StoredPost): CommunityPost {
-  const { ownerId, runId: _runId, assetId: _assetId, ...publicFields } = item;
+  const {
+    ownerId,
+    runId: _runId,
+    assetId: _assetId,
+    approvedVersion: _approvedVersion,
+    ...publicFields
+  } = item;
   const series = demoPublicRunSeries(
     item.runId,
     runsFor(ownerId).find((run) => run.id === item.runId)?.series,
@@ -254,7 +266,7 @@ function offerDto(state: State, offer: LicenseOffer): LicenseOffer {
     brand?.state === "approved" &&
     brand.ownerId === demoActor().id &&
     post &&
-    hasReel(post);
+    isPublished(state, post);
   return {
     ...offer,
     mediaUrl: active ? post.mediaUrl : null,
@@ -561,6 +573,9 @@ export function demoRead<T>(
         businesses: state.brands,
         offers: state.offers.map((offer) => offerDto(state, offer)),
         reports: state.reports,
+        reviewPosts: state.posts
+          .filter((post) => post.state === "pending" && hasReel(post))
+          .map((post) => postDto(state, post)),
       };
       break;
   }
@@ -638,7 +653,7 @@ export async function demoMutate<T>(
             : null,
           caption: p.caption,
           brandOptIn: p.brandOptIn,
-          state: "published",
+          state: "pending",
           version: 1,
           createdAt: now(),
           attemptCount: 0,
@@ -667,8 +682,41 @@ export async function demoMutate<T>(
         );
         post.caption = p.caption;
         post.brandOptIn = p.brandOptIn;
-        post.state = p.published ? "published" : "unpublished";
+        post.state = p.published ? "pending" : "unpublished";
+        delete post.approvedVersion;
+        post.reviewNotes = "";
         post.version++;
+        result = postDto(state, post);
+        break;
+      }
+      case "post_review": {
+        operator();
+        const p = operation.input;
+        const post = requireValue(state.posts.find((item) => item.id === p.id));
+        check(
+          post.ownerId !== actor,
+          "Another operator must review your own submission.",
+        );
+        checkVersion(post.version, p.expectedVersion);
+        check(
+          post.state === "pending",
+          "This video is no longer awaiting publication review.",
+        );
+        check(hasReel(post), "This reel is unavailable.");
+        post.state = p.decision === "approve" ? "published" : "rejected";
+        post.version++;
+        post.approvedVersion =
+          p.decision === "approve" ? post.version : undefined;
+        post.reviewNotes = p.decision === "reject" ? p.notes : "";
+        notify(
+          state,
+          post.ownerId,
+          "post_reviewed",
+          p.decision === "approve"
+            ? "Your video was approved for publication."
+            : "Your video needs changes before publication.",
+          `/posts/${post.id}`,
+        );
         result = postDto(state, post);
         break;
       }

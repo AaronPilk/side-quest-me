@@ -11,6 +11,7 @@ import {
 } from "../../shared/series";
 import { request } from "./api";
 import { DEMO } from "./auth";
+import { CONTENT_REVIEW_CONSENT_HEADER } from "../../shared/content-review";
 import {
   demoSeriesDetail,
   demoSeriesList,
@@ -59,13 +60,19 @@ export const seriesApi = {
   save: async (
     input: SeriesSave,
     key = crypto.randomUUID(),
+    contentReviewConsent = false,
   ): Promise<SeriesDetail> => {
     const parsed = seriesSaveSchema.parse(input);
     return DEMO
       ? demoSeriesMutate("save", parsed, key)
       : request("/api/series/mutate", {
           method: "POST",
-          headers: { "Idempotency-Key": key },
+          headers: {
+            "Idempotency-Key": key,
+            ...(contentReviewConsent
+              ? { [CONTENT_REVIEW_CONSENT_HEADER]: "true" }
+              : {}),
+          },
           body: JSON.stringify({ action: "save", input: parsed }),
         });
   },

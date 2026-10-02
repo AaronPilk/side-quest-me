@@ -156,6 +156,10 @@ export interface Database {
           version: number
           created_at: string
           updated_at: string
+          approved_version: number | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          review_notes: string
         }
         Insert: {
           id?: string
@@ -170,6 +174,10 @@ export interface Database {
           version?: number
           created_at?: string
           updated_at?: string
+          approved_version?: number | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          review_notes?: string
         }
         Update: {
           id?: string
@@ -184,8 +192,12 @@ export interface Database {
           version?: number
           created_at?: string
           updated_at?: string
+          approved_version?: number | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          review_notes?: string
         }
-        Relationships: [{"columns":["asset_id"],"isOneToOne":true,"foreignKeyName":"community_posts_asset_id_fkey","referencedColumns":["id"],"referencedRelation":"media_assets"},{"columns":["owner_id"],"isOneToOne":false,"foreignKeyName":"community_posts_owner_id_fkey","referencedColumns":["id"],"referencedRelation":"profiles"},{"columns":["run_id"],"isOneToOne":false,"foreignKeyName":"community_posts_run_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_runs"},{"columns":["template_id"],"isOneToOne":false,"foreignKeyName":"community_posts_template_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_templates"}]
+        Relationships: [{"columns":["asset_id"],"isOneToOne":true,"foreignKeyName":"community_posts_asset_id_fkey","referencedColumns":["id"],"referencedRelation":"media_assets"},{"columns":["owner_id"],"isOneToOne":false,"foreignKeyName":"community_posts_owner_id_fkey","referencedColumns":["id"],"referencedRelation":"profiles"},{"columns":["reviewed_by"],"isOneToOne":false,"foreignKeyName":"community_posts_reviewed_by_fkey","referencedColumns":["id"],"referencedRelation":"profiles"},{"columns":["run_id"],"isOneToOne":false,"foreignKeyName":"community_posts_run_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_runs"},{"columns":["template_id"],"isOneToOne":false,"foreignKeyName":"community_posts_template_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_templates"}]
       }
       community_reports: {
         Row: {
@@ -411,6 +423,42 @@ export interface Database {
           completed_at?: string | null
         }
         Relationships: [{"columns":["asset_id"],"isOneToOne":true,"foreignKeyName":"media_cleanup_asset_id_fkey","referencedColumns":["id"],"referencedRelation":"media_assets"}]
+      }
+      private_quest_proposals: {
+        Row: {
+          id: string
+          owner_id: string
+          template_id: string
+          outing: Json
+          location: Json | null
+          provider: string
+          model: string
+          created_at: string
+          expires_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id: string
+          template_id: string
+          outing: Json
+          location?: Json | null
+          provider: string
+          model: string
+          created_at?: string
+          expires_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string
+          template_id?: string
+          outing?: Json
+          location?: Json | null
+          provider?: string
+          model?: string
+          created_at?: string
+          expires_at?: string
+        }
+        Relationships: [{"columns":["owner_id"],"isOneToOne":false,"foreignKeyName":"private_quest_proposals_owner_id_fkey","referencedColumns":["id"],"referencedRelation":"profiles"},{"columns":["template_id"],"isOneToOne":true,"foreignKeyName":"private_quest_proposals_template_id_fkey","referencedColumns":["id"],"referencedRelation":"quest_templates"}]
       }
       profiles: {
         Row: {
@@ -1136,6 +1184,7 @@ export interface Database {
     Views: Record<string, never>
     Functions: {
       sq_abandon_run: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
+      sq_accept_private_run: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_accept_run: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_accept_series_run: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_cancel_redemption: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
@@ -1144,6 +1193,7 @@ export interface Database {
       sq_community_media: { Args: { p_actor: string; p_post: string; p_offer: string }; Returns: Json }
       sq_community_mutate: { Args: { p_actor: string; p_action: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_community_read: { Args: { p_actor: string; p_view: string; p_input: Json }; Returns: Json }
+      sq_community_review_media: { Args: { p_actor: string; p_post: string }; Returns: Json }
       sq_consume_redemption: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_create_share: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_delete_account: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
@@ -1152,6 +1202,7 @@ export interface Database {
       sq_eligibility: { Args: { p_actor: string; p_family: string }; Returns: Json }
       sq_fail_render: { Args: { p_job: string; p_fence: number; p_error: string }; Returns: Json }
       sq_finalize_account_deletion: { Args: { p_actor: string }; Returns: Json }
+      sq_finish_experience_discovery: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_finish_render: { Args: { p_job: string; p_fence: number; p_output: Json }; Returns: Json }
       sq_flag_run: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_memberships: { Args: { p_actor: string }; Returns: Json }
@@ -1162,6 +1213,7 @@ export interface Database {
       sq_reconcile: { Args: { p_limit?: number }; Returns: Json }
       sq_redemption_material: { Args: { p_actor: string; p_redemption: string; p_token_hash?: string }; Returns: Json }
       sq_request_render: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
+      sq_reserve_experience_discovery: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_reserve_reward: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_reserve_upload: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_review_evidence: { Args: { p_actor: string; p_run: string }; Returns: Json }
@@ -1171,12 +1223,14 @@ export interface Database {
       sq_seal_media: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_series_mutate: { Args: { p_actor: string; p_action: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_series_read: { Args: { p_actor: string; p_view: string; p_input: Json }; Returns: Json }
+      sq_series_review_preflight: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_set_template_publication: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_social_follow: { Args: { p_actor: string; p_target: string; p_following: boolean }; Returns: Json }
       sq_social_photo: { Args: { p_actor: string; p_key: string }; Returns: Json }
       sq_social_photo_key: { Args: { p_actor: string; p_target: string }; Returns: string }
       sq_social_read: { Args: { p_actor: string; p_target: string }; Returns: Json }
       sq_social_save: { Args: { p_actor: string; p_input: Json }; Returns: Json }
+      sq_store_private_proposal: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_submit_run: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_update_clip: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }
       sq_upsert_campaign: { Args: { p_actor: string; p_input: Json; p_key: string; p_hash: string }; Returns: Json }

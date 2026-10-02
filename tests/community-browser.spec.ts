@@ -1,3 +1,5 @@
+import { allowContentReview } from "./content-review-helper";
+import { reviewPendingReel } from "./reel-publication-helper";
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -163,22 +165,35 @@ test("mobile discovery creates a separate personal attempt, keeps the reel priva
   await page
     .getByRole("textbox", { name: "Public caption", exact: true })
     .fill("My own version, published deliberately.");
-  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Submit for review", exact: true })
+    .click();
   await page
     .getByRole("link", { name: "Edit caption or manage publication" })
     .click();
   const postUrl = page.url();
+  await expect(
+    page.getByText("Awaiting publication review.", { exact: false }),
+  ).toBeVisible();
+  await page.goto("/discover");
+  await expect(page.locator(".public-post video")).toHaveCount(1);
+  await page.goto(postUrl);
+  await reviewPendingReel(page, "creator");
   await expect(page.locator(".public-post")).toContainText(
     "My own version, published deliberately.",
   );
   await page
     .locator("summary")
-    .filter({ hasText: /^Edit this public post$/ })
+    .filter({ hasText: /^Manage publication$/ })
     .click();
   await page
     .getByRole("textbox", { name: "Public caption", exact: true })
     .fill("Caption edited and persisted.");
   await page.getByRole("button", { name: "Save post changes" }).click();
+  await expect(
+    page.getByText("Awaiting publication review.", { exact: false }),
+  ).toBeVisible();
+  await reviewPendingReel(page, "creator");
   await expect(page.locator(".post-caption")).toHaveText(
     "Caption edited and persisted.",
   );
@@ -205,7 +220,7 @@ test("mobile discovery creates a separate personal attempt, keeps the reel priva
   await page.goto(postUrl);
   await page
     .locator("summary")
-    .filter({ hasText: /^Edit this public post$/ })
+    .filter({ hasText: /^Manage publication$/ })
     .click();
   await page
     .getByRole("button", { name: "Unpublish post", exact: true })
@@ -511,6 +526,7 @@ test("creators can decline an inquiry and change profile/video availability with
   await page
     .getByRole("checkbox", { name: "Open to brand opportunities", exact: true })
     .uncheck();
+  await allowContentReview(page);
   await page.getByRole("button", { name: "Save public profile" }).click();
   await expect(
     page.getByText("Public profile saved.", { exact: true }),
@@ -535,7 +551,7 @@ test("creators can decline an inquiry and change profile/video availability with
   await page.goto(`/posts/${fixturePost}`);
   await page
     .locator("summary")
-    .filter({ hasText: /^Edit this public post$/ })
+    .filter({ hasText: /^Manage publication$/ })
     .click();
   await expect(
     page.getByRole("checkbox", { name: "Open this video to brand inquiries" }),
@@ -564,6 +580,10 @@ test("creators can decline an inquiry and change profile/video availability with
   await expect(
     page.getByText("Open to brand offers", { exact: true }),
   ).toHaveCount(0);
+  await expect(
+    page.getByText("Awaiting publication review.", { exact: false }),
+  ).toBeVisible();
+  await reviewPendingReel(page, "viewer");
   await persona(page, "brand");
   await page.goto(`/posts/${fixturePost}`);
   await expect(

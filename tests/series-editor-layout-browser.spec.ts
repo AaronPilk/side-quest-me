@@ -1,3 +1,4 @@
+import { allowContentReview } from "./content-review-helper";
 import { expect, test, type Page } from "@playwright/test";
 import { openPartOptions, reviewSeries } from "./series-authoring-helpers";
 import { selectDemoPersona } from "./demo-persona-helper";
@@ -184,6 +185,10 @@ for (const width of [320, 390, 430]) {
       await expect(
         page.getByRole("button", { name: "Save draft", exact: true }),
       ).toBeEnabled();
+      await expect(
+        page.getByRole("button", { name: "Publish series", exact: true }),
+      ).toBeDisabled();
+      await allowContentReview(page);
       await expect(
         page.getByRole("button", { name: "Publish series", exact: true }),
       ).toBeEnabled();

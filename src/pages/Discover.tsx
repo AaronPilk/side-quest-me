@@ -110,7 +110,18 @@ export function DiscoverPostCard({
         />
       ) : (
         <div className="community-card">
-          <p>This video is no longer public.</p>
+          <p>
+            {post.state === "pending"
+              ? "Awaiting publication review. Your video stays private until approved."
+              : post.state === "rejected"
+                ? "Changes are needed before this video can be published."
+                : post.state === "removed"
+                  ? "This post was removed by moderation."
+                  : "This video is private."}
+          </p>
+          {post.state === "rejected" && post.reviewNotes && (
+            <p className="support">{post.reviewNotes}</p>
+          )}
           {own && (
             <Link to="/journal">
               Watch your private original in the journal
@@ -233,12 +244,12 @@ export function DiscoverPostCard({
             <p>{post.quest.fallback}</p>
           </details>
         )}
-        {detail && own && (
+        {detail && own && post.state !== "removed" && (
           <details className="community-panel">
-            <summary>Edit this public post</summary>
+            <summary>Manage publication</summary>
             <p className="support">
-              Unpublishing removes this public post. Your private original stays
-              in your journal.
+              Caption and publication changes need a new review before sharing.
+              Your private original stays in your journal.
             </p>
             <label>
               Public caption
@@ -272,14 +283,37 @@ export function DiscoverPostCard({
                     expectedVersion: post.version,
                     caption,
                     brandOptIn,
-                    published: post.state === "published",
+                    published: post.state !== "unpublished",
                   },
-                  "Public post updated.",
+                  post.state === "unpublished"
+                    ? "Private post changes saved."
+                    : "Changes submitted for publication review.",
                 )
               }
             >
               Save post changes
             </Button>
+            {post.state === "unpublished" && (
+              <Button
+                secondary
+                busy={action.busy}
+                onClick={() =>
+                  action.run(
+                    "post_update",
+                    {
+                      id: post.id,
+                      expectedVersion: post.version,
+                      caption,
+                      brandOptIn,
+                      published: true,
+                    },
+                    "Submitted for publication review.",
+                  )
+                }
+              >
+                Submit for review
+              </Button>
+            )}
             <button
               className="text-button danger"
               disabled={action.busy}
@@ -298,7 +332,9 @@ export function DiscoverPostCard({
                 if (result) navigate("/profile");
               }}
             >
-              Unpublish post
+              {post.state === "pending"
+                ? "Withdraw submission"
+                : "Unpublish post"}
             </button>
           </details>
         )}

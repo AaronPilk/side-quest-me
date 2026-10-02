@@ -14,6 +14,10 @@ import { demoMutate, demoRead } from "./demo-community";
 import { demoActor } from "./demo-identity";
 import { demoSocialIdentity, demoSocialBlock } from "./demo-social";
 import { clearDemoSeriesFollowsForBlock } from "./demo-series";
+import {
+  CONTENT_REVIEW_CONSENT_HEADER,
+  CONTENT_REVIEW_PERMISSION_MESSAGE,
+} from "../../shared/content-review";
 
 function withDemoIdentity<T>(value: T): T {
   if (Array.isArray(value)) return value.map(withDemoIdentity) as T;
@@ -65,8 +69,11 @@ export const communityApi = {
     action: CommunityAction,
     input: unknown,
     key = crypto.randomUUID(),
+    contentReviewConsent = false,
   ): Promise<T> => {
     const operation = communityMutationSchema.parse({ action, input });
+    if (operation.action === "creator_save" && !contentReviewConsent)
+      throw new Error(CONTENT_REVIEW_PERMISSION_MESSAGE);
     if (DEMO) {
       const result = await demoMutate<T>(action, operation.input, key);
       if (operation.action === "block" && operation.input.blocked) {
@@ -77,7 +84,12 @@ export const communityApi = {
     }
     return request<T>("/api/community/mutate", {
       method: "POST",
-      headers: { "Idempotency-Key": key },
+      headers: {
+        "Idempotency-Key": key,
+        ...(contentReviewConsent
+          ? { [CONTENT_REVIEW_CONSENT_HEADER]: "true" }
+          : {}),
+      },
       body: JSON.stringify(operation),
     });
   },

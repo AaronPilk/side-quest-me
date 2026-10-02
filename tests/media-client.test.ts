@@ -121,6 +121,26 @@ describe("private media transport", () => {
     await expect(fetchMediaBlob(path)).rejects.toThrow("Sign in again");
     expect(request).toHaveBeenCalledOnce();
   });
+  it("authenticates operator publication previews only on the trusted API origin", async () => {
+    const path =
+      "/api/community/reviews/a012d494-69d6-413c-9e7c-2101a999f454/media";
+    expect(mediaNeedsAuth(path)).toBe(true);
+    expect(mediaNeedsAuth(`https://untrusted.example${path}`)).toBe(false);
+    const request = vi.fn(
+      async () =>
+        new Response(new Uint8Array([1, 2, 3]), {
+          headers: { "content-type": "video/mp4" },
+        }),
+    );
+    vi.stubGlobal("fetch", request);
+    await fetchMediaBlob(path);
+    expect(request).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: { Authorization: "Bearer session-test-token" },
+      }),
+    );
+  });
   it("never saves a login page as an MP4", async () => {
     vi.stubGlobal(
       "fetch",

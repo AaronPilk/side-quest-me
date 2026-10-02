@@ -61,6 +61,15 @@ export const communityInputs = {
       published: z.boolean(),
     })
     .strict(),
+  post_review: z
+    .object({
+      id,
+      expectedVersion: version,
+      decision: z.enum(["approve", "reject"]),
+      notes: text(1000).min(3),
+      reviewedContent: z.literal(true),
+    })
+    .strict(),
   draft_save: z
     .object({
       id: id.optional(),
@@ -170,6 +179,12 @@ export const communityMutationSchema = z.discriminatedUnion("action", [
     .object({
       action: z.literal("post_update"),
       input: communityInputs.post_update,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("post_review"),
+      input: communityInputs.post_review,
     })
     .strict(),
   z
@@ -310,7 +325,8 @@ export interface CommunityPost {
   questAuthor: CreatorProfile | null;
   caption: string;
   brandOptIn: boolean;
-  state: "published" | "unpublished" | "removed";
+  state: "pending" | "published" | "unpublished" | "rejected" | "removed";
+  reviewNotes?: string;
   version: number;
   createdAt: string;
   attemptCount: number;
@@ -424,6 +440,7 @@ export interface CommunityReadResults {
   draft: OriginalDraft;
   brand: { brand: BusinessProfile | null; posts: CommunityPost[] };
   operator: {
+    reviewPosts?: CommunityPost[];
     drafts: OriginalDraft[];
     businesses: BusinessProfile[];
     offers: LicenseOffer[];

@@ -139,7 +139,7 @@ async function reelFixture(page: Page, state: CommunityPost["state"]) {
   await page.goto(`/posts/${postId}`);
   const edit = page
     .locator("summary")
-    .filter({ hasText: /^Edit this public post$/ });
+    .filter({ hasText: /^Manage publication$/ });
   await expect(edit).toBeVisible();
   await edit.click();
   await expect(
@@ -160,7 +160,7 @@ async function changeAccount(page: Page, id: string | null) {
 
 async function expectNoOwnerControls(page: Page) {
   await expect(
-    page.locator("summary").filter({ hasText: /^Edit this public post$/ }),
+    page.locator("summary").filter({ hasText: /^Manage publication$/ }),
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Unpublish post", exact: true }),

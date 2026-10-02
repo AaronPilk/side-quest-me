@@ -49,7 +49,7 @@ for (const width of [320, 390, 430]) {
         name: "Settings",
         exact: true,
       });
-      await expect(settings.getByRole("link")).toHaveCount(4);
+      await expect(settings.getByRole("link")).toHaveCount(8);
       const layout = await settings
         .locator(".settings-row")
         .evaluateAll((rows) =>
@@ -118,6 +118,10 @@ test("settings preserves account, preference, journal and demo destinations", as
     ["Account & quest preferences", "/account"],
     ["Private journal", "/journal"],
     ["Demo tools", "/settings/demo-tools"],
+    ["Help & support", "/support"],
+    ["Privacy policy", "/privacy"],
+    ["Terms of use", "/terms"],
+    ["Community guidelines", "/community-guidelines"],
   ]) {
     const settings = page.getByRole("navigation", {
       name: "Settings",

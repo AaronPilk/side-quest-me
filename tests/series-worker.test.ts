@@ -3,12 +3,19 @@ import type { AppContext, AppEnv } from "../worker/services";
 
 const state = vi.hoisted(() => ({
   rpc: vi.fn(),
+  reviewText: vi.fn(),
+  reviewImage: vi.fn(),
   authenticate: vi.fn(),
   serviceDb: vi.fn(),
 }));
 vi.mock("@cloudflare/containers", () => ({
   Container: class {},
   getContainer: vi.fn(),
+}));
+vi.mock("../worker/content-moderation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../worker/content-moderation")>()),
+  assertPublicTextAllowed: state.reviewText,
+  assertPublicImageAllowed: state.reviewImage,
 }));
 vi.mock("../worker/services", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../worker/services")>();
@@ -31,11 +38,15 @@ vi.mock("../worker/services", async (importOriginal) => {
 });
 import worker from "../worker/index";
 import { hash } from "../worker/services";
+import { getQuest } from "../shared/catalog";
 
 const actor = "11111111-1111-4111-8111-111111111111";
 const seriesId = "22222222-2222-4222-8222-222222222222";
 const partId = "33333333-3333-4333-8333-333333333333";
-const auth = { Authorization: "Bearer valid-session" };
+const auth = {
+  Authorization: "Bearer valid-session",
+  "X-Content-Review-Consent": "true",
+};
 const follow = { action: "follow", input: { id: seriesId, following: true } };
 const startFromRun = {
   action: "start_from_run",
@@ -88,7 +99,29 @@ function mutate(input: unknown, key: string | null = "series-request-key") {
 }
 beforeEach(() => {
   vi.clearAllMocks();
-  state.rpc.mockResolvedValue({ data: { id: seriesId }, error: null });
+  state.reviewText.mockResolvedValue(undefined);
+  state.reviewImage.mockResolvedValue(undefined);
+  state.rpc.mockImplementation(
+    async (name: string, args: { p_input: typeof save.input }) => ({
+      data:
+        name === "sq_series_review_preflight"
+          ? {
+              requiresReview: true,
+              publicContent: {
+                title: args.p_input.title,
+                premise: args.p_input.premise,
+                parts: args.p_input.parts
+                  .filter((part) => part.published)
+                  .map((part) => ({
+                    ...part,
+                    quest: getQuest(part.templateId),
+                  })),
+              },
+            }
+          : { id: seriesId },
+      error: null,
+    }),
+  );
 });
 
 describe("Series Worker public and authenticated route boundary", () => {
@@ -325,4 +358,230 @@ describe("Series mutation transport and error contract", () => {
       expect(JSON.stringify(body)).not.toContain("private database diagnostic");
     }
   });
+});
+
+it("keeps private series drafts outside the provider and screens only newly public text after permission", async () => {
+  expect((await mutate(save)).status).toBe(200);
+  expect((await mutate(startFromRun)).status).toBe(200);
+  expect(state.reviewText).not.toHaveBeenCalled();
+  state.rpc.mockClear();
+  const published = {
+    ...save,
+    input: {
+      ...save.input,
+      kind: "ongoing",
+      state: "published",
+      parts: [
+        { ...save.input.parts[0], published: true },
+        {
+          ...save.input.parts[0],
+          id: "44444444-4444-4444-8444-444444444444",
+          title: "Private future title",
+          published: false,
+        },
+      ],
+    },
+  };
+  const denied = await request("/api/series/mutate", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer valid-session",
+      "Content-Type": "application/json",
+      "Idempotency-Key": "series-publication-request",
+    },
+    body: JSON.stringify(published),
+  });
+  expect(denied.status).toBe(422);
+  expect(state.reviewText).not.toHaveBeenCalled();
+  expect(state.rpc).toHaveBeenCalledOnce();
+  expect(state.rpc).toHaveBeenLastCalledWith(
+    "sq_series_review_preflight",
+    expect.objectContaining({ p_actor: actor }),
+  );
+  expect((await mutate(published)).status).toBe(200);
+  expect(state.reviewText).toHaveBeenCalledWith(
+    {},
+    expect.arrayContaining(
+      [
+        published.input.title,
+        published.input.premise,
+        "First part",
+        getQuest(published.input.parts[0].templateId)!.beats[0].action,
+        getQuest(published.input.parts[0].templateId)!.requirements[0],
+      ].filter((text) => text !== undefined),
+    ),
+  );
+  expect(JSON.stringify(state.reviewText.mock.lastCall)).not.toContain(
+    "Private future title",
+  );
+  state.rpc.mockClear();
+  const { ApiError } = await import("../worker/services");
+  state.reviewText.mockRejectedValue(
+    new ApiError("content_review_unavailable", "Try again.", 503),
+  );
+  expect((await mutate(published)).status).toBe(503);
+  expect(state.rpc).toHaveBeenCalledOnce();
+  expect(state.rpc.mock.lastCall?.[0]).toBe("sq_series_review_preflight");
+});
+
+it("preserves editing private future chapters of an existing public series without provider disclosure, and rejects stale comparisons", async () => {
+  const existing = {
+    ...save.input,
+    id: seriesId,
+    isOwner: true,
+    state: "published",
+    kind: "ongoing",
+    version: 3,
+    parts: [{ ...save.input.parts[0], published: true }],
+  };
+  const future = {
+    ...save,
+    input: {
+      ...existing,
+      expectedVersion: 3,
+      parts: [
+        ...existing.parts,
+        {
+          ...save.input.parts[0],
+          id: "44444444-4444-4444-8444-444444444444",
+          title: "Private notes stay private",
+          published: false,
+        },
+      ],
+    },
+  };
+  const { isOwner: _isOwner, version: _version, ...validInput } = future.input;
+  void _isOwner;
+  void _version;
+  const operation = { action: "save", input: validInput };
+  state.rpc.mockImplementation(async (name: string) => ({
+    data:
+      name === "sq_series_review_preflight"
+        ? { requiresReview: false }
+        : { id: seriesId },
+    error: null,
+  }));
+  const noConsent = () =>
+    request("/api/series/mutate", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer valid-session",
+        "Content-Type": "application/json",
+        "Idempotency-Key": "series-private-chapter",
+      },
+      body: JSON.stringify(operation),
+    });
+  expect((await noConsent()).status).toBe(200);
+  expect(state.reviewText).not.toHaveBeenCalled();
+  expect(state.rpc).toHaveBeenLastCalledWith(
+    "sq_series_mutate",
+    expect.objectContaining({ p_actor: actor, p_input: validInput }),
+  );
+  state.rpc.mockClear();
+  state.rpc.mockResolvedValue({
+    data: null,
+    error: { message: "stale_version" },
+  });
+  expect((await noConsent()).status).toBe(409);
+  expect(state.rpc).toHaveBeenCalledOnce();
+  expect(state.reviewText).not.toHaveBeenCalled();
+  state.rpc.mockImplementation(async (name: string) => ({
+    data:
+      name === "sq_series_review_preflight"
+        ? {
+            requiresReview: true,
+            publicContent: {
+              title: existing.title,
+              premise: "New public premise",
+              parts: [
+                {
+                  ...existing.parts[0],
+                  quest: getQuest(existing.parts[0].templateId),
+                },
+              ],
+            },
+          }
+        : { id: seriesId },
+    error: null,
+  }));
+  expect(
+    (
+      await mutate({
+        action: "save",
+        input: { ...validInput, premise: "New public premise" },
+      })
+    ).status,
+  ).toBe(200);
+  expect(state.reviewText).toHaveBeenCalledWith(
+    {},
+    expect.arrayContaining([
+      existing.title,
+      "New public premise",
+      "First part",
+      getQuest(existing.parts[0].templateId)!.hook,
+    ]),
+  );
+});
+
+it("returns an owner-bound completed publication replay before consent, provider or stale-version mutation work", async () => {
+  const published = {
+    action: "save",
+    input: {
+      ...save.input,
+      id: seriesId,
+      expectedVersion: 3,
+      state: "published",
+      parts: [{ ...save.input.parts[0], published: true }],
+    },
+  };
+  const completed = { id: seriesId, version: 4, state: "published", parts: [] };
+  state.rpc.mockResolvedValue({ data: { replay: completed }, error: null });
+  const response = await request("/api/series/mutate", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer valid-session",
+      "Content-Type": "application/json",
+      "Idempotency-Key": "series-lost-response",
+    },
+    body: JSON.stringify(published),
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(completed);
+  expect(state.rpc).toHaveBeenCalledOnce();
+  expect(state.rpc).toHaveBeenCalledWith("sq_series_review_preflight", {
+    p_actor: actor,
+    p_input: published.input,
+    p_key: "series-lost-response",
+    p_hash: await hash(published),
+  });
+  expect(state.reviewText).not.toHaveBeenCalled();
+});
+
+it("fails closed if the canonical published quest snapshot is missing or invalid", async () => {
+  const published = {
+    action: "save",
+    input: {
+      ...save.input,
+      state: "published",
+      parts: [{ ...save.input.parts[0], published: true }],
+    },
+  };
+  state.rpc.mockResolvedValue({
+    data: {
+      requiresReview: true,
+      publicContent: {
+        ...published.input,
+        parts: [
+          {
+            ...published.input.parts[0],
+            quest: { title: "Forged instructions" },
+          },
+        ],
+      },
+    },
+    error: null,
+  });
+  expect((await mutate(published)).status).toBe(404);
+  expect(state.reviewText).not.toHaveBeenCalled();
+  expect(state.rpc).toHaveBeenCalledOnce();
 });

@@ -66,7 +66,7 @@ for (const owner of [false, true])
     ).toEqual([]);
     if (owner)
       await expect(
-        post.locator("summary", { hasText: "Edit this public post" }),
+        post.locator("summary", { hasText: "Manage publication" }),
       ).toBeVisible();
     await post
       .getByRole("link", { name: "Find my own quest", exact: true })

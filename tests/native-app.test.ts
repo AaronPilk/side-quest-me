@@ -127,6 +127,34 @@ describe("native sign-in callback validation", () => {
     ).toEqual({ kind: "error" });
   });
 
+  it("accepts a bounded query-only flow ID and rejects ambiguous callback combinations", () => {
+    expect(
+      parseNativeAuthCallback(
+        `${NATIVE_AUTH_REDIRECT}?sb_flow_id=01234567-abcd&code=abcdefgh-1234`,
+      ),
+    ).toEqual({ kind: "code", code: "abcdefgh-1234", flowId: "01234567-abcd" });
+    expect(
+      parseNativeAuthCallback(
+        `${NATIVE_AUTH_REDIRECT}?sb_flow_id=01234567-abcd#error=access_denied&error_code=otp_expired`,
+      ),
+    ).toEqual({ kind: "error" });
+    for (const query of [
+      "?code=abcdefgh&sb_flow_id=short",
+      "?code=abcdefgh&sb_flow_id=",
+      `?code=abcdefgh&sb_flow_id=${"a".repeat(65)}`,
+      "?code=abcdefgh&sb_flow_id=flow%2Felsewhere",
+      "?code=abcdefgh&sb_flow_id=valid-id&sb_flow_id=other-id",
+      "?code=abcdefgh&sb_flow_id=valid-id#sb_flow_id=other-id",
+      "?code=abcdefgh#sb_flow_id=valid-id",
+      "?code=abcdefgh&sb_flow_id=valid-id&error=expired",
+      "?code=&sb_flow_id=valid-id",
+      "?sb_flow_id=valid-id",
+    ])
+      expect(
+        parseNativeAuthCallback(`${NATIVE_AUTH_REDIRECT}${query}`),
+      ).toBeNull();
+  });
+
   it("uses the device callback and retains only a known internal return route", () => {
     session.setItem("sq-return-to", "/series/abc?part=next");
     expect(emailSignInRedirect()).toBe(NATIVE_AUTH_REDIRECT);
@@ -149,6 +177,27 @@ describe("native sign-in callback validation", () => {
 });
 
 describe("native PKCE exchange", () => {
+  it("selects the verifier belonging to the callback instead of the last resend", async () => {
+    const auth = authFixture(),
+      complete = vi.fn(),
+      error = vi.fn();
+    rememberNativeSignIn("/profile", local);
+    const handle = createNativeAuthHandler({
+      auth,
+      onComplete: complete,
+      onError: error,
+      storage: local,
+    });
+    const link = `${NATIVE_AUTH_REDIRECT}?code=scoped-code-005&sb_flow_id=matching-flow-005`;
+    await Promise.all([handle(link), handle(link)]);
+    expect(auth.exchangeCodeForSession).toHaveBeenCalledExactlyOnceWith(
+      "scoped-code-005",
+      { flowId: "matching-flow-005" },
+    );
+    expect(complete).toHaveBeenCalledWith("/profile");
+    expect(error).not.toHaveBeenCalled();
+  });
+
   it("returns to the saved route and consumes its pending state", async () => {
     const auth = authFixture(),
       complete = vi.fn(),
@@ -282,6 +331,32 @@ describe("native PKCE exchange", () => {
       /private-token|untrusted-message/,
     );
   });
+
+  for (const code of ["flow_state_expired", "otp_expired"]) {
+    it(`explains ${code} with a fresh-link recovery and no provider details`, async () => {
+      const auth = authFixture(),
+        complete = vi.fn(),
+        error = vi.fn();
+      auth.exchangeCodeForSession.mockResolvedValue({
+        error: { code, message: "private-token-or-server-detail" },
+      });
+      rememberNativeSignIn("/create", local);
+      const handle = createNativeAuthHandler({
+        auth,
+        onComplete: complete,
+        onError: error,
+        storage: local,
+      });
+      await handle(`${NATIVE_AUTH_REDIRECT}?code=expired-${code}-callback`);
+      expect(error).toHaveBeenCalledWith(
+        "Your sign-in link expired. Request a new link in this app, then open the newest email right away on this device.",
+      );
+      expect(complete).not.toHaveBeenCalled();
+      expect(native.close).not.toHaveBeenCalled();
+      expect(local.getItem("sq-native-sign-in-v1")).not.toBeNull();
+      expect(JSON.stringify(error.mock.calls)).not.toContain("private-token");
+    });
+  }
 });
 
 describe("native app lifecycle and outbound links", () => {

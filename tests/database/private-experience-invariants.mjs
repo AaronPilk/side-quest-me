@@ -236,6 +236,52 @@ export async function runPrivateExperienceTests(sql) {
   );
   assert.equal(series.parts[0].available, true);
   assert.equal(series.parts[0].quest.privateGenerated, true);
+  // Publishing a generated quest through a Series must review its canonical
+  // instructions, not just the author's chapter title. Only its owner can
+  // obtain this pending-publication payload; outing/account context is absent.
+  const publishInput = {
+    id: series.id,
+    expectedVersion: series.version,
+    title: series.title,
+    premise: series.premise,
+    cover: series.cover,
+    kind: series.kind,
+    state: "published",
+    parts: series.parts.map((part) => ({
+      id: part.id,
+      title: part.title,
+      templateId: part.templateId,
+      prerequisitePartId: part.prerequisitePartId,
+      prerequisiteReason: part.prerequisiteReason,
+      published: true,
+    })),
+  };
+  const preflight = (actor, input) =>
+    sql(
+      `select sq_series_review_preflight(${quote(actor)},${json(input)},${quote(randomUUID())},${quote(hash({ action: "save", input }))});`,
+    ).then(JSON.parse);
+  const pendingReview = await preflight(owner, publishInput);
+  assert.equal(pendingReview.requiresReview, true);
+  assert.deepEqual(
+    pendingReview.publicContent.parts[0].quest,
+    series.parts[0].quest,
+  );
+  assert.equal(JSON.stringify(pendingReview).includes('"outing"'), false);
+  await assert.rejects(
+    () => preflight(other, publishInput),
+    /creator_profile_required|forbidden/,
+  );
+  await assert.rejects(
+    () =>
+      preflight(owner, {
+        ...publishInput,
+        id: undefined,
+        expectedVersion: 0,
+        parts: [{ ...publishInput.parts[0], id: randomUUID() }],
+      }),
+    /template_unavailable/,
+    "a new catalog-based series cannot select unpublished private templates",
+  );
   await sql(
     `update private_quest_proposals set expires_at=now()-interval '1 day' where id=${quote(stored.proposal.id)};`,
   );

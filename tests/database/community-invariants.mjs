@@ -120,11 +120,147 @@ export async function runCommunityTests(sql) {
     openToBrands: false,
     expectedVersion: 0,
   });
-  const [post, duplicatePost] = await Promise.all([
+  let [post, duplicatePost] = await Promise.all([
     mutate(creator, "post_publish", publishInput),
     mutate(creator, "post_publish", publishInput),
   ]);
   assert.equal(post.id, duplicatePost.id);
+  assert.equal(post.state, "pending");
+  const review = (
+    actor,
+    item,
+    decision = "approve",
+    extra = {},
+    key = randomUUID(),
+  ) =>
+    mutate(
+      actor,
+      "post_review",
+      {
+        id: item.id,
+        expectedVersion: item.version,
+        decision,
+        reviewedContent: true,
+        notes: "Entire video, audio, caption and quest instructions reviewed.",
+        ...extra,
+      },
+      key,
+    );
+  const reviewMedia = (actor) =>
+    sql(`select sq_community_review_media(${q(actor)},${q(post.id)});`).then(
+      JSON.parse,
+    );
+  const originalBeforeReview = await sql(
+    `select jsonb_build_object('run',(select to_jsonb(r) from quest_runs r where id=${q(run.id)}),'assets',(select jsonb_agg(to_jsonb(a) order by id) from media_assets a where run_id=${q(run.id)}),'wallet',(select to_jsonb(w) from wallets w where owner_id=${q(creator)}),'ledger',(select jsonb_agg(to_jsonb(l) order by id) from reward_ledger l where run_id=${q(run.id)}));`,
+  );
+  assert.equal((await read(null, "feed")).posts.length, 0);
+  await assert.rejects(
+    () => read(viewer, "post", { id: post.id }),
+    /not_found/,
+  );
+  await assert.rejects(() => media(null, post.id), /not_found/);
+  await assert.rejects(() => media(viewer, post.id), /not_found/);
+  assert.equal((await media(creator, post.id)).mime, "video/mp4");
+  assert.equal((await read(creator, "me")).posts[0].state, "pending");
+  const queued = (await read(operator, "operator")).reviewPosts;
+  assert.equal(queued.length, 1);
+  assert.match(queued[0].mediaUrl, /\/api\/community\/reviews\/[^/]+\/media$/);
+  assert.equal((await reviewMedia(operator)).mime, "video/mp4");
+  await assert.rejects(() => reviewMedia(viewer), /forbidden/);
+  await assert.rejects(() => reviewMedia(creator), /forbidden/);
+  await assert.rejects(() => review(viewer, post), /forbidden/);
+  await sql(
+    `insert into private.role_memberships(user_id,role) values(${q(creator)},'operator');`,
+  );
+  await assert.rejects(() => review(creator, post), /self_review_forbidden/);
+  await sql(
+    `delete from private.role_memberships where user_id=${q(creator)} and role='operator';`,
+  );
+  await assert.rejects(
+    () =>
+      review(operator, post, "approve", { expectedVersion: post.version + 1 }),
+    /stale_version/,
+  );
+  await assert.rejects(
+    () => review(operator, post, "approve", { reviewedContent: false }),
+    /publication_review_required/,
+  );
+  await assert.rejects(
+    () => review(operator, post, "approve", { notes: "  " }),
+    /publication_review_required/,
+  );
+  post = await review(operator, post, "reject", {
+    notes: "Please remove the identifying address from your caption.",
+  });
+  assert.equal(post.state, "rejected");
+  assert.match(
+    (await read(creator, "post", { id: post.id })).reviewNotes,
+    /identifying address/,
+  );
+  await assert.rejects(() => media(null, post.id), /not_found/);
+  await assert.rejects(() => review(operator, post), /post_review_unavailable/);
+  // A fresh publish request cannot override a rejection. Resubmission is an
+  // explicit versioned edit that returns to the independent queue.
+  assert.equal(
+    (await mutate(creator, "post_publish", publishInput)).state,
+    "rejected",
+  );
+  post = await mutate(creator, "post_update", {
+    id: post.id,
+    expectedVersion: post.version,
+    caption: "Make your version",
+    brandOptIn: true,
+    published: true,
+  });
+  assert.equal(post.state, "pending");
+  const approvalKey = randomUUID();
+  const pendingVersion = { ...post };
+  post = await review(operator, pendingVersion, "approve", {}, approvalKey);
+  assert.equal(post.state, "published");
+  assert.deepEqual(
+    await review(operator, pendingVersion, "approve", {}, approvalKey),
+    post,
+  );
+  await assert.rejects(() => reviewMedia(operator), /not_found/);
+  assert.equal((await read(operator, "operator")).reviewPosts.length, 0);
+  assert.equal((await read(null, "feed")).posts.length, 1);
+  assert.equal((await read(null, "post", { id: post.id })).reviewNotes, "");
+  const approved = post;
+  post = await mutate(creator, "post_update", {
+    id: post.id,
+    expectedVersion: post.version,
+    caption: "Make your version: an edited caption also requires review",
+    brandOptIn: true,
+    published: true,
+  });
+  assert.equal(post.state, "pending");
+  assert.equal((await read(null, "feed")).posts.length, 0);
+  await assert.rejects(() => media(null, post.id), /not_found/);
+  await assert.rejects(() => review(operator, approved), /stale_version/);
+  post = await review(operator, post);
+  assert.equal(
+    await sql(
+      `select jsonb_build_object('run',(select to_jsonb(r) from quest_runs r where id=${q(run.id)}),'assets',(select jsonb_agg(to_jsonb(a) order by id) from media_assets a where run_id=${q(run.id)}),'wallet',(select to_jsonb(w) from wallets w where owner_id=${q(creator)}),'ledger',(select jsonb_agg(to_jsonb(l) order by id) from reward_ledger l where run_id=${q(run.id)}));`,
+    ),
+    originalBeforeReview,
+    "publication review never changes the private run, media, wallet or reward ledger",
+  );
+  await assert.rejects(
+    () =>
+      sql(
+        `select sq_community_review_media(${q(operator)},${q(post.id)});`,
+        "authenticated",
+      ),
+    /permission denied/,
+  );
+  await assert.rejects(
+    () =>
+      sql(
+        `select private.community_mutate_before_reel_review(${q(creator)},'post_publish',${j(publishInput)},${q(randomUUID())},'hash');`,
+        "authenticated",
+      ),
+    /permission denied/,
+  );
   await assert.rejects(() => read(null, "me"), /forbidden/);
   const publicPost = await read(null, "post", { id: post.id });
   console.log(
@@ -143,9 +279,9 @@ export async function runCommunityTests(sql) {
       select x::uuid,${q(creator)},${q(run.id)},'reel','sealed','pagination/'||x,4000,'video/mp4',24000,${q(hash("page"))},now()
       from jsonb_array_elements_text(${j(fixtureIds)}) x returning id
     )
-    insert into public.community_posts(id,owner_id,run_id,asset_id,template_id,template_version,brand_opt_in,state,created_at)
+    insert into public.community_posts(id,owner_id,run_id,asset_id,template_id,template_version,brand_opt_in,state,approved_version,reviewed_at,reviewed_by,created_at)
     select id,${q(creator)},${q(run.id)},id,${q(template.id)},1,
-      (right(id::text,1)::int % 2)=1,'published','2026-09-29T09:20:30.123456-04:00'::timestamptz from assets;
+      (right(id::text,1)::int % 2)=1,'published',1,now(),${q(operator)},'2026-09-29T09:20:30.123456-04:00'::timestamptz from assets;
   `);
   const expected = JSON.parse(
     await sql(
@@ -650,10 +786,15 @@ export async function runCommunityTests(sql) {
   await assert.rejects(() => read(null, "post", { id: post.id }), /not_found/);
   await assert.rejects(() => media(null, post.id), /not_found/);
   assert.equal((await media(creator, post.id)).mime, "video/mp4");
-  assert.equal(
-    (await media(brand, null, offer.id)).mime,
-    "video/mp4",
-    "Unpublishing does not rewrite a completed agreement",
+  await assert.rejects(
+    () => media(brand, null, offer.id),
+    /commercial_access_unavailable/,
+  );
+  assert.equal((await read(brand, "offer", { id: offer.id })).mediaUrl, null);
+  assert.deepEqual(
+    (await read(brand, "offer", { id: offer.id })).acceptedTerms,
+    accepted.acceptedTerms,
+    "Unpublishing pauses access without rewriting the agreed terms",
   );
   assert.equal(
     await sql(
@@ -668,6 +809,16 @@ export async function runCommunityTests(sql) {
     brandOptIn: true,
     published: true,
   });
+  assert.equal(unpublished.state, "pending");
+  await assert.rejects(
+    () => mutate(brand, "offer_create", { postId: post.id, terms }),
+    /brand_inquiries_unavailable/,
+  );
+  await assert.rejects(
+    () => media(brand, null, offer.id),
+    /commercial_access_unavailable/,
+  );
+  unpublished = await review(operator, unpublished);
   const another = await mutate(brand, "offer_create", {
     postId: post.id,
     terms: { ...terms, message: "A separate requested period." },

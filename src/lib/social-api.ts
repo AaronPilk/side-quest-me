@@ -10,6 +10,10 @@ import {
 import { request } from "./api";
 import { DEMO } from "./auth";
 import {
+  CONTENT_REVIEW_CONSENT_HEADER,
+  CONTENT_REVIEW_PERMISSION_MESSAGE,
+} from "../../shared/content-review";
+import {
   demoSocialFollow,
   demoSocialPhoto,
   demoSocialRead,
@@ -85,7 +89,12 @@ export const socialApi = {
             ? `/api/social/profile/${encodeURIComponent(id)}`
             : "/api/social/me",
         ),
-  save: async (input: SocialProfileInput): Promise<SocialProfile> => {
+  save: async (
+    input: SocialProfileInput,
+    contentReviewConsent = false,
+  ): Promise<SocialProfile> => {
+    if (!contentReviewConsent)
+      throw new Error(CONTENT_REVIEW_PERMISSION_MESSAGE);
     const validation = socialProfileInput.safeParse(input);
     if (!validation.success)
       throw new Error(
@@ -96,6 +105,7 @@ export const socialApi = {
       ? demoSocialSave(parsed)
       : request("/api/social/profile", {
           method: "POST",
+          headers: { [CONTENT_REVIEW_CONSENT_HEADER]: "true" },
           body: JSON.stringify(parsed),
         });
   },
@@ -111,7 +121,12 @@ export const socialApi = {
           body: JSON.stringify(parsed),
         });
   },
-  uploadPhoto: async (file: File): Promise<SocialProfile> => {
+  uploadPhoto: async (
+    file: File,
+    contentReviewConsent = false,
+  ): Promise<SocialProfile> => {
+    if (!contentReviewConsent)
+      throw new Error(CONTENT_REVIEW_PERMISSION_MESSAGE);
     const photo = await normalizeProfilePhoto(file);
     if (DEMO) {
       const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -125,7 +140,10 @@ export const socialApi = {
     }
     return request("/api/social/photo", {
       method: "PUT",
-      headers: { "Content-Type": "image/png" },
+      headers: {
+        "Content-Type": "image/png",
+        [CONTENT_REVIEW_CONSENT_HEADER]: "true",
+      },
       body: photo,
     });
   },
