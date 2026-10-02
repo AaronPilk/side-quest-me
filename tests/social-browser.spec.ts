@@ -44,6 +44,11 @@ test("public identity and actual photo persist, removal saves immediately, and p
   await expect(
     page.getByText("Public profile saved.", { exact: true }),
   ).toBeVisible();
+  const editor = page.getByRole("dialog", {
+    name: "Edit profile",
+    exact: true,
+  });
+  await expect(editor).not.toBeVisible();
   await expect(page.getByText("@avery_stories", { exact: true })).toBeVisible();
   const photo = await sharp({
     create: { width: 512, height: 384, channels: 3, background: "#1d68ee" },
@@ -51,13 +56,27 @@ test("public identity and actual photo persist, removal saves immediately, and p
     .withMetadata({ exif: { IFD0: { Artist: "PRIVATE_META_TEST" } } })
     .jpeg()
     .toBuffer();
-  await page.getByLabel("Profile photo", { exact: true }).setInputFiles({
+  await page.getByRole("button", { name: "Edit profile", exact: true }).click();
+  const bio = editor.getByRole("textbox", {
+    name: "Short public bio",
+    exact: true,
+  });
+  await bio.fill("An unfinished bio edit survives a photo upload.");
+  await editor.getByLabel("Profile photo", { exact: true }).setInputFiles({
     name: "photo.jpg",
     mimeType: "image/jpeg",
     buffer: photo,
   });
   await expect(
-    page.getByText("Profile photo saved.", { exact: true }),
+    editor.getByText("Profile photo saved.", { exact: true }),
+  ).toBeVisible();
+  await expect(bio).toHaveValue(
+    "An unfinished bio edit survives a photo upload.",
+  );
+  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(editor).not.toBeVisible();
+  await expect(
+    page.getByText("Small adventures, remembered well.", { exact: true }),
   ).toBeVisible();
   await expect(page.locator(".social-profile-top img")).toBeVisible();
   expect(
@@ -84,8 +103,10 @@ test("public identity and actual photo persist, removal saves immediately, and p
     .getByRole("button", { name: "Remove profile photo", exact: true })
     .click();
   await expect(
-    page.getByText("Profile photo removed.", { exact: true }),
+    editor.getByText("Profile photo removed.", { exact: true }),
   ).toBeVisible();
+  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.locator(".social-profile-top img")).toHaveCount(0);
   await page.reload();
   await expect(page.locator(".social-profile-top img")).toHaveCount(0);
   await asViewer(page);
@@ -325,12 +346,18 @@ test("username collisions and unsupported photos show errors without false succe
   await expect(
     page.getByText("Public profile saved.", { exact: true }),
   ).toBeVisible();
-  await page.getByLabel("Profile photo", { exact: true }).setInputFiles({
+  const editor = page.getByRole("dialog", {
+    name: "Edit profile",
+    exact: true,
+  });
+  await expect(editor).not.toBeVisible();
+  await page.getByRole("button", { name: "Edit profile", exact: true }).click();
+  await editor.getByLabel("Profile photo", { exact: true }).setInputFiles({
     name: "unsafe.svg",
     mimeType: "image/svg+xml",
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
   });
-  await expect(page.getByRole("alert")).toContainText("JPEG, PNG, or WebP");
+  await expect(editor.getByRole("alert")).toContainText("JPEG, PNG, or WebP");
   await expect(page.locator(".social-profile-top img")).toHaveCount(0);
   await asViewer(page);
   await page.getByRole("button", { name: "Edit profile", exact: true }).click();
@@ -340,7 +367,10 @@ test("username collisions and unsupported photos show errors without false succe
   await page
     .getByRole("button", { name: "Save public profile", exact: true })
     .click();
-  await expect(page.getByRole("alert")).toContainText("already taken");
+  await expect(editor.getByRole("alert")).toContainText("already taken");
+  await expect(
+    editor.getByRole("textbox", { name: "Username", exact: true }),
+  ).toHaveValue("UNIQUE_HANDLE");
   await page.reload();
   await expect(page.getByText("@unique_handle", { exact: true })).toHaveCount(
     0,

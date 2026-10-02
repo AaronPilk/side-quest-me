@@ -21,10 +21,8 @@ import {
   ArrowRight,
   Clock3,
   Users,
-  ChevronRight,
   Check,
   Video,
-  Flag,
   Sparkles,
 } from "lucide-react";
 import {
@@ -45,6 +43,7 @@ import { ApplePlaceCard } from "../components/ApplePlaces";
 import { preferenceProgress } from "../../shared/preference-progress";
 import { PreferenceReminder } from "../components/PreferenceReminder";
 import { AiQuestAssist } from "../components/AiQuestAssist";
+import { OpenQuestCard } from "../components/OpenQuestShortcut";
 import {
   Button,
   Notice,
@@ -547,25 +546,7 @@ export default function Quest() {
           Show other quests
         </button>
       )}
-      {active && candidates !== null && (
-        <Link className="active-card" to={`/runs/${active.id}`}>
-          <span className="icon-box">
-            <Flag />
-          </span>
-          <div>
-            <span className="eyebrow">YOUR ACTIVE QUEST</span>
-            <h2>{active.quest.title}</h2>
-            <p>
-              {active.clips.length === 1 && active.clips[0].mode === "session"
-                ? "Your video is saved"
-                : active.clips.length
-                  ? "Continue your story"
-                  : "Ready when you are"}
-            </p>
-          </div>
-          <ChevronRight />
-        </Link>
-      )}
+      {active && <OpenQuestCard run={active} />}
       {seriesPartId && (
         <Notice
           error={Boolean(
@@ -646,7 +627,6 @@ export default function Quest() {
               me.data &&
               !preferenceProgress(me.data.profile.preferences).complete,
             )}
-            resumeQuestId={active?.id}
             firstRun={Boolean(
               me.data &&
               me.data.profile.accountType === null &&

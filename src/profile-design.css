@@ -93,11 +93,78 @@
 .profile-preferences-shortcut svg:last-child {
   margin-left: auto;
 }
-.social-edit-panel {
-  margin-bottom: 20px;
+.profile-editor-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgb(24 21 34 / 48%);
 }
-.social-edit-panel:not([open]) {
-  display: none;
+.profile-editor-dialog {
+  position: fixed;
+  z-index: 1001;
+  top: calc(var(--profile-editor-top, 0px) + 12px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  width: min(560px, calc(100% - 24px));
+  max-width: none;
+  max-height: calc(
+    min(var(--profile-editor-height, 100vh), 100vh) - 24px -
+      env(safe-area-inset-top) - env(safe-area-inset-bottom)
+  );
+  padding: 0;
+  border: 1px solid var(--divider);
+  border-radius: 24px;
+  background: var(--surface, white);
+  color: var(--text);
+  box-shadow: 0 20px 70px rgb(24 21 34 / 24%);
+  overflow: hidden;
+}
+.profile-editor-dialog[open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.profile-editor-dialog::backdrop {
+  background: transparent;
+}
+.profile-editor-header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--divider);
+}
+.profile-editor-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+.profile-editor-body {
+  padding: 4px 20px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  scroll-padding: 16px;
+}
+.profile-editor-body input,
+.profile-editor-body textarea,
+.profile-editor-body select {
+  font-size: max(16px, 1rem);
+}
+.profile-editor-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--divider);
+  background: var(--surface, white);
+}
+.profile-editor-actions .button {
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 0.875rem;
+}
+.profile-editor-dialog .photo-upload-control:focus-within {
+  outline: 2px solid var(--action);
+  outline-offset: 3px;
 }
 .profile-photo-actions {
   margin-top: 22px;
@@ -209,30 +276,6 @@
   min-height: 44px;
   padding: 10px 16px;
 }
-.social-private-links {
-  display: grid;
-  gap: 10px;
-  margin: 16px 0 24px;
-}
-.social-private-links .button,
-.social-private-empty .button {
-  justify-content: flex-start;
-  gap: 10px;
-  margin: 0;
-  min-width: 0;
-  min-height: 48px;
-  padding: 12px 16px;
-  text-align: left;
-  font-size: 0.9375rem;
-}
-.social-private-links .button span,
-.social-private-empty .button span {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.social-private-links .button svg,
-.social-private-empty .button svg,
 .social-profile-recovery .button svg {
   flex-shrink: 0;
 }

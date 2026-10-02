@@ -48,6 +48,7 @@ import { rememberReturnTo, validateReturnTo } from "../lib/internal-return";
 import "../reel-design.css";
 import { SeriesEpisodeNav } from "../components/SeriesEpisodeNav";
 import { DiscoverSections } from "../components/DiscoverSections";
+import { OpenQuestShortcut } from "../components/OpenQuestShortcut";
 
 export function DiscoverPostCard({
   post,
@@ -719,6 +720,7 @@ export default function Discover({ signedIn = false }: { signedIn?: boolean }) {
             <Search size={22} aria-hidden="true" />
           </button>
         </header>
+        {signedIn && <OpenQuestShortcut />}
         <DiscoverSections current="quests" />
         <div className="feed-tabs" role="group" aria-label="Discover feed">
           <button

@@ -19,6 +19,7 @@ import {
   words,
 } from "../components/Community";
 import { Button, Loading, Notice, PageTitle } from "../components/ui";
+import { OpenQuestShortcut } from "../components/OpenQuestShortcut";
 
 const activityIcons: Record<string, LucideIcon> = {
   inspired_attempt: Sparkles,
@@ -36,6 +37,15 @@ const activityIcons: Record<string, LucideIcon> = {
 };
 
 export default function Activity() {
+  return (
+    <div className="activity-page">
+      <OpenQuestShortcut />
+      <ActivityUpdates />
+    </div>
+  );
+}
+
+function ActivityUpdates() {
   const { data, error, refresh } = useCommunity("activity");
   const action = useCommunityAction(refresh);
   const [filter, setFilter] = useState("all");
@@ -63,7 +73,7 @@ export default function Activity() {
   );
   const unread = items.filter((item) => !item.readAt);
   return (
-    <div className="activity-page">
+    <div className="activity-updates">
       <div className="activity-heading">
         <PageTitle title="Activity">
           Your quests, connections, and creator updates.

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { publicUrl } from "../lib/runtime";
 import { isShareCancellation, sharePublicLink } from "../lib/native-share";
 import {
@@ -8,7 +9,6 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import {
-  BookOpen,
   Camera,
   ChevronRight,
   Film,
@@ -99,9 +99,6 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
     : me.data?.drafts
         .filter((draft) => draft.state === "approved")
         .map((draft) => draft.quest);
-  const drafts = own
-    ? me.data?.drafts.filter((draft) => draft.state !== "approved")
-    : [];
   const loading = id ? !publicProfile.data : !me.data;
   const loadError = id ? publicProfile.error : me.error;
   const requested = params.get("tab");
@@ -116,6 +113,7 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
   async function mutate(
     operation: () => Promise<SocialProfile>,
     success: string,
+    refreshProfile = true,
   ) {
     setBusy(true);
     setError("");
@@ -128,10 +126,14 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
       setSocial(updated);
       setSocialError("");
       setMessage(success);
-      me.refresh();
-      if (id) publicProfile.refresh();
+      if (refreshProfile) {
+        me.refresh();
+        if (id) publicProfile.refresh();
+      }
+      return true;
     } catch (cause) {
       setError((cause as Error).message);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -181,7 +183,11 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
           <CreatorAvatar
             avatar={creator?.avatarKey}
             name={creator?.displayName || ""}
-            photoUrl={social?.photoUrl || creator?.photoUrl || undefined}
+            photoUrl={
+              social
+                ? social.photoUrl || undefined
+                : creator?.photoUrl || undefined
+            }
           />
           <div className="social-profile-name">
             <h1 id="creator-name">
@@ -242,7 +248,15 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
         )}
         <div className="social-profile-actions">
           {own ? (
-            <Button secondary onClick={() => setEdit((value) => !value)}>
+            <Button
+              secondary
+              aria-haspopup="dialog"
+              onClick={() => {
+                setError("");
+                setMessage("");
+                setEdit(true);
+              }}
+            >
               <PenLine size={17} />
               Edit profile
             </Button>
@@ -305,7 +319,7 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
             </Button>
           )}
         </div>
-        {error && (
+        {error && !edit && (
           <Notice error>
             {error}
             {creatorId && error.startsWith("Sharing") && (
@@ -315,9 +329,9 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
             )}
           </Notice>
         )}
-        {message && <Notice>{message}</Notice>}
+        {message && !edit && <Notice>{message}</Notice>}
       </section>
-      {own && progress.data && (
+      {own && tab !== "private" && progress.data && (
         <>
           <Link
             className="button secondary profile-preferences-shortcut"
@@ -336,40 +350,42 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
           </Link>
         </>
       )}
-      {own && progress.data?.completedQuestCount !== undefined && (
-        <QuestProgress
-          completedQuestCount={progress.data.completedQuestCount}
-          xp={progress.data.wallet.xp}
-          demo={DEMO}
-        />
-      )}
-      {own && (
-        <details
-          className="community-panel social-edit-panel"
-          open={edit || !creator}
-          onToggle={(event) => setEdit(event.currentTarget.open)}
-        >
-          <summary>
-            <PenLine size={17} />
-            {creator ? "Edit public profile" : "Create your public profile"}
-          </summary>
-          <p className="support">
-            Your photo, name, username and bio are public. Preferences, private
-            drafts and earnings stay private.
+      {own &&
+        tab !== "private" &&
+        progress.data?.completedQuestCount !== undefined && (
+          <QuestProgress
+            completedQuestCount={progress.data.completedQuestCount}
+            xp={progress.data.wallet.xp}
+            demo={DEMO}
+          />
+        )}
+      {own && edit && (
+        <ProfileEditor busy={busy} onClose={() => setEdit(false)}>
+          <p className="support" id="profile-editor-privacy">
+            Your photo, name, username and bio are public. Your journal and
+            preferences stay private.
           </p>
+          {error && <Notice error>{error}</Notice>}
+          {message && <Notice>{message}</Notice>}
           <ProfileForm
-            key={`${creator?.version || 0}:${social?.username || ""}`}
+            key={creator?.version || 0}
             creator={creator}
             social={social}
             busy={busy}
-            onSave={(input) =>
-              mutate(() => socialApi.save(input), "Public profile saved.")
-            }
+            onSave={async (input) => {
+              if (
+                await mutate(
+                  () => socialApi.save(input),
+                  "Public profile saved.",
+                )
+              )
+                setEdit(false);
+            }}
           />
           {creator && (
             <div className="profile-photo-actions">
               <label className="button secondary photo-upload-control">
-                <Camera size={17} />
+                <Camera size={17} aria-hidden="true" />
                 {busy ? "Saving photo…" : "Upload profile photo"}
                 <input
                   type="file"
@@ -383,6 +399,7 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
                       void mutate(
                         () => socialApi.uploadPhoto(file),
                         "Profile photo saved.",
+                        false,
                       );
                   }}
                 />
@@ -396,7 +413,11 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
                   className="text-button danger"
                   disabled={busy}
                   onClick={() =>
-                    void mutate(socialApi.removePhoto, "Profile photo removed.")
+                    void mutate(
+                      socialApi.removePhoto,
+                      "Profile photo removed.",
+                      false,
+                    )
                   }
                 >
                   Remove profile photo
@@ -404,7 +425,7 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
               )}
             </div>
           )}
-        </details>
+        </ProfileEditor>
       )}
       <nav className="social-profile-tabs" aria-label="Profile content">
         {[
@@ -470,11 +491,6 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
       )}
       {tab === "quests" && (
         <section aria-label="Authored quests" className="social-quest-list">
-          {own && (
-            <Link className="text-button" to="/originals/new">
-              Draft an original quest
-            </Link>
-          )}
           {quests?.length ? (
             quests.map((quest) => (
               <article className="community-card" key={quest.id}>
@@ -502,46 +518,150 @@ function CreatorPage({ signedIn }: { signedIn: boolean }) {
             <LockKeyhole size={15} />
             Only you can see this tab.
           </p>
-          <div className="social-private-links">
-            <Link className="button secondary" to="/journal">
-              <BookOpen size={18} aria-hidden="true" />
-              <span>Private journal</span>
-              <ChevronRight size={18} aria-hidden="true" />
-            </Link>
-            <Link className="button secondary" to="/account">
-              <SlidersHorizontal size={18} aria-hidden="true" />
-              <span>Account & quest preferences</span>
-              <ChevronRight size={18} aria-hidden="true" />
-            </Link>
-          </div>
-          <h2>Drafts & submissions</h2>
-          {drafts?.length ? (
-            drafts.map((draft) => (
-              <Link
-                className="community-list-link"
-                key={draft.id}
-                to={`/originals/${draft.id}`}
-              >
-                <strong>{draft.quest.title}</strong>
-                <StateTag state={draft.state} />
-              </Link>
-            ))
-          ) : (
-            <div className="social-private-empty">
-              <p className="support">No quest drafts.</p>
-              <Link className="button secondary" to="/originals/new">
-                <PenLine size={18} aria-hidden="true" />
-                <span>Start an original</span>
-                <ChevronRight size={18} aria-hidden="true" />
-              </Link>
-            </div>
-          )}
           <PrivateEntries />
         </section>
       )}
     </div>
   );
 }
+function ProfileEditor({
+  children,
+  busy,
+  onClose,
+}: {
+  children: ReactNode;
+  busy: boolean;
+  onClose: () => void;
+}) {
+  const element = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = element.current!;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    const app = document.getElementById("root");
+    const previousHidden = app?.getAttribute("aria-hidden");
+    const nativeDialog = typeof dialog.showModal === "function";
+    if (nativeDialog) dialog.showModal();
+    else {
+      dialog.setAttribute("open", "");
+      app?.setAttribute("aria-hidden", "true");
+    }
+    document.body.style.overflow = "hidden";
+    const viewport = window.visualViewport;
+    let resizeFrame: number | undefined;
+    const resize = () => {
+      dialog.style.setProperty(
+        "--profile-editor-height",
+        `${viewport?.height || window.innerHeight}px`,
+      );
+      dialog.style.setProperty(
+        "--profile-editor-top",
+        `${viewport?.offsetTop || 0}px`,
+      );
+      if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        const focused = document.activeElement as HTMLElement | null;
+        if (focused && dialog.contains(focused))
+          focused.scrollIntoView({ block: "nearest" });
+      });
+    };
+    resize();
+    viewport?.addEventListener("resize", resize);
+    viewport?.addEventListener("scroll", resize);
+    window.addEventListener("resize", resize);
+    const focusFirst = () =>
+      (
+        dialog.querySelector<HTMLInputElement>("input:not(:disabled)") || dialog
+      ).focus({ preventScroll: true });
+    const containFocus = (event: FocusEvent) => {
+      if (!dialog.contains(event.target as Node)) focusFirst();
+      else if (
+        event.target instanceof HTMLElement &&
+        event.target.matches("input, textarea, select")
+      ) {
+        if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame);
+        const field = event.target;
+        resizeFrame = requestAnimationFrame(() =>
+          field.scrollIntoView({ block: "nearest" }),
+        );
+      }
+    };
+    document.addEventListener("focusin", containFocus);
+    focusFirst();
+    return () => {
+      document.removeEventListener("focusin", containFocus);
+      viewport?.removeEventListener("resize", resize);
+      viewport?.removeEventListener("scroll", resize);
+      window.removeEventListener("resize", resize);
+      if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame);
+      if (nativeDialog) dialog.close();
+      if (!nativeDialog && app) {
+        if (previousHidden === null) app.removeAttribute("aria-hidden");
+        else if (previousHidden !== undefined)
+          app.setAttribute("aria-hidden", previousHidden);
+      }
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected)
+        previousFocus.focus({ preventScroll: true });
+    };
+  }, []);
+  return createPortal(
+    <>
+      <div className="profile-editor-scrim" aria-hidden="true" />
+      <dialog
+        ref={element}
+        className="profile-editor-dialog"
+        role="dialog"
+        tabIndex={-1}
+        aria-modal="true"
+        aria-labelledby="profile-editor-title"
+        aria-describedby="profile-editor-privacy"
+        onCancel={(event) => {
+          event.preventDefault();
+          if (!busy) onClose();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            if (!busy) onClose();
+          }
+          if (event.key !== "Tab") return;
+          const fields = Array.from(
+            event.currentTarget.querySelectorAll<HTMLElement>(
+              "button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href]",
+            ),
+          ).filter((field) => field.getClientRects().length);
+          if (!fields.length) {
+            event.preventDefault();
+            event.currentTarget.focus();
+            return;
+          }
+          const target = event.shiftKey ? fields.at(-1) : fields[0];
+          const edge = event.shiftKey ? fields[0] : fields.at(-1);
+          if (document.activeElement === edge) {
+            event.preventDefault();
+            target?.focus();
+          }
+        }}
+      >
+        <header className="profile-editor-header">
+          <h2 id="profile-editor-title">Edit profile</h2>
+        </header>
+        <div className="profile-editor-body">{children}</div>
+        <footer className="profile-editor-actions">
+          <Button type="button" secondary disabled={busy} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="profile-editor-form" busy={busy}>
+            Save public profile
+          </Button>
+        </footer>
+      </dialog>
+    </>,
+    document.body,
+  );
+}
+
 function ProfileForm({
   creator,
   social,
@@ -555,6 +675,7 @@ function ProfileForm({
 }) {
   return (
     <form
+      id="profile-editor-form"
       className="community-form"
       onSubmit={(event) => {
         event.preventDefault();
@@ -575,6 +696,7 @@ function ProfileForm({
         Public display name
         <input
           name="displayName"
+          disabled={busy}
           maxLength={60}
           required
           defaultValue={creator?.displayName}
@@ -584,6 +706,7 @@ function ProfileForm({
         Username
         <input
           name="username"
+          disabled={busy}
           minLength={3}
           maxLength={24}
           pattern="[a-zA-Z][a-zA-Z0-9_]*"
@@ -600,7 +723,11 @@ function ProfileForm({
       </p>
       <label>
         Avatar color
-        <select name="avatarKey" defaultValue={creator?.avatarKey || "coral"}>
+        <select
+          name="avatarKey"
+          disabled={busy}
+          defaultValue={creator?.avatarKey || "coral"}
+        >
           <option value="coral">Coral</option>
           <option value="mint">Mint</option>
           <option value="violet">Violet</option>
@@ -611,6 +738,7 @@ function ProfileForm({
         Short public bio
         <textarea
           name="bio"
+          disabled={busy}
           rows={3}
           maxLength={280}
           defaultValue={creator?.bio}
@@ -619,6 +747,7 @@ function ProfileForm({
       <label className="check-row">
         <input
           name="openToBrands"
+          disabled={busy}
           type="checkbox"
           defaultChecked={creator?.openToBrands}
         />
@@ -627,9 +756,6 @@ function ProfileForm({
       <p className="support">
         Video availability is separate. This does not authorize advertising.
       </p>
-      <Button type="submit" busy={busy}>
-        Save public profile
-      </Button>
     </form>
   );
 }

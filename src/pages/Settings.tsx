@@ -6,9 +6,11 @@ import {
   Settings2,
   ShieldCheck,
   FlaskConical,
+  SlidersHorizontal,
+  type LucideIcon,
 } from "lucide-react";
 import { useCommunity, useCommunityAction } from "../components/Community";
-import { PageTitle, Notice, Button } from "../components/ui";
+import { PageTitle, Notice, Button, Back } from "../components/ui";
 import { DEMO } from "../lib/auth";
 import { hasBusinessWorkspace } from "../../shared/account";
 import {
@@ -17,94 +19,131 @@ import {
   switchDemoPersona,
   type DemoPersona,
 } from "../lib/demo-identity";
+import "./settings.css";
+
+function SettingsRow({
+  to,
+  title,
+  description,
+  icon: Icon,
+}: {
+  to: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+}) {
+  return (
+    <Link className="settings-row" to={to}>
+      <span className="settings-row-icon" aria-hidden="true">
+        <Icon size={20} />
+      </span>
+      <span className="settings-row-copy">
+        <strong>{title}</strong>
+        <small>{description}</small>
+      </span>
+      <ChevronRight
+        className="settings-row-chevron"
+        size={18}
+        aria-hidden="true"
+      />
+    </Link>
+  );
+}
 
 export default function Settings() {
   const me = useCommunity("me");
   const action = useCommunityAction(me.refresh);
+  const business = me.data ? hasBusinessWorkspace(me.data) : Boolean(me.error);
+  const admin = me.data
+    ? me.data.roles.includes("operator")
+    : Boolean(me.error);
   return (
     <div className="settings-page">
-      <PageTitle title="Settings">
-        App controls, privacy, and your workspaces.
-      </PageTitle>
-      <nav className="settings-list" aria-label="Settings">
-        <Link to="/account/security">
-          <Settings2 />
-          <span>
-            <strong>Account settings</strong>
-            <small>Sign-in, privacy, sign-out and account deletion</small>
-          </span>
-          <ChevronRight />
-        </Link>
-        <Link to="/account">
-          <Settings2 />
-          <span>
-            <strong>Account & quest preferences</strong>
-            <small>Your account type, ChatGPT summary and personal fit</small>
-          </span>
-          <ChevronRight />
-        </Link>
-        <Link to="/journal">
-          <BookOpen />
-          <span>
-            <strong>Private journal</strong>
-            <small>Your saved quests and videos</small>
-          </span>
-          <ChevronRight />
-        </Link>
-        {(me.data ? hasBusinessWorkspace(me.data) : Boolean(me.error)) && (
-          <Link to="/business">
-            <BriefcaseBusiness />
-            <span>
-              <strong>Business workspace</strong>
-              <small>
-                {me.data
-                  ? "Business setup and licensed videos"
-                  : "Opens if your account has a business"}
-              </small>
-            </span>
-            <ChevronRight />
-          </Link>
-        )}
-        {(me.data ? me.data.roles.includes("operator") : Boolean(me.error)) && (
-          <Link to="/admin">
-            <ShieldCheck />
-            <span>
-              <strong>Admin</strong>
-              <small>
-                {me.data
-                  ? "Approvals, reports, and manual verification"
-                  : "Opens if your account is an operator"}
-              </small>
-            </span>
-            <ChevronRight />
-          </Link>
-        )}
-        {me.data?.roles.includes("operator") && (
-          <Link to="/operator">
-            <ShieldCheck />
-            <span>
-              <strong>Operator tools</strong>
-              <small>Quest reviews and funded offers</small>
-            </span>
-            <ChevronRight />
-          </Link>
+      <Back to="/profile">Profile</Back>
+      <PageTitle title="Settings">Account, privacy and preferences.</PageTitle>
+      <nav className="settings-navigation" aria-label="Settings">
+        <section className="settings-group" aria-labelledby="settings-account">
+          <h2 id="settings-account">Your account</h2>
+          <div className="settings-group-rows">
+            <SettingsRow
+              to="/account/security"
+              icon={Settings2}
+              title="Account settings"
+              description="Sign-in, privacy & security"
+            />
+            <SettingsRow
+              to="/account"
+              icon={SlidersHorizontal}
+              title="Account & quest preferences"
+              description="Interests, boundaries & ChatGPT"
+            />
+            <SettingsRow
+              to="/journal"
+              icon={BookOpen}
+              title="Private journal"
+              description="Your private quests & videos"
+            />
+          </div>
+        </section>
+        {(business || admin) && (
+          <section
+            className="settings-group"
+            aria-labelledby="settings-workspaces"
+          >
+            <h2 id="settings-workspaces">Workspaces</h2>
+            <div className="settings-group-rows">
+              {business && (
+                <SettingsRow
+                  to="/business"
+                  icon={BriefcaseBusiness}
+                  title="Business workspace"
+                  description={
+                    me.data
+                      ? "Business & licensed videos"
+                      : "For business accounts"
+                  }
+                />
+              )}
+              {admin && (
+                <SettingsRow
+                  to="/admin"
+                  icon={ShieldCheck}
+                  title="Admin"
+                  description={
+                    me.data ? "Approvals & reports" : "For operator accounts"
+                  }
+                />
+              )}
+              {me.data?.roles.includes("operator") && (
+                <SettingsRow
+                  to="/operator"
+                  icon={ShieldCheck}
+                  title="Operator tools"
+                  description="Quest reviews & funded offers"
+                />
+              )}
+            </div>
+          </section>
         )}
         {DEMO && (
-          <Link to="/settings/demo-tools">
-            <FlaskConical />
-            <span>
-              <strong>Demo tools</strong>
-              <small>Local demonstration identities. No real payments.</small>
-            </span>
-            <ChevronRight />
-          </Link>
+          <section className="settings-group" aria-labelledby="settings-demo">
+            <h2 id="settings-demo">Local demo</h2>
+            <div className="settings-group-rows">
+              <SettingsRow
+                to="/settings/demo-tools"
+                icon={FlaskConical}
+                title="Demo tools"
+                description="Test identities · no real payments"
+              />
+            </div>
+          </section>
         )}
       </nav>
       {Boolean(me.data?.blocks.length) && (
-        <details className="community-panel">
+        <details className="community-panel settings-blocks">
           <summary>Blocked accounts · {me.data!.blocks.length}</summary>
           {me.data!.blocks.map((userId) => (
-            <div className="post-secondary" key={userId}>
+            <div className="post-secondary settings-blocked-row" key={userId}>
               <span>Account {userId.slice(0, 8)}</span>
               <Button
                 secondary
@@ -125,12 +164,12 @@ export default function Settings() {
       )}
       {action.feedback}
       {me.error && (
-        <>
+        <div className="settings-recovery">
           <Notice error>{me.error}</Notice>
           <Button secondary onClick={me.refresh}>
             Retry account settings
           </Button>
-        </>
+        </div>
       )}
     </div>
   );

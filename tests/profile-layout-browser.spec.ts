@@ -1,5 +1,6 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
-import { DEFAULT_PREFERENCES } from "../shared/domain";
+import { expect, test, type Page } from "@playwright/test";
+import { DEFAULT_OUTING, DEFAULT_PREFERENCES } from "../shared/domain";
+import { catalog } from "../shared/catalog";
 
 async function start(page: Page, route = "/profile?tab=series") {
   await page.addInitScript((preferences) => {
@@ -28,38 +29,55 @@ async function start(page: Page, route = "/profile?tab=series") {
   await page.goto(route);
 }
 
-async function expectContainedPill(link: Locator) {
-  await expect(link).toBeVisible();
-  expect(
-    await link.evaluate((element) => {
-      const bounds = element.getBoundingClientRect();
-      const style = getComputedStyle(element);
-      return (
-        bounds.height >= 44 &&
-        bounds.left >= 0 &&
-        bounds.right <= innerWidth &&
-        parseFloat(style.borderRadius) >= bounds.height / 2 &&
-        [...element.children].every((child) => {
-          const rect = child.getBoundingClientRect();
-          return (
-            rect.left >= bounds.left &&
-            rect.right <= bounds.right &&
-            rect.top >= bounds.top &&
-            rect.bottom <= bounds.bottom
-          );
-        })
-      );
-    }),
-  ).toBe(true);
+async function expectEditorInViewport(page: Page) {
+  const dialog = page.getByRole("dialog", {
+    name: "Edit profile",
+    exact: true,
+  });
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Save public profile", exact: true }),
+  ).toBeInViewport({ ratio: 1 });
+  const layout = await dialog.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    const actions = element
+      .querySelector(".profile-editor-actions")!
+      .getBoundingClientRect();
+    const body = element.querySelector(".profile-editor-body")!;
+    return {
+      left: bounds.left,
+      right: bounds.right,
+      top: bounds.top,
+      bottom: bounds.bottom,
+      width: innerWidth,
+      height: visualViewport?.height || innerHeight,
+      actionsBottom: actions.bottom,
+      bodyFits: body.scrollWidth <= body.clientWidth + 1,
+    };
+  });
+  expect(layout.left).toBeGreaterThanOrEqual(0);
+  expect(layout.right).toBeLessThanOrEqual(layout.width);
+  expect(layout.top).toBeGreaterThanOrEqual(0);
+  expect(layout.bottom).toBeLessThanOrEqual(layout.height);
+  expect(layout.actionsBottom).toBeLessThanOrEqual(layout.height);
+  expect(layout.bodyFits).toBe(true);
+  return dialog;
 }
 
-for (const width of [320, 390, 430]) {
+for (const width of [320, 393, 430]) {
   for (const enlarged of [false, true]) {
-    test(`profile actions align at ${width}px${enlarged ? " with 200% text" : ""}`, async ({
+    test(`private journal and visible editor fit at ${width}px${enlarged ? " with 200% text" : ""}`, async ({
       page,
     }, testInfo) => {
-      await page.setViewportSize({ width, height: 844 });
+      await page.setViewportSize({ width, height: 852 });
+      const client = await page.context().newCDPSession(page);
+      await client.send("Emulation.setSafeAreaInsetsOverride", {
+        insets: { top: 59, bottom: 34, left: 0, right: 0 },
+      });
       await start(page);
+      await page.evaluate(() =>
+        document.documentElement.classList.add("native-app"),
+      );
       if (enlarged)
         await page.addStyleTag({
           content: "html { font-size: 200% !important; }",
@@ -83,30 +101,27 @@ for (const width of [320, 390, 430]) {
       });
 
       await page.getByRole("button", { name: "Private", exact: true }).click();
-      const links = page.locator(".social-private-links .button");
-      const privateLinks = [
-        page.getByRole("link", { name: "Private journal", exact: true }),
+      const journal = page.getByRole("region", { name: "Your private space" });
+      await expect(
+        journal.getByRole("heading", { name: "Your journal", exact: true }),
+      ).toBeVisible();
+      await expect(
+        journal.getByText(
+          "Your completed stories and quests in progress will appear here.",
+        ),
+      ).toBeVisible();
+      await expect(journal.getByRole("link")).toHaveCount(0);
+      await expect(
+        page.getByText("Drafts & submissions", { exact: true }),
+      ).toHaveCount(0);
+      await expect(
         page.getByRole("link", {
-          name: "Account & quest preferences",
-          exact: true,
+          name: /Account & quest preferences|Start an original|Draft an original/,
         }),
-        page.getByRole("link", { name: "Start an original", exact: true }),
-      ];
-      for (const link of privateLinks) await expectContainedPill(link);
-      const rows = await links.evaluateAll((elements) =>
-        elements.map((element) => {
-          const bounds = element.getBoundingClientRect();
-          const label = element.querySelector("span")!.getBoundingClientRect();
-          const icon = element.querySelector("svg")!.getBoundingClientRect();
-          return {
-            left: bounds.left,
-            right: bounds.right,
-            labelLeft: label.left,
-            iconLeft: icon.left,
-          };
-        }),
-      );
-      expect(rows[0]).toEqual(rows[1]);
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("region", { name: "Your quest milestones" }),
+      ).toHaveCount(0);
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth + 1,
@@ -116,24 +131,215 @@ for (const width of [320, 390, 430]) {
         path: testInfo.outputPath("private-actions.png"),
         fullPage: true,
       });
+      const edit = page.getByRole("button", {
+        name: "Edit profile",
+        exact: true,
+      });
+      await edit.click();
+      const dialog = await expectEditorInViewport(page);
+      await expect(
+        dialog.getByRole("textbox", {
+          name: "Public display name",
+          exact: true,
+        }),
+      ).toBeFocused();
+      await expect(
+        dialog.getByRole("button", { name: "Cancel", exact: true }),
+      ).toBeInViewport();
+      await expect(
+        dialog.getByRole("button", {
+          name: "Save public profile",
+          exact: true,
+        }),
+      ).toBeInViewport();
+      await page.screenshot({
+        path: testInfo.outputPath("profile-editor.png"),
+      });
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect(edit).toBeFocused();
     });
   }
 }
 
-test("profile pill actions open their intended pages", async ({ page }) => {
-  await start(page);
-  for (const [name, path, heading] of [
-    ["Private journal", "/journal", "Stories worth keeping."],
-    ["Account & quest preferences", "/account", "Account & quest preferences"],
-    ["Start an original", "/originals/new", "A quest only you would invent."],
-  ]) {
-    await page.goto("/profile?tab=private");
-    await page.getByRole("link", { name, exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`${path}$`));
-    await expect(
-      page.getByRole("heading", { name: heading, exact: true }),
-    ).toBeVisible();
-  }
+test("preferences remain accessible outside Private and original authoring is absent from the profile", async ({
+  page,
+}) => {
+  await start(page, "/profile");
+  const preferences = page.getByRole("link", {
+    name: /Account & quest preferences/,
+  });
+  await expect(preferences).toHaveCount(1);
+  await preferences.click();
+  await expect(page).toHaveURL(/\/preferences\?returnTo=%2Fprofile$/);
+  await expect(
+    page.getByRole("heading", {
+      name: "Account & quest preferences",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.goto("/profile?tab=quests");
+  await expect(
+    page.getByRole("region", { name: "Authored quests" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Draft an original|Start an original/ }),
+  ).toHaveCount(0);
+  await expect(preferences).toHaveCount(1);
+});
+
+test("Private shows saved journal entries and opens their existing quest records", async ({
+  page,
+}) => {
+  await start(page, "/profile");
+  const runId = "a629d95e-2fc3-452c-81ca-631fda635911";
+  await page.evaluate(
+    ({ id, quest, outing }) => {
+      const saved = JSON.parse(localStorage.getItem("sidequest-demo-v1")!);
+      saved.runs = [
+        {
+          id,
+          quest,
+          outing,
+          role: null,
+          status: "accepted",
+          clips: [],
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      localStorage.setItem("sidequest-demo-v1", JSON.stringify(saved));
+    },
+    {
+      id: runId,
+      quest: catalog.find((quest) => quest.id === "date_pit_crew_chill_v1")!,
+      outing: DEFAULT_OUTING,
+    },
+  );
+  await page.goto("/profile?tab=private");
+  const journal = page.getByRole("region", { name: "Your private space" });
+  const entries = journal.getByRole("link");
+  await expect(entries).toHaveCount(1);
+  await expect(entries).toHaveAttribute("href", `/runs/${runId}`);
+  await expect(journal).not.toContainText("Drafts & submissions");
+  await expect(journal).not.toContainText("preferences");
+  await entries.click();
+  await expect(page).toHaveURL(new RegExp(`/runs/${runId}$`));
+});
+
+test("profile editor remains modal and returns focus without native dialog support", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+      configurable: true,
+      value: undefined,
+    }),
+  );
+  await page.route("**/src/lib/social-api.ts*", async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      body: `${await response.text()}
+      const originalHeldProfileSave = socialApi.save;
+      socialApi.save = async input => {
+        await new Promise(resolve => { window.__finishProfileSave = resolve; });
+        return originalHeldProfileSave(input);
+      };`,
+    });
+  });
+  await start(page, "/profile");
+  const edit = page.getByRole("button", { name: "Edit profile", exact: true });
+  await edit.click();
+  const dialog = await expectEditorInViewport(page);
+  await expect(page.locator("#root")).toHaveAttribute("aria-hidden", "true");
+  await expect(
+    dialog.getByRole("textbox", { name: "Public display name", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(
+    dialog.getByRole("button", { name: "Save public profile", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator("#root")).not.toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  await expect(edit).toBeFocused();
+  await edit.click();
+  await dialog
+    .getByRole("textbox", { name: "Username", exact: true })
+    .fill("pending_profile");
+  const save = dialog.getByRole("button", {
+    name: "Save public profile",
+    exact: true,
+  });
+  await save.click();
+  await expect(save).toBeDisabled();
+  await page.keyboard.press("Tab");
+  await expect(dialog).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog).toBeFocused();
+  await page.evaluate(() =>
+    (Reflect.get(window, "__finishProfileSave") as () => void)(),
+  );
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByText("Public profile saved.", { exact: true }),
+  ).toBeVisible();
+});
+
+test("visible profile editor saves, reloads, discards cancellation and stays usable above a phone keyboard", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+  await start(page, "/profile");
+  const edit = page.getByRole("button", { name: "Edit profile", exact: true });
+  await edit.click();
+  const dialog = await expectEditorInViewport(page);
+  const displayName = dialog.getByRole("textbox", {
+    name: "Public display name",
+    exact: true,
+  });
+  await expect(displayName).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(
+    dialog.getByRole("button", { name: "Save public profile", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(displayName).toBeFocused();
+  await displayName.fill("Riley’s Detours");
+  await dialog
+    .getByRole("textbox", { name: "Username", exact: true })
+    .fill("riley_detours");
+  const bio = dialog.getByRole("textbox", {
+    name: "Short public bio",
+    exact: true,
+  });
+  await page.setViewportSize({ width: 393, height: 460 });
+  await bio.fill("Little quests, good stories.");
+  await expect(bio).toBeFocused();
+  await expectEditorInViewport(page);
+  await expect(bio).toBeInViewport({ ratio: 1 });
+  await dialog
+    .getByRole("button", { name: "Save public profile", exact: true })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Riley’s Detours", exact: true }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.reload();
+  await expect(page.getByText("@riley_detours", { exact: true })).toBeVisible();
+  await edit.click();
+  await expect(bio).toHaveValue("Little quests, good stories.");
+  await displayName.fill("Unsaved name");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(edit).toBeFocused();
+  await edit.click();
+  await expect(displayName).toHaveValue("Riley’s Detours");
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
 });
 
 test("own-profile Settings stays reachable through loading, failure, and recovery", async ({

@@ -190,15 +190,22 @@ test("a failed save does not pretend to resolve a social read failure, while ret
   const control = await fixture(page, { failSave: true });
   await expect(page.getByRole("alert")).toContainText(loadError);
   await saveProfile(page);
+  const editor = page.getByRole("dialog", {
+    name: "Edit profile",
+    exact: true,
+  });
+  await expect(editor).toBeVisible();
   await expect(
-    page.getByRole("alert").filter({ hasText: loadError }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("alert").filter({ hasText: saveError }),
+    editor.getByRole("alert").filter({ hasText: saveError }),
   ).toBeVisible();
   await expect(
     page.getByText("Public profile saved.", { exact: true }),
   ).toHaveCount(0);
+  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(editor).not.toBeVisible();
+  await expect(
+    page.getByRole("alert").filter({ hasText: loadError }),
+  ).toBeVisible();
   control.recoverRead();
   await page
     .getByRole("button", { name: "Retry profile details", exact: true })

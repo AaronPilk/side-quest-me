@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ArrowUpRight, Play, Clock3, Layers } from "lucide-react";
 import { api } from "../lib/api";
 import { hasReadyVideo } from "../lib/recording-session";
@@ -16,7 +16,20 @@ import {
 } from "../components/ui";
 export default function Journal() {
   const { data, error, refresh } = useResource(api.runs);
-  const [filter, setFilter] = useState("all");
+  const [params, setParams] = useSearchParams();
+  const requestedFilter = params.get("filter");
+  const filter =
+    requestedFilter === "progress" || requestedFilter === "completed"
+      ? requestedFilter
+      : "all";
+  function setFilter(value: string) {
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (value === "all") next.delete("filter");
+      else next.set("filter", value);
+      return next;
+    });
+  }
   const [query, setQuery] = useState("");
   const visible = data?.filter((run) => {
     const matches =
@@ -36,9 +49,13 @@ export default function Journal() {
     <>
       <PageTitle
         eyebrow="YOUR PRIVATE COLLECTION"
-        title="Stories worth keeping."
+        title={
+          filter === "progress" ? "Your open quests" : "Stories worth keeping."
+        }
       >
-        The plans you made. The moments you actually lived.
+        {filter === "progress"
+          ? "Pick up your quest and keep the story going."
+          : "The plans you made. The moments you actually lived."}
       </PageTitle>
       {error && (
         <>
@@ -84,8 +101,12 @@ export default function Journal() {
         <Loading />
       ) : !data?.length && !error ? (
         <Empty
-          title="Your first story starts here"
-          to="/"
+          title={
+            filter === "progress"
+              ? "No open quests right now"
+              : "Your first story starts here"
+          }
+          to="/create"
           action="Find a quest"
         >
           Your quests and videos live here. Any quest can become the first part
@@ -93,7 +114,11 @@ export default function Journal() {
         </Empty>
       ) : data?.length && !visible?.length ? (
         <div className="journal-no-results" role="status">
-          <h2>No stories here yet</h2>
+          <h2>
+            {filter === "progress" && !query
+              ? "No open quests right now"
+              : "No stories here yet"}
+          </h2>
           <p>Try another title or see your full collection.</p>
           <button
             className="button secondary"

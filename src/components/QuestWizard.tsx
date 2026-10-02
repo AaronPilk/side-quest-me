@@ -156,7 +156,6 @@ export function QuestWizard({
   error,
   needsProfile,
   firstRun = false,
-  resumeQuestId,
   center,
   nearbyPlaces = [],
   onAreaReady,
@@ -174,7 +173,6 @@ export function QuestWizard({
    * onboarding (account choice, optional context, questions) instead of the
    * direct preference editor. */
   firstRun?: boolean;
-  resumeQuestId?: string;
   center?: DiscoveryCenter;
   nearbyPlaces?: ApplePlace[];
   onAreaReady?: (
@@ -814,9 +812,6 @@ export function QuestWizard({
               </Link>
             )}
             <div className="create-links">
-              {resumeQuestId && (
-                <Link to={`/runs/${resumeQuestId}`}>Resume your quest</Link>
-              )}
               <Link to="/originals/new?ai=1" state={{ outing }}>
                 Draft with AI
               </Link>

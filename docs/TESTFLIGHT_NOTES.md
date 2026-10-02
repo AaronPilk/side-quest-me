@@ -1,21 +1,18 @@
-# Internal iPhone beta — 1.0.0 (9)
+# Internal iPhone beta — 1.0.0 (10)
 
-Build 9 focuses on the camera screen after a report of a black preview while iPhone camera and microphone indicators were active.
+Build 10 improves finding your open quest, editing your public profile and navigating your private journal and Settings.
 
-- The app explicitly starts preview playback and waits for a video frame before enabling recording.
-- If the preview cannot start or stops, recovery controls let you retry playback or reopen the camera. Earlier saved takes and video import remain available.
-- Switching cameras attaches the new stream directly and cycles through the available cameras.
-- Delayed playback events no longer disable a healthy preview. When playback resumes after an interruption, a fresh frame restores readiness without automatically restarting recording.
-- Returning from the background does not automatically resume recording.
-- Restored drafts copy saved footage into fresh playback buffers before reuse. Earlier takes keep their original bytes, order and audio; a failed read keeps the draft and shows a recovery message.
+- An open quest gets a prominent Resume quest card on Discover, Activity and Create. You can return directly without answering new outing questions.
+- Profile → Private contains only your private journal. Account preferences and original-quest drafting are no longer mixed into that tab.
+- Edit profile opens a focused editor immediately. Save, Cancel and errors stay in the editor; saved changes persist when you reopen the app.
+- Settings uses compact grouped glass cards with inset icons and aligned rows. Account security, sign-out, deletion, preferences and journal remain accessible.
+- The camera recovery and saved-draft playback changes from build 9 are included.
 
-Please test on your iPhone after updating:
+Please test on your iPhone:
 
-1. Open an accepted quest → Record or import video. Grant camera and microphone access if asked. Confirm you see a moving preview before recording becomes available.
-2. Record a short take, pause, switch cameras and record another. Preview the result and confirm both the picture and microphone audio work.
-3. Close and reopen the app, restore the draft, then add another take. Confirm all earlier takes still play in order. Leave the app and return. Reopen the camera, then confirm earlier takes remain and recording starts only when you choose it.
-4. If the preview is black or stalled, try the recovery controls. Also check importing a video, saving and exporting to Photos.
-
-The exact cause of the original iPhone failure has not been established. The update adds playback checks and recovery; real camera preview and audio still need confirmation on your device. Report your iPhone model, iOS version, which camera you used and whether the issue repeats.
+1. Accept a quest, leave it, then use Resume quest from Discover, Activity and Create. Confirm it opens the same quest with your saved footage.
+2. Open Edit profile, change your name or bio, and save. Reopen the app to confirm persistence. Test Cancel as well.
+3. Open Profile → Private and confirm only your private journal appears. Open Settings and verify the account settings and preferences buttons.
+4. Check the camera preview, record/pause/flip, microphone audio, draft restore and video import. Physical camera and microphone behavior still require confirmation on your device.
 
 Recording supports up to 60 seconds. Videos and series remain private until you explicitly publish.

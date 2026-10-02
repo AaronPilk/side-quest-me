@@ -1,0 +1,68 @@
+.open-quest-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  margin: 0 0 24px;
+  padding: 18px;
+  border: 1px solid var(--action-border);
+  border-radius: 26px;
+  background: linear-gradient(
+    125deg,
+    var(--action-soft),
+    rgb(255 255 255 / 82%)
+  );
+  box-shadow: 0 8px 24px rgb(121 80 232 / 6%);
+}
+.open-quest-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--action-ink);
+  background: rgb(255 255 255 / 78%);
+}
+.open-quest-copy .eyebrow {
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+}
+.open-quest-copy h2 {
+  margin: 5px 0 6px;
+  font-size: 1.0625rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.open-quest-copy p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--secondary);
+}
+.open-quest-card > .button {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 44px;
+  padding: 12px 16px;
+  font-size: 0.875rem;
+}
+.open-quest-recovery {
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid var(--divider);
+  border-radius: 24px;
+  background: var(--surface);
+}
+.open-quest-recovery p {
+  margin: 0 0 12px;
+  font-size: 0.875rem;
+}
+.open-quest-recovery > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.open-quest-recovery .button {
+  min-height: 44px;
+  font-size: 0.8125rem;
+}
