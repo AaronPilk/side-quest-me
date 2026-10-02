@@ -209,7 +209,36 @@ describe("provider selection and transport isolation", () => {
   );
 
   it.each([
-    ["openai", { status: "incomplete", output: [] }],
+    ["openai", { status: "incomplete", output: [] }, "incomplete"],
+    [
+      "openai",
+      {
+        status: "incomplete",
+        incomplete_details: { reason: "max_output_tokens" },
+        output: [
+          { type: "message", content: [{ type: "output_text", text: "{}" }] },
+        ],
+      },
+      "token_limit",
+    ],
+    [
+      "openai",
+      {
+        status: "incomplete",
+        incomplete_details: { reason: "content_filter" },
+        output: [],
+      },
+      "refusal",
+    ],
+    [
+      "openai",
+      {
+        status: "incomplete",
+        incomplete_details: { reason: "private-provider-reason" },
+        output: [],
+      },
+      "incomplete",
+    ],
     [
       "openai",
       {
@@ -218,6 +247,7 @@ describe("provider selection and transport isolation", () => {
           { type: "message", content: [{ type: "refusal", text: "No" }] },
         ],
       },
+      "refusal",
     ],
     [
       "xai",
@@ -229,6 +259,7 @@ describe("provider selection and transport isolation", () => {
           },
         ],
       },
+      "token_limit",
     ],
     [
       "xai",
@@ -236,10 +267,46 @@ describe("provider selection and transport isolation", () => {
         choices: [
           {
             finish_reason: "stop",
-            message: { role: "assistant", content: "{}", refusal: "No" },
+            message: {
+              role: "assistant",
+              content: null,
+              refusal: "private-provider-refusal",
+            },
           },
         ],
       },
+      "refusal",
+    ],
+    ...(["content_filter", "refusal"] as const).map(
+      (finish_reason) =>
+        [
+          "xai",
+          {
+            choices: [
+              {
+                finish_reason,
+                message: { role: "assistant", content: "{}" },
+              },
+            ],
+          },
+          "refusal",
+        ] as const,
+    ),
+    [
+      "xai",
+      {
+        choices: [
+          {
+            finish_reason: "length",
+            message: {
+              role: "assistant",
+              content: "{}",
+              refusal: "private-provider-refusal",
+            },
+          },
+        ],
+      },
+      "refusal",
     ],
     [
       "anthropic",
@@ -248,6 +315,17 @@ describe("provider selection and transport isolation", () => {
         stop_reason: "max_tokens",
         content: [{ type: "text", text: "{}" }],
       },
+      "token_limit",
+    ],
+    [
+      "anthropic",
+      {
+        type: "message",
+        stop_reason: "refusal",
+        stop_details: { explanation: "private-provider-refusal" },
+        content: [{ type: "text", text: "{}" }],
+      },
+      "refusal",
     ],
     [
       "anthropic",
@@ -256,9 +334,62 @@ describe("provider selection and transport isolation", () => {
         stop_reason: "end_turn",
         content: [{ type: "refusal" }],
       },
+      "refusal",
     ],
   ] as const)(
-    "rejects %s incomplete or refused envelopes",
+    "classifies %s incomplete or refused envelopes without retaining private content",
+    async (provider, response, kind) => {
+      const error = await requestAiJson(
+        questAiProvider({ ...keys, AI_QUEST_PROVIDER: provider })!,
+        "private-provider-instructions",
+        { plan: "private-provider-context" },
+        {},
+        "proposal",
+        async () => Response.json(response),
+      ).catch((failure) => failure);
+      if (!(error instanceof AiProviderError))
+        throw new Error("Expected a safe provider failure.");
+      expect(error).toMatchObject({
+        kind,
+        message: {
+          incomplete: "Provider output is incomplete.",
+          refusal: "Provider refused.",
+          token_limit: "Provider output reached its token limit.",
+        }[kind],
+      });
+      expect(error.httpStatus).toBeUndefined();
+      expect(error).not.toHaveProperty("cause");
+      expect(JSON.stringify(error)).toBe(
+        JSON.stringify({ kind, name: "AiProviderError" }),
+      );
+      expect(String(error.stack)).not.toContain("private-provider-");
+    },
+  );
+
+  it.each([
+    ["openai", { status: "failed", output: [] }],
+    ["openai", { status: "completed", output: null }],
+    [
+      "xai",
+      {
+        choices: [
+          {
+            finish_reason: "stop",
+            message: { role: "assistant", content: null },
+          },
+        ],
+      },
+    ],
+    [
+      "anthropic",
+      {
+        type: "message",
+        stop_reason: "unknown",
+        content: [{ type: "text", text: "{}" }],
+      },
+    ],
+  ] as const)(
+    "%s still rejects invalid envelopes after failure classification",
     async (provider, response) => {
       await expect(
         requestAiJson(
@@ -269,7 +400,10 @@ describe("provider selection and transport isolation", () => {
           "proposal",
           async () => Response.json(response),
         ),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({
+        name: "AiProviderError",
+        kind: "invalid_response",
+      });
     },
   );
 

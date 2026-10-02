@@ -137,6 +137,7 @@ async function prepare(
   page: Page,
   options: {
     failFirst?: boolean;
+    failAt?: number;
     holdFirst?: boolean;
     source?: "ai" | "curated_fallback";
     location?: DiscoveryPlace;
@@ -161,7 +162,7 @@ async function prepare(
     keys.push(route.request().headers()["idempotency-key"] || "");
     const index = calls.length;
     if (options.holdFirst && index === 1) await held;
-    if (options.failFirst && index === 1)
+    if ((options.failFirst && index === 1) || index === options.failAt)
       return route.fulfill({
         status: 503,
         json: { error: "Mocked discovery is unavailable. Your plan is saved." },
@@ -592,6 +593,61 @@ test("discovery failure keeps the complete plan and can be retried without re-an
   expect(await accepted(page)).toHaveLength(0);
 });
 
+test("finding another experience sends prior proposals and retries the same request without losing the good idea", async ({
+  page,
+}) => {
+  const control = await prepare(page, { failAt: 2 });
+  await planJourney(page);
+  await page
+    .getByRole("button", { name: "Find my quests", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: title, exact: true }),
+  ).toBeVisible();
+  expect(control.calls[0].previousProposalIds).toBeUndefined();
+  await page
+    .getByRole("button", { name: "Find another experience", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Mocked discovery is unavailable. Your plan is saved.",
+  );
+  await expect(
+    page.getByRole("heading", { name: title, exact: true }),
+  ).toBeVisible();
+  expect(control.calls[1].previousProposalIds).toEqual([
+    "33333333-3333-4333-8333-333333333333",
+  ]);
+  expect(control.calls[1].outing).toEqual(venuePlan);
+  expect(control.keys[1]).not.toEqual(control.keys[0]);
+  await page
+    .getByRole("button", { name: "Retry finding an experience", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(control.calls).toHaveLength(3);
+  expect(control.calls[2]).toEqual(control.calls[1]);
+  expect(control.keys[2]).toEqual(control.keys[1]);
+  await expect(
+    page.getByRole("button", { name: "Find another experience", exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit plans", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Edit intensity", exact: true })
+    .click();
+  await page
+    .getByRole("group", { name: "Intensity", exact: true })
+    .getByRole("button", { name: "Bold", exact: true })
+    .click();
+  await continueStep(page);
+  await page
+    .getByRole("button", { name: "Find my quests", exact: true })
+    .click();
+  await expect.poll(() => control.calls.length).toBe(4);
+  expect(control.calls[3].outing.intensity).toBe("bold");
+  expect(control.calls[3].previousProposalIds).toBeUndefined();
+  expect(control.keys[3]).not.toEqual(control.keys[2]);
+});
+
 test("pending discovery prevents duplicate submits and a delayed result cannot replace an edited plan after leaving Create", async ({
   page,
 }) => {
@@ -607,7 +663,7 @@ test("pending discovery prevents duplicate submits and a delayed result cannot r
   await expect(
     page
       .getByRole("status")
-    .filter({ hasText: "Building your experience and checking the fit" }),
+      .filter({ hasText: "Building your experience and checking the fit" }),
   ).toBeVisible();
   await page
     .getByRole("link", { name: "Discover", exact: true })

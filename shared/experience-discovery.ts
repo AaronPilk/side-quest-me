@@ -34,12 +34,21 @@ export const experienceDiscoveryRequestSchema = z
     provider: aiQuestProviderSchema,
     consent: z.literal(true),
     nearbyPlaces: z.array(discoveryPlaceSchema).max(12).default([]),
+    // Optional so requests from older iPhone builds retain their replay hash.
+    // The server resolves these owner-bound proposals; clients supply no prose.
+    previousProposalIds: z.array(z.uuid()).max(5).optional(),
   })
   .strict()
   .refine(
     ({ nearbyPlaces }) =>
       new Set(nearbyPlaces.map(({ id }) => id)).size === nearbyPlaces.length,
     "Place identifiers must be unique.",
+  )
+  .refine(
+    ({ previousProposalIds }) =>
+      !previousProposalIds ||
+      new Set(previousProposalIds).size === previousProposalIds.length,
+    "Previous proposal identifiers must be unique.",
   );
 export type ExperienceDiscoveryRequest = z.infer<
   typeof experienceDiscoveryRequestSchema

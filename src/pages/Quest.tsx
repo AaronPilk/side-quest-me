@@ -8,6 +8,7 @@ import {
 import type { ApplePlace } from "../lib/apple-maps";
 import type {
   DiscoveryProposal,
+  ExperienceDiscoveryRequest,
   ExperienceDiscoveryResult,
 } from "../../shared/experience-discovery";
 import { estimateCost, ineligibilityIssues } from "../../shared/recommend";
@@ -16,6 +17,7 @@ import { useState, useEffect, useRef } from "react";
 import { QuestWizard, editQuestPlans } from "../components/QuestWizard";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
+  ArrowLeft,
   ArrowRight,
   Clock3,
   Users,
@@ -98,6 +100,12 @@ export default function Quest() {
   const [hasMore, setHasMore] = useState(false);
   const discoveryGeneration = useRef(0);
   const discoveryKey = useRef(crypto.randomUUID());
+  const discoveryAttempt = useRef<{
+    key: string;
+    input: ExperienceDiscoveryRequest;
+    completed: boolean;
+  } | null>(null);
+  const previousProposalIds = useRef<string[]>([]);
   const discoveryPlace = useRef<PlaceContext | null>(null);
   const resultsVisible = candidates !== null && !selected;
   const resultsHeading = useRef<HTMLHeadingElement>(null);
@@ -149,6 +157,8 @@ export default function Quest() {
   function update(patch: Partial<Outing>) {
     discoveryGeneration.current++;
     discoveryKey.current = crypto.randomUUID();
+    discoveryAttempt.current = null;
+    previousProposalIds.current = [];
     setOuting((current) => ({
       ...current,
       ...patch,
@@ -192,45 +202,63 @@ export default function Quest() {
         aiConfig.data?.configured &&
         aiConfig.data.provider
       ) {
-        let places = nearbyPlaces;
-        setLocationNotice("");
-        if (
-          outing.setting !== "home" &&
-          (outing.applePlaceId ||
-            (!places.length && (center || outing.area.trim())))
-        ) {
-          try {
-            places = await discoverNearbyPlaces(outing, center);
-          } catch (cause) {
-            setLocationNotice((cause as Error).message);
-            places = [];
+        let attempt = discoveryAttempt.current;
+        if (!attempt || attempt.key !== discoveryKey.current) {
+          let places = nearbyPlaces;
+          setLocationNotice("");
+          if (
+            outing.setting !== "home" &&
+            (outing.applePlaceId ||
+              (!places.length && (center || outing.area.trim())))
+          ) {
+            try {
+              places = await discoverNearbyPlaces(outing, center);
+            } catch (cause) {
+              setLocationNotice((cause as Error).message);
+              places = [];
+            }
           }
+          if (generation !== discoveryGeneration.current) return;
+          attempt = {
+            key: discoveryKey.current,
+            completed: false,
+            // A retry must replay the same request, including its transient
+            // listings, even if a later Maps search would return new results.
+            input: structuredClone({
+              outing,
+              provider: aiConfig.data.provider,
+              consent: true,
+              nearbyPlaces: places
+                .flatMap((place) =>
+                  place.id && place.name && place.coordinate
+                    ? [
+                        {
+                          id: place.id,
+                          name: place.name.slice(0, 160),
+                          address: (place.formattedAddress || "").slice(0, 300),
+                          category: place.pointOfInterestCategory,
+                          ...place.coordinate,
+                        },
+                      ]
+                    : [],
+                )
+                .slice(0, 12),
+              ...(previousProposalIds.current.length
+                ? { previousProposalIds: [...previousProposalIds.current] }
+                : {}),
+            }),
+          };
+          discoveryAttempt.current = attempt;
         }
+        const result = await discoverExperience(attempt.input, attempt.key);
         if (generation !== discoveryGeneration.current) return;
-        const result = await discoverExperience(
-          {
-            outing,
-            provider: aiConfig.data.provider,
-            consent: true,
-            nearbyPlaces: places
-              .flatMap((place) =>
-                place.id && place.name && place.coordinate
-                  ? [
-                      {
-                        id: place.id,
-                        name: place.name.slice(0, 160),
-                        address: (place.formattedAddress || "").slice(0, 300),
-                        category: place.pointOfInterestCategory,
-                        ...place.coordinate,
-                      },
-                    ]
-                  : [],
-              )
-              .slice(0, 12),
-          },
-          discoveryKey.current,
-        );
-        if (generation !== discoveryGeneration.current) return;
+        attempt.completed = true;
+        previousProposalIds.current = [
+          ...new Set([
+            ...previousProposalIds.current,
+            ...result.proposals.map(({ proposalId }) => proposalId),
+          ]),
+        ].slice(-5);
         setExperience(result);
         setCandidates(result.candidates);
         setFit(undefined);
@@ -629,15 +657,16 @@ export default function Quest() {
       {candidates !== null && (
         <section className="section results quest-results">
           <button
-            className="back"
-            aria-label="Edit plans"
+            type="button"
+            className="button secondary quest-edit-plans"
             disabled={busy}
             onClick={() => {
               setError("");
               setCandidates(null);
             }}
           >
-            ← Edit plans
+            <ArrowLeft size={18} aria-hidden="true" />
+            Edit plans
           </button>
           <div className="section-heading">
             <h1 ref={resultsHeading} tabIndex={-1}>
@@ -757,11 +786,18 @@ export default function Quest() {
                   secondary
                   busy={busy}
                   onClick={() => {
-                    discoveryKey.current = crypto.randomUUID();
+                    // A failed reroll may have completed server-side. Replay
+                    // its exact key/request before starting another paid idea.
+                    if (discoveryAttempt.current?.completed) {
+                      discoveryKey.current = crypto.randomUUID();
+                      discoveryAttempt.current = null;
+                    }
                     return discover();
                   }}
                 >
-                  Find another experience
+                  {error
+                    ? "Retry finding an experience"
+                    : "Find another experience"}
                 </Button>
               ) : hasMore ? (
                 <Button secondary busy={busy} onClick={moreIdeas}>

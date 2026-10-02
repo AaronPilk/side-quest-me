@@ -46,7 +46,8 @@ export class AiProviderError extends Error {
       | "response_too_large"
       | "invalid_response"
       | "refusal"
-      | "incomplete",
+      | "incomplete"
+      | "token_limit",
     readonly httpStatus?: number,
   ) {
     super(
@@ -58,6 +59,7 @@ export class AiProviderError extends Error {
         invalid_response: "Provider response was invalid.",
         refusal: "Provider refused.",
         incomplete: "Provider output is incomplete.",
+        token_limit: "Provider output reached its token limit.",
       }[kind],
     );
     this.name = "AiProviderError";
@@ -129,6 +131,64 @@ const messagesEnvelope = z.object({
   stop_reason: z.literal("end_turn"),
   content: z.array(z.object({ type: z.string(), text: z.string().optional() })),
 });
+
+// Failure metadata is inspected separately so truncated content is never parsed
+// as a successful result. Complete results still pass the strict envelopes above.
+const incompleteResponsesEnvelope = z.object({
+  status: z.literal("incomplete"),
+  incomplete_details: z.object({ reason: z.string().optional() }).nullish(),
+});
+const stoppedChatEnvelope = z.object({
+  choices: z
+    .array(
+      z.object({
+        finish_reason: z.string(),
+        message: z
+          .object({ refusal: z.string().nullable().optional() })
+          .nullish(),
+      }),
+    )
+    .length(1),
+});
+const stoppedMessagesEnvelope = z.object({
+  type: z.literal("message"),
+  stop_reason: z.enum(["max_tokens", "refusal"]),
+});
+
+function rejectProviderFailure(provider: AiQuestProvider, raw: unknown) {
+  if (provider === "openai") {
+    const incomplete = incompleteResponsesEnvelope.safeParse(raw);
+    if (incomplete.success) {
+      const reason = incomplete.data.incomplete_details?.reason;
+      throw new AiProviderError(
+        reason === "max_output_tokens"
+          ? "token_limit"
+          : reason === "content_filter"
+            ? "refusal"
+            : "incomplete",
+      );
+    }
+  } else if (provider === "xai") {
+    const stopped = stoppedChatEnvelope.safeParse(raw);
+    if (stopped.success) {
+      const choice = stopped.data.choices[0];
+      if (
+        choice.message?.refusal != null ||
+        choice.finish_reason === "content_filter" ||
+        choice.finish_reason === "refusal"
+      )
+        throw new AiProviderError("refusal");
+      if (choice.finish_reason === "length")
+        throw new AiProviderError("token_limit");
+    }
+  } else {
+    const stopped = stoppedMessagesEnvelope.safeParse(raw);
+    if (stopped.success)
+      throw new AiProviderError(
+        stopped.data.stop_reason === "max_tokens" ? "token_limit" : "refusal",
+      );
+  }
+}
 
 /** Claude's constrained decoder supports fewer numeric/string/array keywords.
  * Keep them in descriptions, then validate the original schema server-side. */
@@ -250,6 +310,7 @@ export async function requestAiJson(
       throw new AiProviderError("http", response.status);
     }
     const raw = await boundedJson(response);
+    rejectProviderFailure(provider, raw);
     let text: string;
     if (provider === "xai") {
       text = chatEnvelope.parse(raw).choices[0].message.content;
