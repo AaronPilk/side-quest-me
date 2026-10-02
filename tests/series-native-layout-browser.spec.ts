@@ -2,31 +2,54 @@ import { expect, test, type Page } from "@playwright/test";
 import { acceptQuest } from "./series-growth-helpers";
 
 async function coverChoicesStayClear(page: Page) {
+  // A visible heading can precede the end of the stage's entrance animation.
+  // Wait for its geometry to settle before scrolling or comparing fixed UI.
+  await expect
+    .poll(() =>
+      page
+        .locator(".series-editor-stage")
+        .evaluate((element) =>
+          element
+            .getAnimations({ subtree: true })
+            .every(
+              (animation) =>
+                !animation.pending && animation.playState !== "running",
+            ),
+        ),
+    )
+    .toBe(true);
   // The covers sit below the prefilled story, so reach them the way a person
   // does: scroll to the end. They must then clear the fixed action footer.
   await page.evaluate(() =>
     window.scrollTo(0, document.documentElement.scrollHeight),
   );
-  const footer = await page.locator(".series-editor-footer").boundingBox();
-  const navigation = await page
-    .getByRole("navigation", { name: "Primary", exact: true })
-    .boundingBox();
-  expect(
-    footer && navigation && footer.y + footer.height <= navigation.y,
-  ).toBeTruthy();
   for (const name of ["Sunrise", "Forest", "Ocean", "Night"]) {
     const cover = page
       .locator(".series-cover-option")
       .filter({ has: page.getByRole("radio", { name, exact: true }) });
-    const bounds = await cover.boundingBox();
-    expect(
-      bounds &&
-        footer &&
-        bounds.y >= 59 &&
-        bounds.y + bounds.height <= footer.y,
-    ).toBeTruthy();
+    const isClear = () =>
+      cover.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const footer = document
+          .querySelector(".series-editor-footer")
+          ?.getBoundingClientRect();
+        const navigation = document
+          .querySelector('nav[aria-label="Primary"]')
+          ?.getBoundingClientRect();
+        return Boolean(
+          footer &&
+          navigation &&
+          footer.bottom <= navigation.top &&
+          bounds.top >= 59 &&
+          bounds.bottom <= footer.top,
+        );
+      });
+    // Read every rectangle in the same frame and retain the exact clearance
+    // requirements. Check again after focus; a persistent overlap still fails.
+    await expect.poll(isClear).toBe(true);
     await cover.click();
     await expect(page.getByRole("radio", { name, exact: true })).toBeChecked();
+    await expect.poll(isClear).toBe(true);
   }
 }
 
