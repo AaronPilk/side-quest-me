@@ -164,4 +164,39 @@ describe("live camera preview", () => {
     expect(element.pause).toHaveBeenCalledOnce();
     expect(track.stop).not.toHaveBeenCalled();
   });
+
+  it("ignores queued interruptions when the camera has already resumed", () => {
+    const { video, element, stream, track, present } = fixture();
+    const state = vi.fn();
+    const preview = connectCameraPreview(video, stream, state);
+    present();
+    for (const event of ["pause", "waiting", "stalled"])
+      element.dispatchEvent(new Event(event));
+    track.dispatchEvent(new Event("mute"));
+    expect(state.mock.calls).toEqual([["starting"], ["ready"]]);
+    present();
+    expect(state).toHaveBeenLastCalledWith("ready");
+    preview.dispose();
+  });
+
+  it("rearms a genuinely paused or stalled preview on playing and waits for a fresh frame", () => {
+    const { video, element, stream, present } = fixture();
+    const state = vi.fn();
+    const preview = connectCameraPreview(video, stream, state);
+    present();
+    for (const event of ["pause", "waiting", "stalled"] as const) {
+      if (event === "pause") element.paused = true;
+      else element.readyState = 1;
+      element.dispatchEvent(new Event(event));
+      expect(state).toHaveBeenLastCalledWith("blocked");
+      element.paused = false;
+      element.readyState = 2;
+      element.dispatchEvent(new Event("playing"));
+      expect(state).toHaveBeenLastCalledWith("starting");
+      present();
+      expect(state).toHaveBeenLastCalledWith("ready");
+    }
+    expect(element.play).toHaveBeenCalledTimes(4);
+    preview.dispose();
+  });
 });

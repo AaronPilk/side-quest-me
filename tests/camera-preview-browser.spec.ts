@@ -311,3 +311,71 @@ test("a preview frame stall seals a take and a user retry keeps it without resta
     .click();
   await expect(dialog.locator(".session-timeline > span")).toHaveCount(1);
 });
+
+test("queued media interruptions cannot disable a camera that is already playing fresh frames", async ({
+  page,
+}) => {
+  const dialog = await openCapture(page);
+  await previewPlays(page);
+  await dialog.getByLabel("Live camera preview").evaluate((element) => {
+    for (const event of ["pause", "waiting", "stalled"])
+      element.dispatchEvent(new Event(event));
+    ((element as HTMLVideoElement).srcObject as MediaStream)
+      .getVideoTracks()[0]
+      .dispatchEvent(new Event("mute"));
+  });
+  await previewPlays(page);
+  await expect(
+    dialog.getByRole("button", { name: "Start preview", exact: true }),
+  ).toHaveCount(0);
+  await dialog
+    .getByRole("button", { name: "Or tap to start recording", exact: true })
+    .click();
+  await expect(
+    dialog.getByRole("button", { name: "Stop recording", exact: true }),
+  ).toBeVisible();
+  await dialog
+    .getByRole("button", { name: "Stop recording", exact: true })
+    .click();
+});
+
+test("genuinely paused video resumes its preview on fresh frames without resuming recording or losing its take", async ({
+  page,
+}) => {
+  const dialog = await openCapture(page);
+  await previewPlays(page);
+  await dialog
+    .getByRole("button", { name: "Or tap to start recording", exact: true })
+    .click();
+  await expect
+    .poll(async () => parseFloat(await dialog.getByRole("timer").innerText()))
+    .toBeGreaterThan(1);
+  await dialog
+    .getByLabel("Live camera preview")
+    .evaluate((element) => (element as HTMLVideoElement).pause());
+  await expect(
+    dialog.getByRole("button", { name: "Start preview", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+  ).toBeDisabled();
+  await expect(dialog.locator(".session-timeline > span")).toHaveCount(1);
+  await expect(
+    dialog.getByText("Draft saved on this device.", { exact: true }),
+  ).toBeVisible();
+  await dialog
+    .getByLabel("Live camera preview")
+    .evaluate((element) => (element as HTMLVideoElement).play());
+  await previewPlays(page);
+  await expect(
+    dialog.getByRole("button", { name: "Stop recording", exact: true }),
+  ).toHaveCount(0);
+  await expect(dialog.locator(".session-timeline > span")).toHaveCount(1);
+  await dialog
+    .getByRole("button", { name: "Exit capture", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Continue recording", exact: true })
+    .click();
+  await expect(dialog.locator(".session-timeline > span")).toHaveCount(1);
+});

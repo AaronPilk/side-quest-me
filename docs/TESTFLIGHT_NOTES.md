@@ -1,10 +1,11 @@
-# Internal iPhone beta — 1.0.0 (7)
+# Internal iPhone beta — 1.0.0 (8)
 
-Build 7 focuses on the camera screen after a report of a black preview while iPhone camera and microphone indicators were active.
+Build 8 focuses on the camera screen after a report of a black preview while iPhone camera and microphone indicators were active.
 
 - The app explicitly starts preview playback and waits for a video frame before enabling recording.
 - If the preview cannot start or stops, recovery controls let you retry playback or reopen the camera. Earlier saved takes and video import remain available.
 - Switching cameras attaches the new stream directly and cycles through the available cameras.
+- Delayed playback events no longer disable a healthy preview. When playback resumes after an interruption, a fresh frame restores readiness without automatically restarting recording.
 - Returning from the background does not automatically resume recording.
 
 Please test on your iPhone after updating:

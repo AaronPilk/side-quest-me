@@ -56,7 +56,19 @@ export function connectCameraPreview(
       lastMediaTime = video.currentTime;
   };
   const interrupted = () => {
-    if (state === "ready") block();
+    // Media events are queued. A waiting/stalled notification may arrive after
+    // a fresh frame; only current missing data should interrupt the preview.
+    if (state === "ready" && video.readyState < 2) block();
+  };
+  const paused = () => {
+    if (video.paused) block();
+  };
+  const muted = () => {
+    if (tracks.some((track) => track.muted)) block();
+  };
+  const playing = () => {
+    if (state === "blocked" && !video.paused) start();
+    else mediaReady();
   };
   const start = () => {
     if (!current()) return;
@@ -101,14 +113,14 @@ export function connectCameraPreview(
   video.setAttribute("muted", "");
   video.srcObject = stream;
   video.addEventListener("loadeddata", mediaReady);
-  video.addEventListener("playing", mediaReady);
+  video.addEventListener("playing", playing);
   video.addEventListener("timeupdate", mediaReady);
-  video.addEventListener("pause", block);
+  video.addEventListener("pause", paused);
   video.addEventListener("error", block);
   video.addEventListener("waiting", interrupted);
   video.addEventListener("stalled", interrupted);
   for (const track of tracks) {
-    track.addEventListener("mute", block);
+    track.addEventListener("mute", muted);
     track.addEventListener("unmute", start);
   }
   start();
@@ -119,14 +131,14 @@ export function connectCameraPreview(
       attempt++;
       clearWait();
       video.removeEventListener("loadeddata", mediaReady);
-      video.removeEventListener("playing", mediaReady);
+      video.removeEventListener("playing", playing);
       video.removeEventListener("timeupdate", mediaReady);
-      video.removeEventListener("pause", block);
+      video.removeEventListener("pause", paused);
       video.removeEventListener("error", block);
       video.removeEventListener("waiting", interrupted);
       video.removeEventListener("stalled", interrupted);
       for (const track of tracks) {
-        track.removeEventListener("mute", block);
+        track.removeEventListener("mute", muted);
         track.removeEventListener("unmute", start);
       }
       if (video.srcObject === stream) {
