@@ -4,7 +4,7 @@
 `IN_BETA_TESTING`.** Its frozen iOS frontend is `292af0a` and deployed backend is
 `3422cbc`. **652 unit tests and the full 209-case local browser suite pass**, with
 **21 hosted migrations** applied and real OpenAI production smoke passing. A
-test-only navigation-race fix is `1756a3f`; follow-up GitHub CI remains running.
+test-only navigation-race fix is `1756a3f`; follow-up GitHub CI [36938154871](https://github.com/AaronPilk/side-quest-me/actions/runs/36938154871) completed successfully (verified October 2).
 Apple availability and testing-note readback were verified at
 **2026-10-01T23:07:51Z**. Open TestFlight → Sidequest Me → Update.
 

@@ -1,9 +1,9 @@
-# Sidequest AI setup — OpenAI activation, 2026-10-01
+# Sidequest AI setup — build 6, 2026-10-02
 
 Sidequest can use **xAI/Grok, OpenAI or Anthropic/Claude** through a server-only
 provider adapter. The current implementation supports three consented flows:
 
-- **Find my quests**, the normal Create journey, generates a private, playable experience from the outing, confirmed preferences, and optional nearby Apple Maps listings. It checks concrete concepts, expands one plan, and independently reviews it. Conditional booking requirements are shown after the suggestion; unknown prices are never described as free. Accepted generated experiences can be filmed and explicitly published as a story, and their author can grow them into a series. They do not enter the public quest catalog or award XP/points. Repeated requests use a server-side lease and replay the same result rather than paying for duplicate generation.
+- **Find my quests**, the normal Create journey, generates a private, playable experience from the outing, confirmed preferences, and optional nearby Apple Maps listings. One call compares three concepts and writes the selected plan; a second call independently reviews it. Conditional booking requirements are shown after the suggestion; unknown prices are never described as free. Accepted generated experiences can be filmed and explicitly published as a story, and their author can grow them into a series. They do not enter the public quest catalog or award XP/points. A deliberate reroll can include the user's previous proposals. Retrying an interrupted request retains its exact payload and idempotency key, so a completed result can be replayed without duplicate generation.
 
 - **Draft with AI**, linked from Create, turns a short brief and reviewed outing
   into an original quest proposal. The user previews it, chooses **Use editable
@@ -55,6 +55,14 @@ References: [Grok models](https://docs.x.ai/developers/models),
 
 ## Connect OpenAI
 
+Build 6 source `c416fcd` is deployed successfully in run `37023079638`, Worker
+version `5f1cb462-b93e-44d8-812b-87aec2098c01`. Authenticated production testing
+passed initial OpenAI generation and a history-aware reroll (56.6 and 55.6 seconds),
+exact replays, owner isolation, relevant preflight and temporary-account cleanup.
+Signed iPhone build 1.0.0 (6) is VALID and IN_BETA_TESTING in Sidequest Internal.
+See [build-6 release evidence](BETA_FEEDBACK_BUILD_6_RELEASE.md). The following
+deployment evidence belongs to build 5.
+
 The production Worker reports OpenAI / GPT-6 Astra as configured. Its server-only
 secret, provider/model variables and separate AI rate limiter are deployed.
 For build 5, deployment `36935884932` of backend `3422cbc` passed authenticated
@@ -68,8 +76,8 @@ Build **1.0.0 (5)** is now `VALID` and `IN_BETA_TESTING` in Sidequest Internal,
 verified at `2026-10-01T23:07:51Z` with exact testing-note readback. The full local
 browser suite passes **209/209**, and 652 unit tests pass. Test-only fixture fix
 `1756a3f` changes neither the iOS binary nor deployed backend. Follow-up GitHub
-CI `36938154871` is still running; these are confirmed local results, not a claim
-of completed independent CI.
+CI [36938154871](https://github.com/AaronPilk/side-quest-me/actions/runs/36938154871)
+completed successfully, verified October 2. These are historical build-5 results.
 
 Earlier build-2 smoke verified authentication and consent without paid generation;
 the later synthetic evaluations called the generator directly. These are distinct
@@ -159,7 +167,29 @@ and [preview limitations](https://developers.openai.com/siwc/token-sharing-open-
 
 ## Quest quality pipeline
 
-Original ideas now use three bounded, server-side stages with GPT-6 Astra:
+Normal Create experience discovery uses two bounded provider calls with GPT-6
+Astra at low reasoning effort:
+
+1. Compare three materially different, scored concepts and return the complete
+   selected proposal in the same structured response. `selectedConceptId` must
+   identify one of the three distinct concepts. The selected concept must pass
+   the existing feasibility and playability, goal and audience/intensity
+   thresholds; subjective score ties do not introduce an additional rejection.
+   The response schema fixes the outing's category, intensity, group, participant
+   range and setting, and bounds activity time by the time remaining after travel.
+2. Independently review the selected instructions using the unchanged quality
+   gates. This checks coherence, concrete intensity, completeness, hidden
+   requirements, boundaries, unsupported place facts, filming compatibility and
+   whether a reroll merely renames a previous activity. A weak or contradictory
+   proposal is withheld; a fallback remains explicitly labeled.
+
+The total deadline is **90 seconds**, with up to **60 seconds** for comparison
+and proposal and up to **30 seconds** for review, both bounded by the remaining
+overall time. Combining comparison and expansion removes a provider round trip;
+it does not lower quality scores or remove independent review. There is no
+automatic paid retry of the full generation and no silent provider switch.
+
+The separate **Draft with AI** original-draft flow retains three bounded stages:
 
 1. Brainstorm three materially different playable concepts using a concise shortlist at **low reasoning effort**.
    Compare concrete actions, achievable payoff, originality, participant/energy fit
@@ -179,7 +209,7 @@ force the user to attest that they won. Human review caught this mismatch in two
 initially approved live outputs; the generation and review prompts now explicitly
 check that contract.
 
-There are at most three provider calls per original proposal, a 90-second overall
+There are at most three provider calls per original draft, a 90-second overall
 budget and a 60-second maximum per call (the final review has a 30-second cap).
 Astra remains the higher-capability model; low reasoning effort here limits latency,
 while the separate planning and review stages provide the quality process.
@@ -195,25 +225,47 @@ References: [GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-as
 ## Data, validation and recovery
 
 Generation requires an authenticated permanent account and explicit named-provider
-consent. Imported summaries, profile identity, unconfirmed/legacy defaults,
-free-form private preference notes, exact coordinates, area and Apple place IDs
-are excluded. The original draft sends the user-written brief, the structured plan
-and confirmed preferences. Filming assistance may additionally send a matching
-place's coarse category, such as `Park`, but no live place facts. Users should
-keep private details out of their brief.
+consent. Raw imported summaries, profile identity, unconfirmed/legacy defaults,
+free-form private preference notes and exact coordinates are excluded. Normal
+discovery may send the explicitly supplied nearby listings, including their IDs,
+names, addresses and categories; consent names this sharing. These are unverified
+listings, not evidence of opening hours, current prices or availability. The
+original draft sends the user-written brief, structured plan and confirmed
+preferences without area or Apple place IDs. Filming assistance may additionally
+send a matching place's coarse category, such as `Park`, but no live place facts.
+Users should keep private details out of their brief.
+
+Discovery accepts up to five optional, unique `previousProposalIds`. The server
+resolves these against the authenticated owner's private proposals and unpublished
+templates before any generation. Missing, invalid or other-owner history is
+rejected. Only bounded summaries of previous titles, actions and mechanics reach
+the model; prior proposal IDs, identity and stored location details do not. An
+exact previous title is rejected locally, and independent review checks for a
+renamed repeat. The curated fallback skips exact prior titles when another fitting
+option exists. This improves variety without promising every reroll is novel.
+
+The client keeps the exact payload and idempotency key for a transport retry.
+Choosing **Find another experience** starts a new request with recent proposal
+history; changing the outing clears that history. The server's existing lease and
+cached response preserve replay behavior. The history field is optional without a
+default, so older clients retain their original request/hash shape. Build 6 needs
+no database migration.
 
 The server resolves published templates and rechecks boundaries/outing before
 filming help. Original proposals are validated against the strict quest contract,
 assigned the app's own identity, intensity-based rewards and cooldown policy, and
 checked against the same eligibility rules for time, group, setting, budget and
 exclusions. An unresolved custom boundary stops generation before sharing. Rewards
-and identity cannot be supplied by the model. Nothing is automatically saved,
-published, accepted or rewarded. Full Send does not change selected participant
+and identity cannot be supplied by the model. Original drafts require explicit
+save; normal discovery persists an owner-bound private proposal for later
+acceptance. Nothing is automatically published, accepted or rewarded, and private
+generated quests grant zero XP/points. Full Send does not change selected participant
 count or override boundaries. Unknown participation is never presented as confirmed.
 
 All providers share the existing AI guard of three requests per minute per user
 per Cloudflare location. This is not an exact global spending ledger; use provider
-spending controls. Each original proposal can consume up to three provider calls.
+spending controls. Normal discovery uses at most two provider calls; each original
+draft can consume up to three.
 Responses are bounded to 64 KiB and the deadlines above apply. Incomplete, refused,
 extra-field, invalid or quality-rejected output is rejected. Failure preserves the
 original quest/draft and provides retry/manual paths. Upstream bodies, submitted
@@ -222,9 +274,26 @@ private data and keys are never returned or logged. OpenAI requests use
 applicable account policy. Claude receives a compatible reduced JSON Schema while
 the server validates every original length, count and numeric constraint.
 
+Diagnostics use fixed stage/failure labels, elapsed times, allowlisted validation
+codes and numeric HTTP status. Explicit provider truncation, refusal and incomplete
+responses are classified separately. Raw provider bodies, prompts, location data,
+account data, credentials and error messages are not diagnostic fields.
+
 Reference: [Cloudflare rate limiter locality and accuracy](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/).
 
 ## Verification
+
+Full GitHub checks [37022868847](https://github.com/AaronPilk/side-quest-me/actions/runs/37022868847) pass **686 unit tests and 214 browser tests**, database checks, lint, typecheck and build.
+
+Build 6 local verification passes **686 unit tests across 61 files**, **13 focused
+discovery/native-layout browser checks**, typecheck, full lint and production
+build. A native Simulator walkthrough verified the results **Edit plans** pill,
+restoration of all six answers, and preservation of an existing active quest card.
+One bounded synthetic Late Night / Full Send reroll for five friends produced an
+approved karting championship after a previous escape-room idea in **64.8 seconds**.
+This is one checked result, not a reliability guarantee. See the
+[build-6 release note](BETA_FEEDBACK_BUILD_6_RELEASE.md) for its constraints,
+verified production/TestFlight delivery and remaining physical-device checks.
 
 Local automated coverage exercises all provider transports and malformed responses,
 selected-provider keys/no fallback, old/new consent boundaries, authentication,
@@ -304,7 +373,7 @@ There are no database changes in this follow-up.
 
 ## Build 5 normal experience discovery
 
-`POST /api/quests/discover` requires authentication, named-provider consent and an idempotency key. The server uses the configured OpenAI / GPT-6 Astra pipeline for concepts, a complete plan, and an independent quality review. Current outing limits and confirmed exclusions remain authoritative. Nearby listing strings are untrusted data; only a supplied Apple place ID or no named place can be selected. Exact device coordinates and raw imported summary prose are excluded from the model. Listing coordinates are transient client context and stripped from persisted proposal/replay records.
+`POST /api/quests/discover` requires authentication, named-provider consent and an idempotency key. Build 5 introduced the configured OpenAI / GPT-6 Astra pipeline for concepts, a complete plan, and an independent quality review; build 6 combines its first two calls as described above. Current outing limits and confirmed exclusions remain authoritative. Nearby listing strings are untrusted data; only a supplied Apple place ID or no named place can be selected. Exact device coordinates and raw imported summary prose are excluded from the model. Listing coordinates are transient client context and stripped from persisted proposal/replay records.
 
 Each proposal is owner-bound and unpublished. The user sees specific booking/price/permission checks before acceptance; the Worker and database recheck them. Private snapshots grant zero XP/points and cannot claim sponsorship. An author may explicitly publish the resulting video/story, then create later series episodes with fresh preflight. Unaccepted proposals expire after two days; a saved owned series can continue its already accepted quest later. Account deletion redacts generated prose and clears discovery caches.
 

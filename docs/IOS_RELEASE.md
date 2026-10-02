@@ -1,8 +1,8 @@
 # Sidequest iOS release guide
 
-Status checked **October 1, 2026, at 23:07:51 UTC**. **Build 1.0.0 (5) is VALID and IN_BETA_TESTING in Sidequest Internal**, from frozen iOS frontend `292af0a`, with the response to all 20 build-3 screenshot reports. Upload completed at 18:42:16 EDT with delivery/build ID `99b0d926-77e6-46e5-b130-480fba5f4985`; group `f10a5d96-4a4a-4b23-862c-1f33802a4397` membership and exact English-note readback are verified. Backend `3422cbc` fixes the Worker provider transport; deployment `36935884932` passed with version `79ac83f0-569f-4272-b3cd-71fb5087068e`. All 21 migrations are applied; 652 unit tests, 209/209 local browser cases, lint/typecheck and local database/advisors pass. Final authenticated production smoke passed with configured OpenAI generation, exact plan preservation, replay, private-owner checks and cleanup. Test-only fixture fix `1756a3f` changes neither the app binary nor backend; follow-up GitHub CI `36938154871` is still running. See [build-5 release evidence](BETA_FEEDBACK_BUILD_5_RELEASE.md) for artifacts, the earlier fallback diagnosis and verified counts.
+Status checked **October 2, 2026, at 15:01:00 UTC**. **Build 1.0.0 (6) is VALID and IN_BETA_TESTING in Sidequest Internal**, from source `c416fcd`. Apple validated and accepted delivery/build ID `af06e767-8c0d-47ec-b697-f8d822415a12` without errors. Group `f10a5d96-4a4a-4b23-862c-1f33802a4397` membership and exact English-note readback are verified. Production deployment [37023079638](https://github.com/AaronPilk/side-quest-me/actions/runs/37023079638) passed, with Worker version `5f1cb462-b93e-44d8-812b-87aec2098c01`. Local checks passed 686 unit tests, 13 focused discovery/native-layout browser tests, lint/typecheck/build, packaged release guards and a native iPhone Simulator walkthrough. Authenticated production testing passed initial AI generation, a distinct history-aware reroll, exact replays, private-owner checks and cleanup. Existing 21 migrations remain compatible; this release adds no migration. Full GitHub checks [37022868847](https://github.com/AaronPilk/side-quest-me/actions/runs/37022868847) passed: 686 unit tests, 214 browser tests, database checks, lint/typecheck and build. See [build-6 release evidence](BETA_FEEDBACK_BUILD_6_RELEASE.md) for source, artifacts, verified counts and limits.
 
-Open **TestFlight → Sidequest Me → Update** to install build 5. The earlier build **1.0.0 (4)** delivery remains recorded in [build-4 evidence](EXPERIENCE_ROUTING_RELEASE_2026-10-01.md); build 5 is the current internal beta. Availability does not establish physical-device acceptance or public App Store approval.
+Open **TestFlight → Sidequest Me → Update** to install build 6. Earlier [build-5 delivery](BETA_FEEDBACK_BUILD_5_RELEASE.md) remains historical. Availability does not establish physical-device acceptance or public App Store approval.
 
 The repository contains a Capacitor iOS app that bundles the React interface and connects to the existing Cloudflare/Supabase backend. App Store Connect record **Sidequest Me** (`6817917086`) uses bundle `com.aaronpilk.sidequest` and signing team **`5F5C5G25Y6`**. See `PREFERENCES_FLOW_REVIEW_2026-10-01.md` for combined setup and `RELEASE_REVIEW_2026-10-01.md` for the earlier Series review. Public App Store submission and physical iPhone verification of the final build remain separate requirements.
 
@@ -130,20 +130,22 @@ Use the final device-tested build and functioning backend for review. Do not cla
 
 ## Current handoff to TestFlight
 
-Apple validated and accepted the **1.0.0 (5)** delivery IPA without errors at
-18:42:16 EDT on October 1, with delivery UUID
-`99b0d926-77e6-46e5-b130-480fba5f4985`. It is processed as **VALID** and
+Apple validated and accepted the **1.0.0 (6)** delivery IPA without errors at
+10:56:37 EDT on October 2, with delivery UUID
+`af06e767-8c0d-47ec-b697-f8d822415a12`. It is processed as **VALID** and
 **IN_BETA_TESTING**, assigned to Sidequest Internal, with exact English-note
-readback verified at `2026-10-01T23:07:51Z`. Existing testers can update through
-TestFlight. The
-deployed backend passed real OpenAI normal-discovery smoke with disposable
-accounts and cleanup. See [build-5 release evidence](BETA_FEEDBACK_BUILD_5_RELEASE.md)
-for archive paths and verified results. A public App Store launch has not been
-submitted, and physical-device acceptance of build 5 remains a tester check.
+readback verified at `2026-10-02T15:01:00Z`. Existing testers can update through
+TestFlight. The deployed backend passed real OpenAI initial-generation and reroll
+smoke with disposable accounts and cleanup. See
+[build-6 release evidence](BETA_FEEDBACK_BUILD_6_RELEASE.md) for archive paths and
+verified results. A public App Store launch has not been submitted, and
+physical-device acceptance of build 6 remains a tester check.
 
 The current normal Create flow uses consented OpenAI / GPT-6 Astra to compare
-experiences, expand a complete plan and independently review it before relevant
-booking/cost/permission checks. Current outing limits and confirmed boundaries
+three experiences and write the selected complete plan in one call, then
+independently review it before relevant booking/cost/permission checks. Rerolls can
+include owner-bound previous suggestions; interrupted requests replay their exact
+key and payload. Current outing limits and confirmed boundaries
 remain authoritative. A clearly labeled authored fallback may be returned;
 generated proposals stay owner-bound and private and award zero XP/points.
 Editorial **Draft with AI** remains separate and still requires review before a
