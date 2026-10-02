@@ -151,6 +151,48 @@ test("hold/release takes survive leaving and resume as one session, with no nume
   await expect(
     dialog.getByRole("button", { name: "Save video", exact: true }),
   ).toBeEnabled();
+  async function expectBothTakesToPlay() {
+    const preview = dialog.getByLabel("Your video preview", { exact: true });
+    await expect(preview).toHaveAttribute("src", /^blob:/);
+    const firstSource = await preview.getAttribute("src");
+    async function expectDecodedPlayback() {
+      await expect
+        .poll(() =>
+          preview.evaluate((element: HTMLVideoElement) => ({
+            decoded:
+              element.readyState >= 2 &&
+              element.videoWidth > 0 &&
+              element.videoHeight > 0,
+            error: element.error?.code ?? null,
+            playing: !element.paused,
+          })),
+        )
+        .toEqual({ decoded: true, error: null, playing: true });
+      const start = await preview.evaluate((element: HTMLVideoElement) => ({
+        source: element.currentSrc,
+        time: element.currentTime,
+      }));
+      await expect
+        .poll(() =>
+          preview.evaluate(
+            (element: HTMLVideoElement, before) =>
+              element.currentSrc === before.source &&
+              element.currentTime > before.time + 0.15 &&
+              !element.paused &&
+              element.error === null,
+            start,
+          ),
+        )
+        .toBe(true);
+    }
+    await expectDecodedPlayback();
+    // Let the restored first take end naturally: the component must advance to
+    // the appended take, attach its Blob and play real decoded frames.
+    await expect.poll(() => preview.getAttribute("src")).not.toBe(firstSource);
+    await expectDecodedPlayback();
+    await expect(dialog.getByText(/could not be previewed/)).toHaveCount(0);
+  }
+  await expectBothTakesToPlay();
   const data = await page.evaluate(async () => {
     const modulePath = "/src/lib/capture-drafts.ts";
     const identityPath = "/src/lib/demo-identity.ts";
@@ -171,6 +213,117 @@ test("hold/release takes survive leaving and resume as one session, with no nume
   expect(data.count).toBe(2);
   expect(data.seconds).toBeGreaterThan(6);
   expect(data.sizes.every((size: number) => size > 0)).toBe(true);
+  await dialog.getByRole("button", { name: "Exit capture" }).click();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Continue recording", exact: true })
+    .click();
+  await expect(dialog.getByText(/Your draft is here/)).toBeVisible();
+  await dialog
+    .getByRole("button", { name: "Preview video", exact: true })
+    .click();
+  await expect(dialog.locator(".session-timeline > span")).toHaveCount(2);
+  await expectBothTakesToPlay();
+});
+
+test("a restored video copy failure keeps the original take when another recording is appended", async ({
+  page,
+}) => {
+  await openQuest(page);
+  const dialog = page.getByRole("dialog", { name: "Record your quest" });
+  async function recordTake(count: number) {
+    const before = parseFloat(await dialog.getByRole("timer").innerText());
+    await dialog
+      .getByRole("button", { name: "Or tap to start recording", exact: true })
+      .click();
+    await expect
+      .poll(async () => parseFloat(await dialog.getByRole("timer").innerText()))
+      .toBeGreaterThan(before + 0.8);
+    await dialog
+      .getByRole("button", { name: "Stop recording", exact: true })
+      .click();
+    await expect(dialog.locator(".session-timeline > span")).toHaveCount(count);
+    await expect(dialog.getByText(/Draft saved on this device/)).toBeVisible();
+  }
+  async function savedFirstTake() {
+    return page.evaluate(async () => {
+      const draftsPath = "/src/lib/capture-drafts.ts";
+      const identityPath = "/src/lib/demo-identity.ts";
+      const drafts = await import(draftsPath);
+      const identity = await import(identityPath);
+      const run = JSON.parse(localStorage.getItem("sidequest-demo-v1")!)
+        .runs[0];
+      const draft = await drafts.loadCaptureDraft(
+        `demo:${identity.demoActor().id}`,
+        run.id,
+        3,
+      );
+      const first = draft.takes[0];
+      const digest = await crypto.subtle.digest(
+        "SHA-256",
+        await first.file.arrayBuffer(),
+      );
+      return {
+        count: draft.takes.length,
+        first: {
+          bytes: Array.from(new Uint8Array(digest)),
+          size: first.file.size,
+          type: first.file.type,
+          duration: first.duration,
+        },
+      };
+    });
+  }
+  await recordTake(1);
+  await dialog.getByRole("button", { name: "Exit capture" }).click();
+  const original = await savedFirstTake();
+  expect(original.count).toBe(1);
+  expect(original.first.size).toBeGreaterThan(0);
+  await page.evaluate(() => {
+    const read = Blob.prototype.arrayBuffer;
+    const state = window as unknown as {
+      failedVideoReads: number;
+      restoreBlobRead: () => void;
+    };
+    state.failedVideoReads = 0;
+    state.restoreBlobRead = () => {
+      Blob.prototype.arrayBuffer = read;
+    };
+    Blob.prototype.arrayBuffer = function () {
+      if (this.type.startsWith("video/")) {
+        state.failedVideoReads++;
+        return Promise.reject(
+          new Error("Synthetic restored video read failure"),
+        );
+      }
+      return read.call(this);
+    };
+  });
+  await page
+    .getByRole("button", { name: "Continue recording", exact: true })
+    .click();
+  await expect(
+    dialog.getByText(
+      "Your saved takes are kept, but playback could not be prepared. Try reopening your draft.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(dialog.locator(".session-timeline > span")).toHaveCount(1);
+  expect(
+    await page.evaluate(() => {
+      const state = window as unknown as {
+        failedVideoReads: number;
+        restoreBlobRead: () => void;
+      };
+      state.restoreBlobRead();
+      return state.failedVideoReads;
+    }),
+  ).toBeGreaterThan(0);
+  await recordTake(2);
+  const appended = await savedFirstTake();
+  expect(appended.count).toBe(2);
+  expect(appended.first).toEqual(original.first);
+  await dialog.getByRole("button", { name: "Exit capture" }).click();
 });
 
 test("backgrounding seals the current take and releases camera without resuming on foreground", async ({

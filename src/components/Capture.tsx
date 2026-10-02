@@ -20,6 +20,7 @@ import {
   captureDraftGeneration,
   deleteCaptureDraft,
   loadCaptureDraft,
+  materializeCaptureDraft,
   saveCaptureDraft,
 } from "../lib/capture-drafts";
 import { watchCaptureActivity } from "../lib/capture-lifecycle";
@@ -200,24 +201,52 @@ export default function Capture({
     let canceled = false;
     void (async () => {
       try {
-        owner.current = DEMO
+        const draftOwner = DEMO
           ? `demo:${demoActor().id}`
           : (await supabase?.auth.getSession())?.data.session?.user.id;
-        if (!owner.current || canceled) return;
+        if (!draftOwner || canceled) return;
+        owner.current = draftOwner;
         const draft = await loadCaptureDraft(
-          owner.current,
+          draftOwner,
           run.id,
           SESSION_DRAFT_SLOT,
         );
-        if (canceled || !draft || draft.baseClipId !== baseClipId) return;
-        savedTakes.current = draft.takes || [
-          { file: draft.file, duration: draft.duration },
+        if (
+          canceled ||
+          !draft ||
+          draft.baseClipId !== baseClipId ||
+          owner.current !== draftOwner ||
+          captureDraftGeneration() !== generation.current
+        )
+          return;
+        let restored = draft;
+        let playbackPrepared = true;
+        try {
+          restored = await materializeCaptureDraft(draft);
+        } catch {
+          // Keep the saved session intact if its backing file cannot be read.
+          // Starting from an empty session could overwrite the earlier takes.
+          playbackPrepared = false;
+        }
+        if (
+          canceled ||
+          closed.current ||
+          owner.current !== draftOwner ||
+          captureDraftGeneration() !== generation.current
+        )
+          return;
+        savedTakes.current = restored.takes || [
+          { file: restored.file, duration: restored.duration },
         ];
-        overlayRef.current = draft.overlay;
-        setOverlay(draft.overlay);
-        source.current = draft.source === "gallery" ? "gallery" : "camera";
+        overlayRef.current = restored.overlay;
+        setOverlay(restored.overlay);
+        source.current = restored.source === "gallery" ? "gallery" : "camera";
         setTakes(savedTakes.current);
         setMessage("Your draft is here. Keep filming.");
+        if (!playbackPrepared)
+          setError(
+            "Your saved takes are kept, but playback could not be prepared. Try reopening your draft.",
+          );
       } catch {
         if (!canceled)
           setError(
@@ -279,7 +308,7 @@ export default function Capture({
   useEffect(() => {
     if (!ready || autoOpened.current) return;
     autoOpened.current = true;
-    void openCamera();
+    void openCamera(undefined, true);
   }, [ready]);
   useEffect(() => {
     if (!overlay) {
@@ -317,7 +346,7 @@ export default function Capture({
       setSheet("quest");
   }
 
-  async function openCamera(deviceId?: string) {
+  async function openCamera(deviceId?: string, preserveError = false) {
     if (
       opening ||
       busy ||
@@ -328,7 +357,7 @@ export default function Capture({
       !ready
     )
       return;
-    setError("");
+    if (!preserveError) setError("");
     setPreview(false);
     setOpening(true);
     releaseCamera();

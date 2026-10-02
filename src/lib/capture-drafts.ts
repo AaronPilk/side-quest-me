@@ -79,6 +79,56 @@ export async function loadCaptureDraft(
   }
 }
 
+export async function materializeCaptureDraft(
+  draft: CaptureDraft,
+): Promise<CaptureDraft> {
+  const takes = draft.takes?.map((take) => take.file) || [draft.file];
+  const videos = new Set([draft.file, ...takes]);
+  if (
+    !takes.length ||
+    takes.length > 30 ||
+    [...videos].some((file) => !(file instanceof Blob) || !file.size) ||
+    [...videos].reduce((sum, file) => sum + file.size, 0) > 40 * 1024 * 1024 ||
+    (draft.overlay &&
+      (!(draft.overlay.file instanceof Blob) ||
+        !draft.overlay.file.size ||
+        draft.overlay.file.size > 5 * 1024 * 1024))
+  )
+    throw new Error("This saved video draft could not be restored.");
+
+  const files = new Set(videos);
+  if (draft.overlay) files.add(draft.overlay.file);
+  const copies = new Map<Blob, Blob>();
+  for (const file of files) {
+    // A Blob wrapper can retain an IndexedDB file backing. Reading its bytes
+    // gives playback and later draft writes an independent in-memory copy.
+    const bytes = await file.arrayBuffer();
+    if (bytes.byteLength !== file.size)
+      throw new Error("This saved video draft could not be restored.");
+    copies.set(file, new Blob([bytes], { type: file.type }));
+  }
+  return {
+    ...draft,
+    file: copies.get(draft.file)!,
+    ...(draft.takes
+      ? {
+          takes: draft.takes.map((take) => ({
+            ...take,
+            file: copies.get(take.file)!,
+          })),
+        }
+      : {}),
+    ...(draft.overlay
+      ? {
+          overlay: {
+            ...draft.overlay,
+            file: copies.get(draft.overlay.file)!,
+          },
+        }
+      : {}),
+  };
+}
+
 export async function saveCaptureDraft(
   draft: CaptureDraft,
   expectedGeneration: number,
