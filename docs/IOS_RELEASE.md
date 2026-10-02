@@ -1,8 +1,8 @@
 # Sidequest iOS release guide
 
-Status checked **October 2, 2026, at 16:59:12 UTC**. **Build 1.0.0 (9) is VALID and IN_BETA_TESTING in Sidequest Internal**, from source `b05059c`. Apple validated and accepted build ID `baece762-b9f6-48dc-9293-8e68476ff907` without errors. Group `f10a5d96-4a4a-4b23-862c-1f33802a4397` membership and exact English-note readback are verified. Production deployment [37035840329](https://github.com/AaronPilk/side-quest-me/actions/runs/37035840329) passed, with Worker version `b0fcb987-42fc-49b4-bec9-e2fed780db13`; deployed capture assets match the update. Full GitHub checks [37035790968](https://github.com/AaronPilk/side-quest-me/actions/runs/37035790968) passed: 698 unit tests, 222 browser tests, isolated database checks, lint/typecheck and build. Final native iPhone Simulator testing passed moving synthetic preview, camera switching, restored three-take retention and sequential playback. Packaged production release guards, signed archive/export, distribution entitlements and Apple validation passed. Existing 21 migrations remain compatible; no migration was added. See [build-9 release evidence](BETA_FEEDBACK_BUILD_9_RELEASE.md) for artifacts and limits.
+Status checked **October 2, 2026, at 17:43:07 UTC**. **Build 1.0.0 (10) is VALID and IN_BETA_TESTING in Sidequest Internal**, from source `409103a`. Apple validated and accepted build ID `5ad995c2-9dc6-4d66-b7cc-bb09085b2376` without errors. Group `f10a5d96-4a4a-4b23-862c-1f33802a4397` membership and exact English-note readback are verified. Production deployment [37040244355](https://github.com/AaronPilk/side-quest-me/actions/runs/37040244355) passed, with Worker version `94c6bcbe-ce96-4ef6-ae88-4d216394464b`; deployed lazy assets include the new open-quest card, profile editor and Settings styling. Full GitHub checks [37040185334](https://github.com/AaronPilk/side-quest-me/actions/runs/37040185334) passed: 698 unit tests, 246 browser scenarios, isolated database checks, lint/typecheck and build. Native iPhone Simulator verification passed open-quest navigation, profile save/reopen/Cancel, keyboard visibility, journal-only Private content and Settings alignment. Signed archive/export, packaged production release guards, distribution entitlements and Apple validation passed. Existing 21 migrations remain compatible; no migration was added. See [build-10 release evidence](BETA_FEEDBACK_BUILD_10_RELEASE.md) for artifacts and limits.
 
-Open **TestFlight → Sidequest Me → Update** to install build 9. Builds 7 and 8 were withheld after verification found recovery/playback defects; [build-6 delivery](BETA_FEEDBACK_BUILD_6_RELEASE.md) remains historical. The exact original physical-iPhone black-preview cause remains unproven. Physical camera preview and microphone audio require testing on the updated device; availability does not establish public App Store approval.
+Open **TestFlight → Sidequest Me → Update** to install build 10. The camera recovery and restored-draft playback fixes from [build 9](BETA_FEEDBACK_BUILD_9_RELEASE.md) are included. Builds 7 and 8 remain withheld historical candidates. Physical camera preview and microphone audio still require testing on the updated device; TestFlight availability does not establish public App Store approval.
 
 The repository contains a Capacitor iOS app that bundles the React interface and connects to the existing Cloudflare/Supabase backend. App Store Connect record **Sidequest Me** (`6817917086`) uses bundle `com.aaronpilk.sidequest` and signing team **`5F5C5G25Y6`**. See `PREFERENCES_FLOW_REVIEW_2026-10-01.md` for combined setup and `RELEASE_REVIEW_2026-10-01.md` for the earlier Series review. Public App Store submission and physical iPhone verification of the final build remain separate requirements.
 
@@ -130,18 +130,18 @@ Use the final device-tested build and functioning backend for review. Do not cla
 
 ## Current handoff to TestFlight
 
-Apple validated and accepted the **1.0.0 (9)** delivery IPA without errors at
-12:52:26 EDT on October 2, with delivery UUID
-`baece762-b9f6-48dc-9293-8e68476ff907`. It is processed as **VALID** and
+Apple validated and accepted the **1.0.0 (10)** delivery IPA without errors at
+13:29:16 EDT on October 2, with delivery UUID
+`5ad995c2-9dc6-4d66-b7cc-bb09085b2376`. It is processed as **VALID** and
 **IN_BETA_TESTING**, assigned to Sidequest Internal, with exact English-note
-readback verified at `2026-10-02T16:59:12.063Z`. Existing testers can update through
-TestFlight. The camera update adds frame-checked preview readiness, explicit
-recovery and restored-draft playback buffers that preserve original footage.
-See [build-9 release evidence](BETA_FEEDBACK_BUILD_9_RELEASE.md) for archive paths
-and results. The full unit/browser/database suite passed, plus native Simulator
-preview/switch/restore/playback checks. Physical iPhone preview and audio remain
-tester checks. No new AI or database behavior was introduced in this follow-up;
-the earlier authenticated OpenAI smoke results remain recorded in build-6 evidence.
+readback verified at `2026-10-02T17:43:07.428Z`. Existing testers can update through
+TestFlight. This follow-up adds prominent Resume quest cards, a focused profile
+editor, journal-only Private content and compact aligned Settings groups.
+See [build-10 release evidence](BETA_FEEDBACK_BUILD_10_RELEASE.md) for archive
+paths and results. All 246 browser scenarios and the full unit/database suite
+passed, plus native Simulator profile, keyboard and navigation checks. The
+camera fixes from build 9 are included; physical iPhone preview and audio remain
+tester checks. No new AI or database behavior was introduced in this follow-up.
 A public App Store launch has not been submitted.
 
 The current normal Create flow uses consented OpenAI / GPT-6 Astra to compare
