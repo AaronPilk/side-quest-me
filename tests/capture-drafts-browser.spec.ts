@@ -109,6 +109,7 @@ test("hold/release takes survive leaving and resume as one session, with no nume
     name: "Hold to record",
     exact: true,
   });
+  await expect(shutter).toBeEnabled();
   const bounds = await shutter.boundingBox();
   await page.mouse.move(
     bounds!.x + bounds!.width / 2,

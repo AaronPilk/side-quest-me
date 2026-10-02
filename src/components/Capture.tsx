@@ -24,6 +24,10 @@ import {
 } from "../lib/capture-drafts";
 import { watchCaptureActivity } from "../lib/capture-lifecycle";
 import {
+  connectCameraPreview,
+  type CameraPreviewState,
+} from "../lib/camera-preview";
+import {
   SESSION_DRAFT_SLOT,
   sessionSeconds,
   validSession,
@@ -47,7 +51,10 @@ export default function Capture({
   onClose: () => void;
 }) {
   const [takes, setTakes] = useState<RecordedTake[]>([]);
-  const [camera, setCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraPreview, setCameraPreview] =
+    useState<CameraPreviewState>("starting");
+  const camera = cameraStream !== null;
   const [opening, setOpening] = useState(false);
   const [recording, setRecording] = useState(false);
   const [finishing, setFinishing] = useState(false);
@@ -79,6 +86,9 @@ export default function Capture({
   const [galleryUrl, setGalleryUrl] = useState("");
   const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
   const liveVideo = useRef<HTMLVideoElement>(null);
+  const livePreview = useRef<ReturnType<typeof connectCameraPreview> | null>(
+    null,
+  );
   const previewVideo = useRef<HTMLVideoElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const sheetElement = useRef<HTMLElement>(null);
@@ -118,9 +128,14 @@ export default function Capture({
       setTorchAvailable(false);
     }
     requestId.current++;
+    livePreview.current?.dispose();
+    livePreview.current = null;
     stream.current?.getTracks().forEach((track) => track.stop());
     stream.current = null;
-    if (!closed.current) setCamera(false);
+    if (!closed.current) {
+      setCameraStream(null);
+      setCameraPreview("starting");
+    }
   }
   async function persist(next: RecordedTake[]) {
     savedTakes.current = next;
@@ -229,9 +244,27 @@ export default function Capture({
     };
   }, [run.id, baseClipId]);
   useEffect(() => {
-    if (camera && liveVideo.current)
-      liveVideo.current.srcObject = stream.current;
-  }, [camera, preview]);
+    if (!cameraStream || !liveVideo.current) return;
+    const connection = connectCameraPreview(
+      liveVideo.current,
+      cameraStream,
+      (state) => {
+        if (closed.current || stream.current !== cameraStream) return;
+        setCameraPreview(state);
+        if (state === "blocked") {
+          clearInterval(countdownTimer.current);
+          countdownTimer.current = undefined;
+          setCountdown(0);
+          void stopRecording();
+        }
+      },
+    );
+    livePreview.current = connection;
+    return () => {
+      connection.dispose();
+      if (livePreview.current === connection) livePreview.current = null;
+    };
+  }, [cameraStream]);
   useEffect(() => {
     const file = takes[previewIndex]?.file;
     if (!file || !preview) {
@@ -320,11 +353,12 @@ export default function Capture({
       stream.current = acquired;
       acquired.getTracks().forEach((track) => {
         track.onended = () => {
+          if (stream.current !== acquired || id !== requestId.current) return;
           void stopRecording();
           releaseCamera();
         };
       });
-      setCamera(true);
+      setCameraStream(acquired);
       const track = acquired.getVideoTracks()[0];
       setDevice(track?.getSettings().deviceId || deviceId || "");
       setTorchAvailable(
@@ -358,6 +392,7 @@ export default function Capture({
     if (
       !active.current ||
       !stream.current ||
+      cameraPreview !== "ready" ||
       finishing ||
       busy ||
       recorder.current?.state === "recording"
@@ -450,7 +485,7 @@ export default function Capture({
       void stopRecording();
       return;
     }
-    if (countdownTimer.current || !camera) return;
+    if (countdownTimer.current || !camera || cameraPreview !== "ready") return;
     timedRecording.current = delay > 0;
     if (!delay) {
       startRecording();
@@ -732,6 +767,32 @@ export default function Capture({
               )}
             </div>
           )}
+          {camera && cameraPreview !== "ready" && (
+            <div className="session-camera-empty session-camera-recovery">
+              <p role="status">
+                {cameraPreview === "starting"
+                  ? "Starting camera preview…"
+                  : "Camera preview isn’t playing. Your saved takes are kept."}
+              </p>
+              {cameraPreview === "blocked" && (
+                <>
+                  <Button
+                    onClick={() => livePreview.current?.retry()}
+                    disabled={locked}
+                  >
+                    Start preview
+                  </Button>
+                  <Button
+                    secondary
+                    onClick={() => void openCamera(device || undefined)}
+                    disabled={locked || opening}
+                  >
+                    Restart camera
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
           {overlayUrl && overlay && (
             <div
               className="session-overlay-frame"
@@ -793,7 +854,10 @@ export default function Capture({
                 : "Flip camera"
             }
             onClick={() => {
-              const next = devices.find((entry) => entry.deviceId !== device);
+              const index = devices.findIndex(
+                (entry) => entry.deviceId === device,
+              );
+              const next = devices[(index + 1) % devices.length];
               if (next) void openCamera(next.deviceId);
             }}
           >
@@ -1038,6 +1102,7 @@ export default function Capture({
                   className={`session-shutter ${recording ? "is-recording" : ""}`}
                   aria-label="Hold to record"
                   disabled={
+                    cameraPreview !== "ready" ||
                     finishing ||
                     busy ||
                     countdown > 0 ||
@@ -1096,6 +1161,7 @@ export default function Capture({
                 <button
                   className="session-tap-record"
                   disabled={
+                    (!recording && cameraPreview !== "ready") ||
                     finishing ||
                     busy ||
                     countdown > 0 ||

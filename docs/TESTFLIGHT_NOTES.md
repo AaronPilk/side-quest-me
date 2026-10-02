@@ -1,22 +1,19 @@
-# Internal iPhone beta — 1.0.0 (6)
+# Internal iPhone beta — 1.0.0 (7)
 
-Build 6 continues the screenshot-feedback fixes and connects to live Sidequest services. Videos and series remain private until you explicitly publish.
+Build 7 focuses on the camera screen after a report of a black preview while iPhone camera and microphone indicators were active.
 
-Start with Create → Find my quests:
+- The app explicitly starts preview playback and waits for a video frame before enabling recording.
+- If the preview cannot start or stops, recovery controls let you retry playback or reopen the camera. Earlier saved takes and video import remain available.
+- Switching cameras attaches the new stream directly and cycles through the available cameras.
+- Returning from the background does not automatically resume recording.
 
-- OpenAI creates a private experience for your group, time, budget, intensity and confirmed preferences. The new two-call path compares ideas and writes the selected experience together, then independently reviews it. Generation can take about a minute.
-- Choose your current area or a town; a specific destination is optional. Apple Maps listings do not confirm bookings, prices or availability.
-- Try Full Send with friends, with and without a named place. The activity should earn its intensity through what you actually do, while keeping your chosen group and setting.
-- Confirm the suggested activity's specific booking, permission and equipment requirements. Unknown prices require a complete group quote, including for paid outdoor activities; the quote plus travel must fit your budget.
-- Use Find another experience several times. Earlier suggestions now inform rerolls; look for a materially different activity rather than a renamed repeat. After a failed request, retry should preserve the exact request and plan without repeating the wizard.
-- A fallback is labeled when AI cannot finish a strong idea. Generated quests award **0 XP and 0 points**, shown before acceptance. They remain runnable and filmable, and you can publish their stories or continue them as a series.
+Please test on your iPhone after updating:
 
-Check the updated layout:
+1. Open an accepted quest → Record or import video. Grant camera and microphone access if asked. Confirm you see a moving preview before recording becomes available.
+2. Record a short take, pause, switch cameras and record another. Preview the result and confirm both the picture and microphone audio work.
+3. Leave the app and return. Reopen the camera, then confirm earlier takes remain and recording starts only when you choose it.
+4. If the preview is black or stalled, try the recovery controls. Also check importing a video, saving and exporting to Photos.
 
-- The gap between the brand header and quest results is reduced from 54px to 12px, and Edit plans is a compact pill.
-- Budget retains its slider, exact amount and Whole group / Each person choices. Travel choices stay visible; question controls and Continue should fit above the bottom navigation.
-- Account setup and preferences retain compact screens and bottom actions. Test pasting, editing and removing a ChatGPT summary, saving the profile, and opening ChatGPT with the app installed. Browser handoff remains available.
+The exact cause of the original iPhone failure has not been established. The update adds playback checks and recovery; real camera preview and audio still need confirmation on your device. Report your iPhone model, iOS version, which camera you used and whether the issue repeats.
 
-Please test accepting → filming/importing → saving/exporting → Turn into a series → Create Part 2. Confirm that later parts retain the intended activity and request fresh preflight confirmations. Also try denied location access and returning after leaving the app. Report the screen, chosen plan and whether the issue repeats.
-
-Live event inventory is not configured, so the app does not claim current concerts or ticket availability. Camera/audio interruptions, installed ChatGPT handoff and Photos export still need physical-iPhone feedback. Recording supports up to 60 seconds. Email sign-in remains; Sign in with Apple is not included.
+Recording supports up to 60 seconds. Videos and series remain private until you explicitly publish.

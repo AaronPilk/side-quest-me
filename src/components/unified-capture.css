@@ -67,6 +67,13 @@
   font-size: 1rem;
   margin: 0;
 }
+.session-camera-recovery {
+  padding-inline: 76px;
+  background: #090a0eaa;
+}
+.session-camera-recovery .button {
+  max-width: 280px;
+}
 .session-capture-header {
   z-index: 2;
   position: absolute;
