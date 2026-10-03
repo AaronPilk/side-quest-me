@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "verifiedAt": "2026-10-03T17:56:56.760Z",
+  "appId": "6817917086",
+  "localization": "7cabb0f9-82b6-45a1-ad7d-2d8cde554897",
+  "setId": "77d9b143-e9fd-433a-be3c-70a6c4d00245",
+  "display": "APP_IPHONE_67",
+  "status": "Partial screenshot set delivered to editable App Store draft; no review submission.",
+  "exactOrderVerified": true,
+  "files": [
+    {
+      "order": 1,
+      "id": "16400019-6612-889e-801a-8966d0a6b667",
+      "file": "02-your-kind-of-quest.png",
+      "state": "COMPLETE",
+      "size": 963475,
+      "md5": "320a43da152319cb63f3aa30dfedf338",
+      "sha256": "3e0e5a0374a605dc88caf56cc70401dca826dacbec1b2de90d1465e9eaab83d7"
+    },
+    {
+      "order": 2,
+      "id": "97800019-6612-889e-8004-fe6ae3eb7f65",
+      "file": "04-your-next-detour.png",
+      "state": "COMPLETE",
+      "size": 774050,
+      "md5": "1076ee1234c6bf4a3b491717e3bafa57",
+      "sha256": "4d868fc92a42a69a88b56d4637a99495158e58631a64699237e6f1d4eca17d7f"
+    },
+    {
+      "order": 3,
+      "id": "d3c00019-6612-889e-8008-9e729a91f11b",
+      "file": "07-great-stories-start-here.png",
+      "state": "COMPLETE",
+      "size": 1454968,
+      "md5": "bceebb6d857a609ba68450b563b262b9",
+      "sha256": "aace98f4fb43a78e368753119f178ecd8777957ea147d78818ef7701ab367b42"
+    }
+  ]
+}

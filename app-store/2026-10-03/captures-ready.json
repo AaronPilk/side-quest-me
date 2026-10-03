@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "locale": "en-US",
+  "status": "partial-authentic-captures",
+  "captures": [
+    {
+      "id": "02-your-kind-of-quest",
+      "capture": "raw/02-create.png",
+      "headline": ["Your people.", "Your kind of quest."],
+      "subtitle": "Choose the budget, time, and energy.",
+      "background": "#F7F8FD"
+    },
+    {
+      "id": "04-your-next-detour",
+      "capture": "raw/04-places.png",
+      "headline": ["Your next detour", "is nearby."],
+      "subtitle": "Find real places around you.",
+      "background": "#F7F8FD"
+    }
+  ]
+}
