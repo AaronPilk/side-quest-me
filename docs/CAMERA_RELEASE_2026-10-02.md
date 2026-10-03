@@ -19,8 +19,9 @@ full-screen controls and one-video recording flow.
   another quest. Failed copy/storage operations expose retry and explicit discard.
 - Private native files have durable metadata for chronological recovery after
   reopening. Draft provenance prevents duplicate takes after a cleanup failure.
-  Recovery is isolated to the current account and quest, expires after seven
-  days, and respects sign-out/persona cleanup through a durable clear marker.
+  Recovery is isolated to the current account and quest. Seven-day expiry is
+  enforced when that quest is reopened, rather than by a background purge timer.
+  Sign-out/persona cleanup is enforced through a durable clear marker.
 - Browser capture remains available with reported hardware zoom capabilities,
   stable pinch gestures and front/rear selection. Unsupported lens ratios are
   not advertised. Finished-video import remains available after camera failure.
@@ -43,7 +44,25 @@ frames, rear 0.5×/1×, pinch during recording, front/rear flip, microphone audi
 torch, portrait playback and interruption recovery. No physical-device pass is
 claimed by the browser tests or SDK compilation.
 
-Build 12 archive, Apple validation and TestFlight processing evidence will be
-recorded below when delivery completes. This camera release does not submit the
-App Store listing for review or resolve the pending owner declarations described
-in `APP_STORE_RELEASE_2026-10-02.md`.
+Build 12 (version 1.0.0, `com.aaronpilk.sidequest`) is available in the
+**Sidequest Internal** TestFlight group. App Store Connect reports `VALID` and
+`IN_BETA_TESTING`; group membership was verified after assignment. Camera test
+notes are saved in the build's English localization.
+
+- Source commit: `f493857d6d806a75ed4deae3caef4f46bdb0487c`, pushed to `main`.
+- Apple build/delivery ID: `cff67bf8-3f88-40ce-9082-67b696669798`.
+- Signed archive and export: successful; native camera/recovery/clear symbols
+  were checked in both the archive and exported app binary.
+- Apple validation: successful. Upload: successful, October 2, 2026 at 20:32 EDT.
+- IPA SHA-256: `5086760c4db25023b3b312cd8a3320e0a3839a81983b5090b616f7cf7e9fa6a6`.
+- Private delivery evidence: `.local/beta12-apple-validation-proof.json`,
+  `.local/beta12-apple-upload.log`, `.local/beta12-apple-build.json` and
+  `.local/beta12-group-builds-proof.json`.
+- GitHub [Checks run 37081949991](https://github.com/AaronPilk/side-quest-me/actions/runs/37081949991)
+  passed configuration, lint, typecheck, all unit tests, database tests and media
+  fixtures. The broader browser regression step was still running when beta
+  availability was verified; the 36 focused camera scenarios passed locally.
+
+The backend is unchanged. This camera release does not submit the App Store
+listing for review or resolve the pending owner declarations described in
+`APP_STORE_RELEASE_2026-10-02.md`.
