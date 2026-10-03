@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "locale": "en-US",
+  "captures": [
+    {
+      "id": "01-make-tonight-a-story",
+      "capture": "raw/01-quest.png",
+      "headline": [
+        "Make tonight",
+        "a story."
+      ],
+      "subtitle": "A real adventure for your people.",
+      "background": "#EEE9FF"
+    },
+    {
+      "id": "02-your-kind-of-quest",
+      "capture": "raw/02-create.png",
+      "headline": [
+        "Your people.",
+        "Your kind of quest."
+      ],
+      "subtitle": "Choose the budget, time, and energy.",
+      "background": "#F7F8FD"
+    },
+    {
+      "id": "03-film-it-as-it-happens",
+      "capture": "raw/03-camera.png",
+      "headline": [
+        "Film it",
+        "as it happens."
+      ],
+      "subtitle": "Record. Pause. Keep the story going.",
+      "background": "#F3F1FF"
+    },
+    {
+      "id": "04-your-next-detour",
+      "capture": "raw/04-places.png",
+      "headline": [
+        "Your next detour",
+        "is nearby."
+      ],
+      "subtitle": "Find real places around you.",
+      "background": "#F7F8FD"
+    },
+    {
+      "id": "05-more-chapters",
+      "capture": "raw/05-series.png",
+      "headline": [
+        "One quest.",
+        "More chapters."
+      ],
+      "subtitle": "Turn a filmed quest into a series.",
+      "background": "#EEE9FF"
+    },
+    {
+      "id": "06-your-private-journal",
+      "capture": "raw/06-journal.png",
+      "headline": [
+        "Keep it yours.",
+        "Share when ready."
+      ],
+      "subtitle": "A private journal for your quests and videos.",
+      "background": "#F7F8FD"
+    }
+  ]
+}

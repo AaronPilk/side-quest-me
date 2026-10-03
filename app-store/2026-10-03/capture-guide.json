@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "status": "Awaiting authentic final-build captures; no new screenshot UI or social state has been fabricated.",
+  "outputSize": {
+    "width": 1320,
+    "height": 2868
+  },
+  "style": {
+    "colors": {
+      "violet": "#7950E8",
+      "charcoal": "#171A22",
+      "paleViolet": "#EEE9FF",
+      "coolWhite": "#F7F8FD"
+    },
+    "typography": "Keep the existing Arial/Helvetica compositor: two short bold lines, a single supporting line, consistent left alignment. No cartoon imagery, badges, stickers, or crowded decorative overlays.",
+    "composition": "One large unchanged native capture inside the existing restrained phone frame. No retouching screen controls or user content. The existing frame preserves the entire image with contain fit.",
+    "welcome": "Keep the existing welcome artwork optional and last. It repeats the lead headline inside the screen and exposes sign-in fields; a concrete quest is the stronger opening image."
+  },
+  "captures": [
+    {
+      "path": "raw/01-quest.png",
+      "required": "A successful final-build quest recommendation or accepted-quest overview: concrete title and readable instructions/description, consistent time and budget. Prefer a real friends/Bold/Full Send outing showing spontaneous adventure.",
+      "avoid": "AI error/fallback banner, incoherent description, guaranteed venue availability/booking/price, exact personal location."
+    },
+    {
+      "path": "raw/02-create.png",
+      "required": "Current native Create budget slider or energy choice, with a real selected value. Budget slider is visually strongest; all three energy choices should be visible if using intensity.",
+      "avoid": "Keyboard, half-filled validation state, clipping or old square buttons."
+    },
+    {
+      "path": "raw/03-camera.png",
+      "required": "Physical iPhone live native camera preview showing authentic controls and framing. An actual subject must be captured by the app, not composited behind its controls.",
+      "avoid": "Simulator black preview, a camera permission error, fabricated preview image, real private bystanders or unapproved people."
+    },
+    {
+      "path": "raw/03-finished-video.png",
+      "required": "Alternate image 3: genuine completed-video preview or gallery-import session with actual playable recorded footage. Use captures-finished-video-proposed.json instead of the live-camera manifest.",
+      "avoid": "Test patterns, synthetic creator footage/counts, external TikTok branding, upload/renderer errors."
+    },
+    {
+      "path": "raw/04-places.png",
+      "required": "Current native nearby-place search with actual results in a neutral public neighborhood and useful venue names. Native results must be genuine; manual place entry alone does not support the nearby-result image.",
+      "avoid": "Home address, exact personal pin, invented concert schedules, empty/error results, claimed bookings."
+    },
+    {
+      "path": "raw/05-series.png",
+      "required": "Populated current own-Series detail from a genuinely filmed quest, ideally completed Part 1 and Create Part 2 action. A private authentic series is sufficient; do not publish solely for imagery.",
+      "avoid": "Empty library, obsolete New Series form, invented episode/follower totals, unfinished required validation."
+    },
+    {
+      "path": "raw/06-journal.png",
+      "required": "Current Journal or own-profile Private tab, populated with one or two real retained quests and a real ready-video thumbnail if available. Journal-only layout with clear status and resume action.",
+      "avoid": "Account/preferences links inside Private, Start an original, abandoned old layout, private contact details."
+    }
+  ],
+  "commands": {
+    "checkLive": "node scripts/app-store-artwork.mjs --check --manifest app-store/2026-10-03/captures-proposed.json",
+    "renderLive": "node scripts/app-store-artwork.mjs --manifest app-store/2026-10-03/captures-proposed.json --output app-store/2026-10-03/artwork",
+    "checkFinished": "node scripts/app-store-artwork.mjs --check --manifest app-store/2026-10-03/captures-finished-video-proposed.json",
+    "renderFinished": "node scripts/app-store-artwork.mjs --manifest app-store/2026-10-03/captures-finished-video-proposed.json --output app-store/2026-10-03/artwork",
+    "validateUpload": "node .local/app-store-screenshot-upload.mjs --manifest app-store/2026-10-03/artwork/artwork-manifest.json"
+  },
+  "finalChecks": [
+    "Check every composed PNG and contact-sheet.jpg visually at full resolution and phone thumbnail size.",
+    "Keep the final manifest list in the intended screenshot order.",
+    "No demo/PILOT badge, simulator window chrome, credentials, notifications, real email addresses, test patterns or misleading counters.",
+    "No promise of live event inventory, ticket bookings, automatic payouts, viral guarantees or advanced editing.",
+    "Do not crop or repaint the native app content to repair a UI issue; fix and recapture if required."
+  ]
+}

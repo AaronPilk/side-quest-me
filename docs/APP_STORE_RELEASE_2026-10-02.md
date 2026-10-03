@@ -1,5 +1,11 @@
 # App Store release preparation — October 2, 2026
 
+**Later checkpoint:** On October 3, Build 12 replaced Build 11 in the draft
+App Store version and manual release was selected. See
+[current preparation](APP_STORE_PREPARATION_2026-10-03.md). The historical
+Build 11 evidence below is preserved; it does not claim the newer submission
+work is complete.
+
 Checkpoint: **2026-10-02 21:39 UTC**. Build **1.0.0 (11)** has been archived,
 exported, verified, validated, uploaded and processed by Apple. It is available
 to the existing internal TestFlight group and attached to the draft App Store

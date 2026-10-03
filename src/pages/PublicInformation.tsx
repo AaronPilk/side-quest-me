@@ -153,14 +153,17 @@ function PrivacyPolicy() {
       </Section>
       <Section title="Storage, retention and deletion">
         <p>
-          Local capture drafts are scoped to your account and device and expire
-          after seven days. They are not a cloud backup and can be lost if
-          device storage is cleared. Sign-out clears local capture drafts.
-          Server source footage is eligible for cleanup after 30 days when a
-          completed reel is safely retained or a run has been abandoned; pending
-          work and unresolved review or failures can extend that period. Saved
-          final reels do not automatically expire, subject to the account’s
-          storage limit and your deletion choices.
+          Local capture drafts and recoverable camera recordings stay private on
+          your device and are scoped to your account and quest. Saved drafts
+          expire seven days after their last save. Separate camera recovery
+          files expire seven days after recording. Expiry is checked when you
+          reopen a quest, and sign-out clears both. These files are not a cloud
+          backup and can be lost if device storage is cleared. Server source
+          footage is eligible for cleanup after 30 days when a completed reel is
+          safely retained or a run has been abandoned; pending work and
+          unresolved review or failures can extend that period. Saved final
+          reels do not automatically expire, subject to the account’s storage
+          limit and your deletion choices.
         </p>
         <p>
           You can start account deletion in Settings → Account settings → Delete
@@ -212,10 +215,11 @@ function Support() {
       </Section>
       <Section title="Sign-in and your account">
         <p>
-          Sign-in uses the secure link sent to your email. Open that link on the
-          same phone to return to the app. If it has expired, request a new one
-          and check your junk folder. Account controls, including sign-out and
-          account deletion, are in Settings → Account settings.
+          For email-link sign-in, open the newest secure link on the same phone
+          to return to the app. If it has expired, request a new one and check
+          your junk folder. If your account has a password, choose “Sign in with
+          password” on the welcome screen. Account controls, including sign-out
+          and account deletion, are in Settings → Account settings.
         </p>
         <Link className="information-action" to="/account/security">
           Account settings <ArrowUpRight size={18} aria-hidden="true" />

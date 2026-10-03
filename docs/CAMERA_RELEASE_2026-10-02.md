@@ -59,9 +59,10 @@ notes are saved in the build's English localization.
   `.local/beta12-apple-upload.log`, `.local/beta12-apple-build.json` and
   `.local/beta12-group-builds-proof.json`.
 - GitHub [Checks run 37081949991](https://github.com/AaronPilk/side-quest-me/actions/runs/37081949991)
-  passed configuration, lint, typecheck, all unit tests, database tests and media
-  fixtures. The broader browser regression step was still running when beta
-  availability was verified; the 36 focused camera scenarios passed locally.
+  completed successfully after delivery: configuration, lint, typecheck, all
+  744 unit tests, database tests, media fixtures, **277 browser scenarios**
+  (18.1 minutes) and production build passed. The 36 focused camera scenarios
+  also passed locally. The full CI log is retained in `.local/beta12-full-ci.log`.
 
 The backend is unchanged. This camera release does not submit the App Store
 listing for review or resolve the pending owner declarations described in

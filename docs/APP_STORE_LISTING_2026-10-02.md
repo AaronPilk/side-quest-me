@@ -1,5 +1,13 @@
 # Sidequest App Store listing — October 2, 2026
 
+**October 3 checkpoint:** Build **1.0.0 (12)** is now selected in the Apple draft.
+The listing copy remains saved; six feature images still need authentic native
+captures. The revised capture order/configuration and remaining requirements are
+in [current preparation](APP_STORE_PREPARATION_2026-10-03.md). The production
+policy URLs are live. Public support contact and final owner declarations remain
+pending; no App Review submission has been sent. Older build-10 references below
+describe the original copy preparation.
+
 Prepared for the current **1.0.0 (10)** iPhone app. The English listing text and categories below are saved in App Store Connect; the screenshot storyboard remains a capture plan. Saving metadata is not submission or Apple approval. The lead message is real experiences worth doing and filming. Social discovery supports that experience; brand licensing is a secondary opportunity.
 
 ## Ready-to-paste English listing

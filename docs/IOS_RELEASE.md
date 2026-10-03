@@ -1,5 +1,15 @@
 # Sidequest iOS release guide
 
+**Current checkpoint — October 3, 2026:** Build **1.0.0 (12)** is `VALID` and
+`IN_BETA_TESTING` and is selected in the draft App Store version. Full checks
+passed: 744 unit tests and 277 browser scenarios. iPhone capture now uses the
+native AVFoundation plugin with hardware zoom and durable recovery; browser
+capture remains the fallback. See [camera delivery](CAMERA_RELEASE_2026-10-02.md)
+and [current App Store preparation](APP_STORE_PREPARATION_2026-10-03.md) for
+authoritative readiness and remaining owner/device/operating checks. No App
+Review submission or public launch has occurred. The build-10 details below
+remain historical evidence, not the current release checklist.
+
 Status checked **October 2, 2026, at 17:43:07 UTC**. **Build 1.0.0 (10) is VALID and IN_BETA_TESTING in Sidequest Internal**, from source `409103a`. Apple validated and accepted build ID `5ad995c2-9dc6-4d66-b7cc-bb09085b2376` without errors. Group `f10a5d96-4a4a-4b23-862c-1f33802a4397` membership and exact English-note readback are verified. Production deployment [37040244355](https://github.com/AaronPilk/side-quest-me/actions/runs/37040244355) passed, with Worker version `94c6bcbe-ce96-4ef6-ae88-4d216394464b`; deployed lazy assets include the new open-quest card, profile editor and Settings styling. Full GitHub checks [37040185334](https://github.com/AaronPilk/side-quest-me/actions/runs/37040185334) passed: 698 unit tests, 246 browser scenarios, isolated database checks, lint/typecheck and build. Native iPhone Simulator verification passed open-quest navigation, profile save/reopen/Cancel, keyboard visibility, journal-only Private content and Settings alignment. Signed archive/export, packaged production release guards, distribution entitlements and Apple validation passed. Existing 21 migrations remain compatible; no migration was added. See [build-10 release evidence](BETA_FEEDBACK_BUILD_10_RELEASE.md) for artifacts and limits.
 
 Open **TestFlight → Sidequest Me → Update** to install build 10. The camera recovery and restored-draft playback fixes from [build 9](BETA_FEEDBACK_BUILD_9_RELEASE.md) are included. Builds 7 and 8 remain withheld historical candidates. Physical camera preview and microphone audio still require testing on the updated device; TestFlight availability does not establish public App Store approval.
