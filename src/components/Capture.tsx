@@ -25,6 +25,25 @@ import {
 } from "../lib/capture-drafts";
 import { watchCaptureActivity } from "../lib/capture-lifecycle";
 import {
+  nativeCamera,
+  readNativeCameraTake,
+  usesNativeCamera,
+  type NativeCameraState,
+  type NativeCameraTake,
+} from "../lib/native-camera";
+import {
+  beginPinchZoom,
+  updatePinchZoom,
+  clampCameraZoom,
+  zoomRangeFromCapabilities,
+  zoomButtonChoices,
+  cameraZoomConstraints,
+  cameraFacing,
+  oppositeCameraDevice,
+  type CameraZoomRange,
+  type ZoomPoint,
+} from "../lib/camera-zoom";
+import {
   connectCameraPreview,
   type CameraPreviewState,
 } from "../lib/camera-preview";
@@ -55,7 +74,14 @@ export default function Capture({
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraPreview, setCameraPreview] =
     useState<CameraPreviewState>("starting");
-  const camera = cameraStream !== null;
+  const [nativeSession, setNativeSession] = useState(false);
+  const [nativeCaptureId] = useState(() => crypto.randomUUID());
+  const camera = cameraStream !== null || nativeSession;
+  const [zoom, setZoom] = useState(1);
+  const [zoomRange, setZoomRange] = useState<CameraZoomRange | null>(null);
+  const [zoomPresets, setZoomPresets] = useState<number[]>([1]);
+  const [nativeCanFlip, setNativeCanFlip] = useState(false);
+  const [nativeTakePending, setNativeTakePending] = useState(false);
   const [opening, setOpening] = useState(false);
   const [recording, setRecording] = useState(false);
   const [finishing, setFinishing] = useState(false);
@@ -87,6 +113,28 @@ export default function Capture({
   const [galleryUrl, setGalleryUrl] = useState("");
   const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
   const liveVideo = useRef<HTMLVideoElement>(null);
+  const cameraStage = useRef<HTMLDivElement>(null);
+  const nativeSessionOpen = useRef(false);
+  const nativeShutdown = useRef(Promise.resolve());
+  const nativeStart = useRef(Promise.resolve());
+  const nativeListenersReady = useRef(Promise.resolve());
+  const nativeRecording = useRef(false);
+  const nativeRecordingId = useRef<string | undefined>(undefined);
+  const nativeStopping = useRef<Promise<void> | null>(null);
+  const nativeStopResolve = useRef<(() => void) | undefined>(undefined);
+  const importedNativeTakes = useRef(new Map<string, Promise<void>>());
+  const pendingNativeTakes = useRef(
+    new Map<string, { native: NativeCameraTake; prepared?: RecordedTake }>(),
+  );
+  const zoomState = useRef<{ range: CameraZoomRange | null; value: number }>({
+    range: null,
+    value: 1,
+  });
+  const zoomPending = useRef<number | null>(null);
+  const zoomApplying = useRef(false);
+  const pointers = useRef(new Map<number, ZoomPoint>());
+  const pinch = useRef<ReturnType<typeof beginPinchZoom>>(null);
+  const pinched = useRef(false);
   const livePreview = useRef<ReturnType<typeof connectCameraPreview> | null>(
     null,
   );
@@ -133,8 +181,24 @@ export default function Capture({
     livePreview.current = null;
     stream.current?.getTracks().forEach((track) => track.stop());
     stream.current = null;
+    if (nativeSessionOpen.current) {
+      nativeSessionOpen.current = false;
+      nativeShutdown.current = stopped.current
+        .catch(() => {})
+        .then(() => nativeCamera.stop())
+        .catch(() => {});
+    }
+    zoomPending.current = null;
+    pointers.current.clear();
+    pinch.current = null;
+    zoomState.current = { range: null, value: 1 };
     if (!closed.current) {
       setCameraStream(null);
+      setNativeSession(false);
+      setNativeCanFlip(false);
+      setZoomRange(null);
+      setZoomPresets([1]);
+      setZoom(1);
       setCameraPreview("starting");
     }
   }
@@ -178,6 +242,32 @@ export default function Capture({
       setMessage(next.length ? "Draft saved on this device." : "");
   }
   function stopRecording() {
+    if (nativeRecording.current) {
+      if (nativeStopping.current) return nativeStopping.current;
+      recordingStopped.current = performance.now();
+      const recordingId = nativeRecordingId.current;
+      clearInterval(timer.current);
+      if (!closed.current) {
+        setRecording(false);
+        setFinishing(true);
+      }
+      nativeStopping.current = (async () => {
+        try {
+          await nativeStart.current;
+          if (nativeRecording.current)
+            await keepNativeTake(await nativeCamera.stopRecording());
+        } catch (cause) {
+          if (!closed.current)
+            setError(
+              (cause as Error).message ||
+                "Recording stopped. Your earlier takes are saved.",
+            );
+        } finally {
+          finishNativeRecording(recordingId);
+        }
+      })();
+      return nativeStopping.current;
+    }
     const current = recorder.current;
     if (!current || current.state === "inactive") return stopped.current;
     recordingStopped.current = performance.now();
@@ -194,6 +284,224 @@ export default function Capture({
     }
     return stopped.current;
   }
+  function finishNativeRecording(recordingId?: string) {
+    if (recordingId && nativeRecordingId.current !== recordingId) return;
+    clearInterval(timer.current);
+    nativeRecording.current = false;
+    nativeRecordingId.current = undefined;
+    nativeStopResolve.current?.();
+    nativeStopResolve.current = undefined;
+    nativeStopping.current = null;
+    if (!closed.current) {
+      setRecording(false);
+      setFinishing(false);
+      setElapsed(0);
+    }
+  }
+  function keepNativeTake(take: NativeCameraTake): Promise<void> {
+    const previous = importedNativeTakes.current.get(take.fileUrl);
+    if (previous) return previous;
+    if (
+      !pendingNativeTakes.current.has(take.fileUrl) &&
+      savedTakes.current.some(
+        (saved) => saved.nativeRecordingId === take.recordingId,
+      )
+    )
+      return nativeCamera
+        .discardRecording({ fileUrl: take.fileUrl })
+        .catch(() => {});
+    const pending = pendingNativeTakes.current.get(take.fileUrl) ?? {
+      native: take,
+    };
+    pendingNativeTakes.current.set(take.fileUrl, pending);
+    if (!closed.current) setNativeTakePending(true);
+    const saving = (async () => {
+      if (take.durationMs < 100) {
+        await nativeCamera.discardRecording({ fileUrl: take.fileUrl });
+        pendingNativeTakes.current.delete(take.fileUrl);
+        if (!closed.current)
+          setNativeTakePending(pendingNativeTakes.current.size > 0);
+        return;
+      }
+      pending.prepared ??= {
+        file: await readNativeCameraTake(take),
+        duration: take.durationMs / 1000,
+        nativeRecordingId: take.recordingId,
+      };
+      const next = savedTakes.current.includes(pending.prepared)
+        ? savedTakes.current
+        : [...savedTakes.current, pending.prepared];
+      if (
+        next.reduce((sum, entry) => sum + entry.file.size, 0) >
+        40 * 1024 * 1024
+      )
+        throw new Error(
+          "This take exceeds the 40 MB session limit. Your earlier takes are saved.",
+        );
+      await persist(next);
+      await nativeCamera
+        .discardRecording({ fileUrl: take.fileUrl })
+        .catch(() => {});
+      pendingNativeTakes.current.delete(take.fileUrl);
+      if (!closed.current)
+        setNativeTakePending(pendingNativeTakes.current.size > 0);
+    })();
+    importedNativeTakes.current.set(take.fileUrl, saving);
+    // A failed read leaves the native file intact and can be retried.
+    void saving.catch(() => importedNativeTakes.current.delete(take.fileUrl));
+    return saving;
+  }
+  async function retryNativeTakes() {
+    if (finishing || busy) return;
+    setFinishing(true);
+    setError("");
+    try {
+      for (const pending of pendingNativeTakes.current.values())
+        await keepNativeTake(pending.native);
+    } catch {
+      setError(
+        "Your recorded take is still on this device. Retry saving it before recording more or leaving.",
+      );
+    } finally {
+      if (!closed.current) setFinishing(false);
+    }
+  }
+  async function discardPendingNativeTakes() {
+    if (
+      finishing ||
+      busy ||
+      !confirm("Discard the unsaved take? Your earlier saved takes will stay.")
+    )
+      return;
+    setFinishing(true);
+    try {
+      for (const [url, pending] of pendingNativeTakes.current) {
+        if (pending.prepared && savedTakes.current.includes(pending.prepared))
+          await persist(
+            savedTakes.current.filter((take) => take !== pending.prepared),
+          );
+        await nativeCamera.discardRecording({ fileUrl: url });
+        pendingNativeTakes.current.delete(url);
+        importedNativeTakes.current.delete(url);
+      }
+      setNativeTakePending(pendingNativeTakes.current.size > 0);
+      setError("");
+    } catch {
+      setError(
+        "This take could not be discarded yet. Keep the camera open and try again.",
+      );
+    } finally {
+      setFinishing(false);
+    }
+  }
+  function applyNativeState(state: NativeCameraState) {
+    const range = { min: state.minZoom, max: state.maxZoom, step: 0.01 };
+    zoomState.current = { range, value: state.zoom };
+    setZoom(state.zoom);
+    setZoomRange(range);
+    setZoomPresets(
+      state.presets.filter((value) => value === 0.5 || value === 1),
+    );
+    setTorchAvailable(state.torchAvailable);
+    if (typeof state.torch === "boolean") setTorch(state.torch);
+    setNativeCanFlip(state.canFlip !== false);
+  }
+  useEffect(() => {
+    if (!usesNativeCamera()) return;
+    let disposed = false;
+    const handles: { remove: () => Promise<void> }[] = [];
+    nativeListenersReady.current = (async () => {
+      const registrations = [
+        nativeCamera.addListener("recordingStopped", (take) => {
+          if (
+            take.captureId !== nativeCaptureId ||
+            take.contextId !== `${owner.current}:${run.id}` ||
+            closed.current
+          )
+            return;
+          void keepNativeTake(take)
+            .catch((cause) => {
+              if (!closed.current) setError((cause as Error).message);
+            })
+            .finally(() => finishNativeRecording(take.recordingId));
+        }),
+        nativeCamera.addListener("cameraReady", (state) => {
+          if (
+            !nativeSessionOpen.current ||
+            closed.current ||
+            state.captureId !== nativeCaptureId
+          )
+            return;
+          applyNativeState(state);
+          setCameraPreview("ready");
+        }),
+        nativeCamera.addListener("interrupted", (notice) => {
+          if (closed.current) return;
+          setCameraPreview("blocked");
+          setError(
+            notice.message ||
+              "Camera paused. Your saved takes are kept. Restart the camera to continue.",
+          );
+          clearInterval(countdownTimer.current);
+          setCountdown(0);
+        }),
+        nativeCamera.addListener("cameraError", (notice) => {
+          if (closed.current) return;
+          setCameraPreview("blocked");
+          setError(
+            notice.message || "Camera stopped. Restart it or import a video.",
+          );
+          void stopRecording();
+        }),
+      ];
+      const results = await Promise.allSettled(registrations);
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          if (disposed) await result.value.remove();
+          else handles.push(result.value);
+        }
+      }
+      if (results.some((result) => result.status === "rejected"))
+        throw new Error(
+          "Camera controls could not connect. Close and reopen the camera.",
+        );
+    })();
+    // openCamera awaits this promise and reports failures to the user.
+    void nativeListenersReady.current.catch(() => {});
+    return () => {
+      disposed = true;
+      handles.forEach((handle) => void handle.remove());
+    };
+  }, []);
+  useEffect(() => {
+    if (!nativeSession) return;
+    document.documentElement.classList.add("native-camera-active");
+    const update = () => {
+      const bounds = cameraStage.current?.getBoundingClientRect();
+      if (!bounds || !nativeSessionOpen.current) return;
+      void nativeCamera
+        .updatePreview({
+          preview: {
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+          },
+        })
+        .catch(() => {});
+    };
+    const observer = new ResizeObserver(update);
+    if (cameraStage.current) observer.observe(cameraStage.current);
+    window.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("resize", update);
+    update();
+    return () => {
+      document.documentElement.classList.remove("native-camera-active");
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("resize", update);
+    };
+  }, [nativeSession]);
   useEffect(() => {
     closed.current = false;
     const previousFocus = document.activeElement as HTMLElement | null;
@@ -253,6 +561,28 @@ export default function Capture({
             "Local draft storage is unavailable. Save your video before leaving.",
           );
       } finally {
+        if (!canceled && owner.current && usesNativeCamera()) {
+          try {
+            const contextId = `${owner.current}:${run.id}`;
+            const recovered = await nativeCamera.recoverRecordings({
+              contextId,
+            });
+            if (
+              canceled ||
+              closed.current ||
+              captureDraftGeneration() !== generation.current
+            )
+              return;
+            for (const take of recovered.takes) {
+              if (take.contextId === contextId) await keepNativeTake(take);
+            }
+          } catch {
+            if (!canceled)
+              setError(
+                "A recorded take could not be recovered yet. Your earlier saved takes are kept.",
+              );
+          }
+        }
         if (!canceled) setReady(true);
       }
     })();
@@ -345,8 +675,95 @@ export default function Capture({
     if (from && from.y - y > 70 && Math.abs(from.x - x) < 80 && !recording)
       setSheet("quest");
   }
+  function requestZoom(value: number) {
+    const range = zoomState.current.range;
+    if (
+      !range ||
+      !camera ||
+      cameraPreview !== "ready" ||
+      opening ||
+      busy ||
+      pendingNativeTakes.current.size > 0 ||
+      finishing ||
+      countdown
+    )
+      return;
+    zoomPending.current = clampCameraZoom(value, range);
+    if (zoomApplying.current) return;
+    zoomApplying.current = true;
+    const id = requestId.current;
+    void (async () => {
+      try {
+        while (
+          zoomPending.current !== null &&
+          id === requestId.current &&
+          !closed.current
+        ) {
+          const next = zoomPending.current;
+          zoomPending.current = null;
+          let applied = next;
+          if (nativeSessionOpen.current) {
+            const state = await nativeCamera.setZoom({ zoom: next });
+            applied = state.zoom;
+          } else {
+            const track = stream.current?.getVideoTracks()[0];
+            if (!track) break;
+            await track.applyConstraints(cameraZoomConstraints(next, range));
+            applied =
+              (track.getSettings() as MediaTrackSettings & { zoom?: number })
+                .zoom ?? next;
+          }
+          if (id !== requestId.current || closed.current) break;
+          zoomState.current.value = clampCameraZoom(applied, range);
+          setZoom(zoomState.current.value);
+        }
+      } catch {
+        if (id === requestId.current && !closed.current)
+          setError("Zoom could not change. Try the lens button again.");
+      } finally {
+        zoomApplying.current = false;
+      }
+    })();
+  }
+  async function flipCamera() {
+    if (nativeSessionOpen.current) {
+      const id = ++requestId.current;
+      setOpening(true);
+      zoomPending.current = null;
+      pointers.current.clear();
+      pinch.current = null;
+      try {
+        const state = await nativeCamera.flip();
+        if (closed.current || id !== requestId.current) return;
+        applyNativeState(state);
+        setTorch(false);
+        setCameraPreview("ready");
+      } catch (cause) {
+        if (!closed.current)
+          setError(
+            (cause as Error).message || "Camera could not flip. Try again.",
+          );
+      } finally {
+        if (!closed.current) setOpening(false);
+      }
+      return;
+    }
+    const facing = cameraFacing(
+      stream.current?.getVideoTracks()[0]?.getSettings() ?? {},
+    );
+    const opposite = oppositeCameraDevice(devices, device, facing);
+    await openCamera(
+      opposite?.deviceId,
+      false,
+      facing === "user" ? "environment" : "user",
+    );
+  }
 
-  async function openCamera(deviceId?: string, preserveError = false) {
+  async function openCamera(
+    deviceId?: string,
+    preserveError = false,
+    facing: "user" | "environment" = "environment",
+  ) {
     if (
       opening ||
       busy ||
@@ -354,6 +771,7 @@ export default function Capture({
       recording ||
       countdown ||
       !active.current ||
+      pendingNativeTakes.current.size > 0 ||
       !ready
     )
       return;
@@ -363,13 +781,46 @@ export default function Capture({
     releaseCamera();
     const id = ++requestId.current;
     try {
+      if (usesNativeCamera()) {
+        if (!owner.current)
+          throw new Error(
+            "Sign in to keep your recording drafts on this device.",
+          );
+        await nativeShutdown.current;
+        await nativeListenersReady.current;
+        if (closed.current || !active.current || id !== requestId.current)
+          return;
+        const bounds = cameraStage.current?.getBoundingClientRect();
+        if (!bounds) throw new Error("Camera preview is not ready. Try again.");
+        nativeSessionOpen.current = true;
+        const state = await nativeCamera.start({
+          contextId: `${owner.current}:${run.id}`,
+          captureId: nativeCaptureId,
+          position: facing === "user" ? "front" : "back",
+          preview: {
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+          },
+        });
+        if (closed.current || !active.current || id !== requestId.current) {
+          await nativeCamera.stop();
+          nativeSessionOpen.current = false;
+          return;
+        }
+        applyNativeState(state);
+        setNativeSession(true);
+        setCameraPreview("ready");
+        return;
+      }
       if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder)
         throw new Error();
       const acquired = await navigator.mediaDevices.getUserMedia({
         video: {
           ...(deviceId
             ? { deviceId: { exact: deviceId } }
-            : { facingMode: "environment" }),
+            : { facingMode: facing }),
           width: { ideal: 1080 },
           height: { ideal: 1920 },
         },
@@ -389,6 +840,22 @@ export default function Capture({
       });
       setCameraStream(acquired);
       const track = acquired.getVideoTracks()[0];
+      const capabilities = track?.getCapabilities?.();
+      const range = zoomRangeFromCapabilities(capabilities);
+      const reportedZoom =
+        (track?.getSettings() as MediaTrackSettings & { zoom?: number })
+          ?.zoom ?? 1;
+      const initialZoom = range ? clampCameraZoom(reportedZoom, range) : 1;
+      zoomState.current = { range, value: initialZoom };
+      setZoom(initialZoom);
+      setZoomRange(range);
+      setZoomPresets(
+        range
+          ? zoomButtonChoices(range, [0.5, 1]).filter(
+              (value) => value === 0.5 || value === 1,
+            )
+          : [1],
+      );
       setDevice(track?.getSettings().deviceId || deviceId || "");
       setTorchAvailable(
         Boolean(
@@ -408,10 +875,16 @@ export default function Capture({
             (entry) => entry.kind === "videoinput" && entry.deviceId,
           ),
         );
-    } catch {
-      if (!closed.current)
+    } catch (cause) {
+      if (nativeSessionOpen.current) {
+        nativeSessionOpen.current = false;
+        await nativeCamera.stop().catch(() => {});
+      }
+      if (!closed.current && id === requestId.current)
         setError(
-          "Camera access is unavailable. Import a video below or enable camera and microphone access in Settings.",
+          usesNativeCamera() && cause instanceof Error
+            ? cause.message
+            : "Camera access is unavailable. Import a video below or enable camera and microphone access in Settings.",
         );
     } finally {
       if (!closed.current) setOpening(false);
@@ -420,11 +893,14 @@ export default function Capture({
   function startRecording() {
     if (
       !active.current ||
-      !stream.current ||
+      opening ||
+      pendingNativeTakes.current.size > 0 ||
+      (!stream.current && !nativeSessionOpen.current) ||
       cameraPreview !== "ready" ||
       finishing ||
       busy ||
-      recorder.current?.state === "recording"
+      recorder.current?.state === "recording" ||
+      nativeRecording.current
     )
       return;
     const total = sessionSeconds(savedTakes.current);
@@ -435,6 +911,41 @@ export default function Capture({
     setError("");
     setMessage("");
     source.current = "camera";
+    if (nativeSessionOpen.current) {
+      const recordingId = crypto.randomUUID();
+      nativeRecordingId.current = recordingId;
+      nativeRecording.current = true;
+      stopped.current = new Promise<void>((resolve) => {
+        nativeStopResolve.current = resolve;
+      });
+      setRecording(true);
+      nativeStart.current = nativeCamera
+        .startRecording({ recordingId })
+        .then(() => {
+          recordingStarted.current = performance.now();
+          if (
+            nativeStopping.current ||
+            !nativeRecording.current ||
+            closed.current
+          )
+            return;
+          timer.current = setInterval(() => {
+            const now = (performance.now() - recordingStarted.current) / 1000;
+            setElapsed(now);
+            if (total + now >= limit - 0.2) void stopRecording();
+          }, 50);
+        })
+        .catch((cause) => {
+          if (!closed.current)
+            setError(
+              (cause as Error).message ||
+                "Recording could not start. Try again or import a video.",
+            );
+          finishNativeRecording(recordingId);
+        });
+      return;
+    }
+    if (!stream.current) return;
     const chunks: Blob[] = [];
     const mime = [
       "video/mp4;codecs=avc1.424028,mp4a.40.2",
@@ -533,6 +1044,15 @@ export default function Capture({
     }, 1000);
   }
   async function toggleTorch() {
+    if (nativeSessionOpen.current && torchAvailable) {
+      try {
+        applyNativeState(await nativeCamera.setTorch({ enabled: !torch }));
+        setTorch(!torch);
+      } catch {
+        setError("Camera light is unavailable. Try turning it on again.");
+      }
+      return;
+    }
     const track = stream.current?.getVideoTracks()[0];
     if (!track || !torchAvailable) return;
     try {
@@ -574,6 +1094,10 @@ export default function Capture({
   }
   async function importVideo(file?: File) {
     if (!file) return;
+    if (pendingNativeTakes.current.size) {
+      setError("Save your recorded take using Retry saving take first.");
+      return;
+    }
     setError("");
     if (!file.size || file.size > 40 * 1024 * 1024) {
       setError("Choose a video no larger than 40 MB.");
@@ -600,6 +1124,12 @@ export default function Capture({
   async function close() {
     if (busy || finishing) return;
     await stopRecording();
+    if (pendingNativeTakes.current.size) {
+      setError(
+        "Your recorded take is still on this device. Retry saving it before leaving.",
+      );
+      return;
+    }
     try {
       await write.current;
       releaseCamera();
@@ -611,6 +1141,10 @@ export default function Capture({
     }
   }
   async function save() {
+    if (pendingNativeTakes.current.size) {
+      setError("Retry saving your recorded take first.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -635,7 +1169,8 @@ export default function Capture({
       setBusy(false);
     }
   }
-  const locked = busy || finishing || recording || countdown > 0;
+  const locked =
+    busy || finishing || recording || countdown > 0 || nativeTakePending;
   const positions: { value: ImageOverlay["position"]; label: string }[] = [
     { value: "top_left", label: "Top left" },
     { value: "top_right", label: "Top right" },
@@ -645,7 +1180,7 @@ export default function Capture({
   ];
   return (
     <div
-      className="capture-overlay session-capture session-fullscreen"
+      className={`capture-overlay session-capture session-fullscreen ${nativeSession ? "is-native-camera" : ""}`}
       role="dialog"
       aria-modal="true"
       aria-label="Record your quest"
@@ -707,6 +1242,7 @@ export default function Capture({
         )}
       </div>
       <div
+        ref={cameraStage}
         className={`session-camera-stage ${preview ? "is-preview" : ""}`}
         onPointerDown={(event) => {
           if (
@@ -715,30 +1251,65 @@ export default function Capture({
             )
           )
             return;
-          touchStart.current = { x: event.clientX, y: event.clientY };
-          if (!preview) event.currentTarget.setPointerCapture(event.pointerId);
+          if (preview) return;
+          pointers.current.set(event.pointerId, {
+            id: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+          });
+          if (pointers.current.size === 1) {
+            pinched.current = false;
+            touchStart.current = { x: event.clientX, y: event.clientY };
+          } else {
+            pinched.current = true;
+            touchStart.current = undefined;
+            const range = zoomState.current.range;
+            if (range)
+              pinch.current = beginPinchZoom(
+                [...pointers.current.values()],
+                zoomState.current.value,
+                range,
+              );
+          }
+          event.currentTarget.setPointerCapture(event.pointerId);
         }}
-        onPointerUp={(event) => finishSwipe(event.clientX, event.clientY)}
-        onPointerCancel={() => {
+        onPointerMove={(event) => {
+          if (!pointers.current.has(event.pointerId)) return;
+          pointers.current.set(event.pointerId, {
+            id: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+          });
+          const range = zoomState.current.range;
+          if (!range || pointers.current.size < 2) return;
+          const update = updatePinchZoom(
+            pinch.current,
+            [...pointers.current.values()],
+            zoomState.current.value,
+            range,
+          );
+          pinch.current = update.gesture;
+          requestZoom(update.zoom);
+        }}
+        onPointerUp={(event) => {
+          pointers.current.delete(event.pointerId);
+          if (!pinched.current) finishSwipe(event.clientX, event.clientY);
+          if (pointers.current.size < 2) pinch.current = null;
+          if (!pointers.current.size) touchStart.current = undefined;
+        }}
+        onPointerCancel={(event) => {
+          pointers.current.delete(event.pointerId);
           touchStart.current = undefined;
-        }}
-        onTouchStart={(event) => {
-          if (
-            (event.target as HTMLElement).closest(
-              "button, input, label, textarea, a",
-            )
-          )
-            return;
-          const touch = event.touches[0];
-          touchStart.current = { x: touch.clientX, y: touch.clientY };
-        }}
-        onTouchEnd={(event) => {
-          const touch = event.changedTouches[0];
-          if (touch) finishSwipe(touch.clientX, touch.clientY);
+          pinch.current = null;
         }}
       >
         <div className="session-video-canvas">
-          {camera ? (
+          {nativeSession ? (
+            <div
+              className="session-native-preview"
+              aria-label="Live camera preview"
+            />
+          ) : camera ? (
             <video
               ref={liveVideo}
               autoPlay
@@ -806,7 +1377,11 @@ export default function Capture({
               {cameraPreview === "blocked" && (
                 <>
                   <Button
-                    onClick={() => livePreview.current?.retry()}
+                    onClick={() =>
+                      nativeSession
+                        ? void openCamera()
+                        : livePreview.current?.retry()
+                    }
                     disabled={locked}
                   >
                     Start preview
@@ -876,19 +1451,18 @@ export default function Capture({
           <button
             className="session-tool-icon"
             aria-label="Flip camera"
-            disabled={locked || !camera || devices.length < 2}
+            disabled={
+              locked ||
+              opening ||
+              !camera ||
+              (nativeSession ? !nativeCanFlip : devices.length < 2)
+            }
             title={
-              devices.length < 2
+              (nativeSession ? !nativeCanFlip : devices.length < 2)
                 ? "Only one camera is available"
                 : "Flip camera"
             }
-            onClick={() => {
-              const index = devices.findIndex(
-                (entry) => entry.deviceId === device,
-              );
-              const next = devices[(index + 1) % devices.length];
-              if (next) void openCamera(next.deviceId);
-            }}
+            onClick={() => void flipCamera()}
           >
             <SwitchCamera />
             <span>Flip</span>
@@ -997,6 +1571,24 @@ export default function Capture({
       <footer
         className={`session-camera-footer ${preview ? "is-preview" : ""}`}
       >
+        {nativeTakePending && !recording && (
+          <div className="session-review-actions">
+            <Button
+              secondary
+              onClick={() => void retryNativeTakes()}
+              busy={finishing || busy}
+            >
+              Retry saving take
+            </Button>
+            <Button
+              secondary
+              onClick={() => void discardPendingNativeTakes()}
+              disabled={finishing || busy}
+            >
+              Discard unsaved take
+            </Button>
+          </div>
+        )}
         {error ? (
           <div className="session-feedback" role="alert">
             {error}
@@ -1018,7 +1610,7 @@ export default function Capture({
               <Button
                 onClick={save}
                 busy={busy}
-                disabled={!validSession(takes)}
+                disabled={!validSession(takes) || nativeTakePending}
               >
                 Save video <Check size={18} />
               </Button>
@@ -1075,6 +1667,40 @@ export default function Capture({
           </>
         ) : (
           <>
+            <div className="session-zoom-choices" aria-label="Camera zoom">
+              {(zoomPresets.length ? zoomPresets : [1]).map((value) => (
+                <button
+                  key={value}
+                  className="session-zoom"
+                  aria-label={`Zoom ${value === 1 ? "1" : value}×`}
+                  aria-pressed={Math.abs(zoom - value) < 0.025}
+                  disabled={
+                    !camera ||
+                    !zoomRange ||
+                    cameraPreview !== "ready" ||
+                    opening ||
+                    busy ||
+                    finishing ||
+                    countdown > 0
+                  }
+                  onClick={() => requestZoom(value)}
+                >
+                  {value === 1 ? "1" : value}×
+                </button>
+              ))}
+              {camera &&
+                zoomRange &&
+                !zoomPresets.some(
+                  (value) => Math.abs(zoom - value) < 0.025,
+                ) && (
+                  <output
+                    className="session-zoom-value"
+                    aria-label="Current zoom"
+                  >
+                    {zoom.toFixed(1)}×
+                  </output>
+                )}
+            </div>
             <div
               className="session-duration-choices"
               aria-label="Recording duration"
@@ -1132,6 +1758,8 @@ export default function Capture({
                   aria-label="Hold to record"
                   disabled={
                     cameraPreview !== "ready" ||
+                    opening ||
+                    nativeTakePending ||
                     finishing ||
                     busy ||
                     countdown > 0 ||
@@ -1191,6 +1819,8 @@ export default function Capture({
                   className="session-tap-record"
                   disabled={
                     (!recording && cameraPreview !== "ready") ||
+                    opening ||
+                    nativeTakePending ||
                     finishing ||
                     busy ||
                     countdown > 0 ||

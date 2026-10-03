@@ -1,3 +1,5 @@
+import { nativeCamera, usesNativeCamera } from "./native-camera";
+
 const DATABASE = "sidequest-private-capture-drafts";
 const STORE = "drafts";
 const MAX_AGE = 7 * 24 * 60 * 60 * 1000;
@@ -9,7 +11,7 @@ export type CaptureDraft = {
   slot: number;
   baseClipId: string | null;
   file: Blob;
-  takes?: { file: Blob; duration: number }[];
+  takes?: import("./recording-session").RecordedTake[];
   overlay?: import("./recording-session").ImageOverlay;
   duration: number;
   start: number;
@@ -170,6 +172,8 @@ export async function deleteCaptureDraft(
 
 export async function clearCaptureDrafts() {
   generation++;
-  if (!globalThis.indexedDB) return;
-  await write((store) => store.clear());
+  await Promise.all([
+    usesNativeCamera() ? nativeCamera.clearRecordings() : Promise.resolve(),
+    globalThis.indexedDB ? write((store) => store.clear()) : Promise.resolve(),
+  ]);
 }

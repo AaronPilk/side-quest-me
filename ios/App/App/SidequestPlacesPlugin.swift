@@ -9,6 +9,7 @@ class SidequestViewController: CAPBridgeViewController {
 
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(SidequestPlacesPlugin())
+        bridge?.registerPluginInstance(SidequestCameraPlugin())
         guard let content = webView?.configuration.userContentController else { return }
         let handler = SidequestStatusAreaHandler(owner: self)
         statusAreaHandler = handler

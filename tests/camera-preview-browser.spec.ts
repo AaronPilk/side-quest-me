@@ -176,33 +176,31 @@ test("a muted camera seals the current take and recovers preview without resumin
   await expect(dialog.locator(".session-timeline > span")).toHaveCount(1);
 });
 
-test("fast camera flips reattach each stream and reach a third camera without stale track events closing it", async ({
+test("camera flips between rear and front with fresh streams and ignores stale track events", async ({
   page,
 }) => {
   await page.addInitScript(() => {
     const ids = ["rear-wide", "rear-ultra", "front"];
-    let streams: MediaStream[] = [];
+    const streams: MediaStream[] = [];
+    (window as unknown as { flipStreams: MediaStream[] }).flipStreams = streams;
     const acquire = navigator.mediaDevices.getUserMedia.bind(
       navigator.mediaDevices,
     );
     navigator.mediaDevices.getUserMedia = async (constraints) => {
-      if (!streams.length) {
-        const initial = await acquire(constraints);
-        streams = [initial, initial.clone(), initial.clone()];
-        (window as unknown as { flipStreams: MediaStream[] }).flipStreams =
-          streams;
-        streams.forEach((stream, index) => {
-          const track = stream.getVideoTracks()[0];
-          const settings = track.getSettings();
-          track.getSettings = () => ({ ...settings, deviceId: ids[index] });
-        });
-      }
       const video = constraints?.video as MediaTrackConstraints | undefined;
       const requested = (video?.deviceId as ConstrainDOMStringParameters)
         ?.exact;
-      return streams[
-        typeof requested === "string" ? ids.indexOf(requested) : 0
-      ];
+      const deviceId = typeof requested === "string" ? requested : "rear-wide";
+      const stream = await acquire({ video: true, audio: true });
+      const track = stream.getVideoTracks()[0];
+      const settings = track.getSettings();
+      track.getSettings = () => ({
+        ...settings,
+        deviceId,
+        facingMode: deviceId === "front" ? "user" : "environment",
+      });
+      streams.push(stream);
+      return stream;
     };
     navigator.mediaDevices.enumerateDevices = async () =>
       ids.map(
@@ -237,6 +235,16 @@ test("fast camera flips reattach each stream and reach a third camera without st
           index,
         ),
     ).toBe(true);
+    expect(
+      await dialog
+        .getByLabel("Live camera preview")
+        .evaluate(
+          (element) =>
+            ((element as HTMLVideoElement).srcObject as MediaStream)
+              .getVideoTracks()[0]
+              .getSettings().deviceId,
+        ),
+    ).toBe(index === 1 ? "front" : "rear-wide");
     if (index) {
       await page.evaluate(
         (previous) =>

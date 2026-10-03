@@ -1,6 +1,10 @@
 import type { Clip } from "./types";
 
-export type RecordedTake = { file: Blob; duration: number };
+export type RecordedTake = {
+  file: Blob;
+  duration: number;
+  nativeRecordingId?: string;
+};
 export type ImageOverlay = {
   file: Blob;
   position:

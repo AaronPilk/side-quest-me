@@ -514,12 +514,10 @@ test("backgrounding cancels the countdown without recording, and swipe opens que
     dialog.getByRole("button", { name: "Cancel timer" }),
   ).toHaveCount(0);
   await expect(dialog.getByLabel("0 takes saved")).toBeVisible();
-  await dialog.locator(".session-camera-stage").dispatchEvent("touchstart", {
-    touches: [{ identifier: 1, clientX: 120, clientY: 500 }],
-  });
-  await dialog.locator(".session-camera-stage").dispatchEvent("touchend", {
-    changedTouches: [{ identifier: 1, clientX: 130, clientY: 300 }],
-  });
+  await page.mouse.move(30, 500);
+  await page.mouse.down();
+  await page.mouse.move(40, 300);
+  await page.mouse.up();
   await expect(
     dialog.getByRole("region", { name: "Quest instructions panel" }),
   ).toBeVisible();
