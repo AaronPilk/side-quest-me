@@ -1,0 +1,58 @@
+{
+  "appId": "6817917086",
+  "localizationId": "7cabb0f9-82b6-45a1-ad7d-2d8cde554897",
+  "setId": "77d9b143-e9fd-433a-be3c-70a6c4d00245",
+  "display": "APP_IPHONE_67",
+  "verifiedAt": "2026-10-04T15:23:37.056Z",
+  "verification": "Independent fresh Apple GET compared against local PNG bytes and SHA256 manifest",
+  "completeCount": 4,
+  "exactOrderVerified": true,
+  "existingThreePreserved": true,
+  "reviewSubmitted": false,
+  "files": [
+    {
+      "order": 1,
+      "file": "01-make-today-a-story.png",
+      "id": "89c00019-6612-889e-802b-c62ed76a81f0",
+      "state": "COMPLETE",
+      "size": 2027621,
+      "sha256": "680335f9c105dda9ca682c123ef1f417866e53aa764f88476d33417c497535a5",
+      "appleMd5": "d6a3e6814368e50935844cf524044f2e",
+      "checksumVerified": true,
+      "preservedExisting": false
+    },
+    {
+      "order": 2,
+      "file": "02-your-kind-of-quest.png",
+      "id": "16400019-6612-889e-801a-8966d0a6b667",
+      "state": "COMPLETE",
+      "size": 963475,
+      "sha256": "3e0e5a0374a605dc88caf56cc70401dca826dacbec1b2de90d1465e9eaab83d7",
+      "appleMd5": "320a43da152319cb63f3aa30dfedf338",
+      "checksumVerified": true,
+      "preservedExisting": true
+    },
+    {
+      "order": 3,
+      "file": "04-your-next-detour.png",
+      "id": "97800019-6612-889e-8004-fe6ae3eb7f65",
+      "state": "COMPLETE",
+      "size": 774050,
+      "sha256": "4d868fc92a42a69a88b56d4637a99495158e58631a64699237e6f1d4eca17d7f",
+      "appleMd5": "1076ee1234c6bf4a3b491717e3bafa57",
+      "checksumVerified": true,
+      "preservedExisting": true
+    },
+    {
+      "order": 4,
+      "file": "07-great-stories-start-here.png",
+      "id": "d3c00019-6612-889e-8008-9e729a91f11b",
+      "state": "COMPLETE",
+      "size": 1454968,
+      "sha256": "aace98f4fb43a78e368753119f178ecd8777957ea147d78818ef7701ab367b42",
+      "appleMd5": "bceebb6d857a609ba68450b563b262b9",
+      "checksumVerified": true,
+      "preservedExisting": true
+    }
+  ]
+}

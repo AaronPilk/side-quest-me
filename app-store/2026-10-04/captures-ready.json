@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "locale": "en-US",
+  "status": "partial-authentic-captures",
+  "captures": [
+    {
+      "id": "01-make-today-a-story",
+      "capture": "raw/01-quest.png",
+      "headline": ["Make today", "a story."],
+      "subtitle": "A real adventure for your people.",
+      "background": "#EEE9FF"
+    }
+  ]
+}

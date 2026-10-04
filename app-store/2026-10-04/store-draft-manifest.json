@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "locale": "en-US",
+  "size": {
+    "width": 1320,
+    "height": 2868
+  },
+  "method": "Deterministic SVG typography and vector phone frame around unchanged native captures.",
+  "brandSource": "shared/brand.mjs (approved owner-supplied violet direction)",
+  "capturesManifest": "/Users/pilksclaes/Side Quest Me/app-store/2026-10-04/captures-ready.json",
+  "files": [
+    {
+      "id": "01-make-today-a-story",
+      "file": "01-make-today-a-story.png",
+      "width": 1320,
+      "height": 2868,
+      "source": "/Users/pilksclaes/Side Quest Me/app-store/2026-10-04/raw/01-quest.png",
+      "sourceWidth": 1320,
+      "sourceHeight": 2868,
+      "sourceSha256": "dedbb02de234362f7b33a762789988ccc58e969a7813b5277aaaee06fcc9329f",
+      "sha256": "680335f9c105dda9ca682c123ef1f417866e53aa764f88476d33417c497535a5",
+      "headline": [
+        "Make today",
+        "a story."
+      ],
+      "subtitle": "A real adventure for your people."
+    },
+    {
+      "id": "02-your-kind-of-quest",
+      "file": "02-your-kind-of-quest.png",
+      "width": 1320,
+      "height": 2868,
+      "source": "/Users/pilksclaes/Side Quest Me/app-store/2026-10-03/raw/02-create.png",
+      "sourceWidth": 1320,
+      "sourceHeight": 2868,
+      "sourceSha256": "ba9afabddab9fce72a38d602a4dcb3045636833933fe0207ae05d54cc0a5d5de",
+      "sha256": "3e0e5a0374a605dc88caf56cc70401dca826dacbec1b2de90d1465e9eaab83d7",
+      "headline": [
+        "Your people.",
+        "Your kind of quest."
+      ],
+      "subtitle": "Choose the budget, time, and energy."
+    },
+    {
+      "id": "04-your-next-detour",
+      "file": "04-your-next-detour.png",
+      "width": 1320,
+      "height": 2868,
+      "source": "/Users/pilksclaes/Side Quest Me/app-store/2026-10-03/raw/04-places.png",
+      "sourceWidth": 1320,
+      "sourceHeight": 2868,
+      "sourceSha256": "84b1897512a7b5072beb34d7dee94ae310fc34159a27b7d9fa94a108cac036ab",
+      "sha256": "4d868fc92a42a69a88b56d4637a99495158e58631a64699237e6f1d4eca17d7f",
+      "headline": [
+        "Your next detour",
+        "is nearby."
+      ],
+      "subtitle": "Find real places around you."
+    },
+    {
+      "id": "07-great-stories-start-here",
+      "file": "07-great-stories-start-here.png",
+      "width": 1320,
+      "height": 2868,
+      "source": "/Users/pilksclaes/Side Quest Me/app-store/2026-10-02/raw/welcome.png",
+      "sourceWidth": 1320,
+      "sourceHeight": 2868,
+      "sourceSha256": "22af73204668916a882eeb0086b185d1d882eaf508a23fe1d7026e2d61ec3706",
+      "sha256": "aace98f4fb43a78e368753119f178ecd8777957ea147d78818ef7701ab367b42",
+      "headline": [
+        "Great stories",
+        "start here."
+      ],
+      "subtitle": "A little detour. A memory worth keeping."
+    }
+  ],
+  "status": "Four genuine App Store draft images: generated quest, budget, real Maps and welcome. Physical filming, Series and journal presentation remain pending."
+}

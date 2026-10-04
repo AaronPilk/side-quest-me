@@ -1,5 +1,9 @@
 # App Store preparation — October 3, 2026
 
+This is a historical October 3 checkpoint. See
+[the October 4 checkpoint](APP_STORE_PREPARATION_2026-10-04.md) for the updated
+review contact, support mailbox, screenshot set and Build 13 delivery status.
+
 The editable App Store version now selects **1.0.0 (12)**. It remains
 `PREPARE_FOR_SUBMISSION`, with **manual release** selected. No App Review
 submission or public release was sent. Build 12 remains available in internal

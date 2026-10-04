@@ -51,7 +51,11 @@ plan and the real selected Victory Lane Indoor Karting location. This verifies
 normal generation and quest details; it does not assert venue booking or activity
 completion. Its genuine native capture is retained for the App Store presentation.
 
-Build 13 preparation and focused verification are ongoing at this checkpoint.
+Build 13's full source verification passed: 747 unit tests and all 279 browser
+scenarios, plus database checks, render fixtures, lint, typecheck and build.
+Archive, distribution export and Apple upload validation passed; the verified
+IPA was uploaded. See [the release checkpoint](APP_STORE_PREPARATION_2026-10-04.md)
+for processing and delivery status.
 No App Review submission or public release has been sent. Paid-licensing scope,
 public signup email delivery, operating moderation and final owner declarations
 remain separate submission work.

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "locale": "en-US",
+  "size": {
+    "width": 1320,
+    "height": 2868
+  },
+  "method": "Deterministic SVG typography and vector phone frame around unchanged native captures.",
+  "brandSource": "shared/brand.mjs (approved owner-supplied violet direction)",
+  "capturesManifest": "/Users/pilksclaes/Side Quest Me/app-store/2026-10-04/captures-ready.json",
+  "files": [
+    {
+      "id": "01-make-today-a-story",
+      "file": "01-make-today-a-story.png",
+      "width": 1320,
+      "height": 2868,
+      "source": "/Users/pilksclaes/Side Quest Me/app-store/2026-10-04/raw/01-quest.png",
+      "sourceWidth": 1320,
+      "sourceHeight": 2868,
+      "sourceSha256": "dedbb02de234362f7b33a762789988ccc58e969a7813b5277aaaee06fcc9329f",
+      "sha256": "680335f9c105dda9ca682c123ef1f417866e53aa764f88476d33417c497535a5",
+      "headline": [
+        "Make today",
+        "a story."
+      ],
+      "subtitle": "A real adventure for your people."
+    }
+  ]
+}
