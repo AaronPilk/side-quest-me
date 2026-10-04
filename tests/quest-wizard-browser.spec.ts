@@ -197,8 +197,29 @@ test("new quest planning omits generic booking requirements and preserves visibl
     page.getByRole("combobox", { name: "Getting there" }),
   ).toHaveCount(0);
   await reviewQuestPlans(page);
-  await expect(page.locator(".quest-arrangements")).toHaveCount(0);
-  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  const nightlife = page.getByRole("region", {
+    name: "Adult nightlife preferences",
+    exact: true,
+  });
+  await expect(nightlife).toBeVisible();
+  await expect(
+    nightlife.getByRole("link", {
+      name: "Set your age group for adult experiences",
+      exact: true,
+    }),
+  ).toHaveAttribute("href", "/preferences?step=account&returnTo=%2Fcreate");
+  // Age setup is available at review, but adult opt-in and generic booking
+  // confirmations must not be silently enabled for an unanswered account.
+  await expect(nightlife.getByRole("checkbox")).toHaveCount(0);
+  await expect(page.locator("details.quest-arrangements")).toHaveCount(0);
+  await expect(
+    page.getByRole("spinbutton", { name: /confirmed.*cost/i }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("checkbox", {
+      name: /booking|equipment|permission|filming/i,
+    }),
+  ).toHaveCount(0);
   await page.reload();
   expect(await draft(page)).toMatchObject({
     setting: "venue",
@@ -207,10 +228,13 @@ test("new quest planning omits generic booking requirements and preserves visibl
     venuePermission: false,
     arrangementConfirmed: false,
     confirmedVenueCostMinor: null,
+    adultEligible: false,
+    adultContext: false,
   });
   await page.getByRole("button", { name: "Edit setting", exact: true }).click();
   await page.getByRole("button", { name: "At home", exact: true }).click();
   await reviewQuestPlans(page);
+  await expect(nightlife).toHaveCount(0);
   expect(await draft(page)).toMatchObject({
     setting: "home",
     transport: "none",

@@ -593,16 +593,24 @@
   padding-top: 8px;
   padding-bottom: calc(12px + env(safe-area-inset-bottom));
 }
-.preferences-account .account-type-choice {
-  gap: 10px;
+/* Account setup includes age as well as identity. Keep the full form and its
+   footer above the iPhone home indicator, including the age-clear action. */
+.preferences-account .onboard-top {
+  margin-bottom: 8px;
+}
+.preferences-account > .page-title {
   margin-bottom: 12px;
+}
+.preferences-account .account-type-choice {
+  gap: 8px;
+  margin-bottom: 8px;
 }
 .preferences-account .account-type-choice legend {
   font-size: 0.85rem;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .preferences-account .account-type-choice label {
-  padding: 14px;
+  padding: 10px 14px;
   gap: 12px;
   border-radius: 24px;
   font-size: 0.85rem;
@@ -612,11 +620,20 @@
   line-height: 1.4;
 }
 .preferences-account .preference-nickname {
-  margin: 10px 0 16px;
+  margin: 8px 0;
   font-size: 0.85rem;
 }
 .preferences-account .preference-nickname input {
   min-height: 48px;
+}
+.preferences-account .age-band-choice {
+  margin: 0;
+}
+.preferences-account .age-band-choice legend {
+  margin-bottom: 8px;
+}
+.preferences-account .survey-footer {
+  padding-top: 10px;
 }
 .preferences-journey .summary-guided {
   display: flex;

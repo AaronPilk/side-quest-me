@@ -707,6 +707,13 @@ for (const [width, height] of [
       .click();
     await containedAction("Continue");
     await containedAction("Skip this step");
+    await page.getByRole("radio", { name: "21+", exact: true }).check();
+    await containedAction("Prefer not to say");
+    await containedAction("Continue");
+    await containedAction("Skip this step");
+    const ageChoices = page.locator(".age-band-options label");
+    for (const choice of await ageChoices.all())
+      expect((await choice.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     if (width === 393)
       await page.screenshot({ path: ".local/beta-account-393.png" });
     await page.getByRole("button", { name: "Continue", exact: true }).click();

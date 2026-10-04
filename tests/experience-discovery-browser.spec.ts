@@ -307,8 +307,29 @@ async function planJourney(page: Page) {
     "imported summary and exact device location aren’t sent",
   );
   await expect(page.getByText("More options", { exact: true })).toHaveCount(0);
-  await expect(page.locator(".quest-arrangements")).toHaveCount(0);
-  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  const nightlife = page.getByRole("region", {
+    name: "Adult nightlife preferences",
+    exact: true,
+  });
+  await expect(nightlife).toBeVisible();
+  await expect(
+    nightlife.getByRole("link", {
+      name: "Set your age group for adult experiences",
+      exact: true,
+    }),
+  ).toHaveAttribute("href", "/preferences?step=account&returnTo=%2Fcreate");
+  // Unknown age cannot opt in. Booking confirmations belong to the selected
+  // experience, not the initial plan or the optional nightlife preference.
+  await expect(nightlife.getByRole("checkbox")).toHaveCount(0);
+  await expect(page.locator("details.quest-arrangements")).toHaveCount(0);
+  await expect(
+    page.getByRole("spinbutton", { name: /confirmed.*cost/i }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("checkbox", {
+      name: /booking|equipment|permission|filming/i,
+    }),
+  ).toHaveCount(0);
 }
 async function accepted(page: Page) {
   return page.evaluate(() => (window as FixtureWindow).__experienceAccepts);
