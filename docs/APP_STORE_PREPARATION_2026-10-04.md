@@ -34,7 +34,8 @@ restoration and the downloaded watermarked video on Build 14.
 succeeded before client distribution. Worker/renderer version
 `ef1e976b-e8ca-426e-86ca-02b824cf54fd` accepts the new optional overlay transform.
 [Full source checks](https://github.com/AaronPilk/side-quest-me/actions/runs/37230204724)
-track this exact source separately from the focused verification above.
+passed for this exact source: 756 unit tests, all 280 browser scenarios,
+database checks, render fixtures, lint, typecheck and the production build.
 
 The archive, distribution signing/arm64/identity verification and Apple upload
 validation passed. IPA SHA256:
