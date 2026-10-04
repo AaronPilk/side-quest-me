@@ -5,6 +5,14 @@ October 4, 2026. Based on the owner's TikTok reference and the
 This is a proposed sequence. No phase below is declared complete merely because
 a toolbar button exists or a mocked browser test passes.
 
+Build 14 update: the owner's beta request for dragging and pinching a still
+photo overlay is implemented and available in internal TestFlight. It includes
+draft persistence, a size slider and shared preview/export placement. A real
+production composition independently verified the output pixels. This is a
+limited Phase 2 increment; rotation, layer timing, multiple layers and the
+larger visual editor remain open. Physical iPhone gesture/record/export
+acceptance is still required. See [delivery evidence](APP_STORE_PREPARATION_2026-10-04.md).
+
 ## Product outcome
 
 An accepted quest opens a full-screen camera immediately. The creator can record

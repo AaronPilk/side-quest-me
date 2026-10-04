@@ -1,9 +1,49 @@
 # App Store preparation — October 4, 2026
 
-**Version 1.0.0 (13) is available in internal TestFlight and selected in the
-editable App Store draft.** It corrects both new Build 12 camera reports. The
-TikTok camera research and feature roadmap are complete. App Review submission
-and public release have not been sent.
+**Version 1.0.0 (14) is available in internal TestFlight and selected in the
+editable App Store draft.** It adds drag/pinch photo overlays. The shared
+Discover/Activity/Rewards/Profile loading failure is repaired on the live
+backend, including for Build 13. App Review submission and public release have
+not been sent.
+
+## Build 14 delivery
+
+Source `62fc7983569d26b1b911e488f99387973f3471e5` adds bounded one-finger
+dragging and two-finger resizing, an accessible photo-size slider, preset
+positions, and draft persistence. The preview and renderer share placement
+geometry in a 9:16 canvas. Existing drafts and older clients remain compatible.
+This is one still photo across the video; rotation, timed overlays and multiple
+layers remain future work.
+
+Verification passed: lint, typecheck, 756 unit tests, six focused camera/draft
+browser scenarios, a real FFmpeg composition/export with watermark, and the
+production iPhone Simulator build and launch. A normal signed-in production
+compose request returned a 1080 × 1920 video whose pixels independently
+confirmed the requested free placement. Synthetic diagnostic media was not
+saved as a quest clip or published, and the private reviewer test plans were
+abandoned through the normal API without completion or rewards.
+
+Simulator content interactions were unavailable in this session: the automation
+bridge returned `windowNotFoundAtPosition` despite visible app screenshots and
+rebinding/repositioning the device. The gesture evidence is browser pointer/touch
+plus native-bridge fixtures; it is not a claim of physical iPhone acceptance.
+The owner should verify recording, microphone playback, overlay gestures, draft
+restoration and the downloaded watermarked video on Build 14.
+
+[Production deployment](https://github.com/AaronPilk/side-quest-me/actions/runs/37230238634)
+succeeded before client distribution. Worker/renderer version
+`ef1e976b-e8ca-426e-86ca-02b824cf54fd` accepts the new optional overlay transform.
+[Full source checks](https://github.com/AaronPilk/side-quest-me/actions/runs/37230204724)
+track this exact source separately from the focused verification above.
+
+The archive, distribution signing/arm64/identity verification and Apple upload
+validation passed. IPA SHA256:
+`172489e57cb46618d88cf85ca38421854c6247031bbf6fc440c23f48e8850776`.
+Apple readback verified build `61b6430f-f272-41fe-adce-52a5dcbbfca7`, version
+14, processing `VALID`, state `IN_BETA_TESTING`, membership in the existing
+**Sidequest Internal** group, and exact saved English test notes. App Store
+version `07c31559-9097-43fb-9d6f-2744374be7aa` selects this build and remains
+`PREPARE_FOR_SUBMISSION` with `MANUAL` release.
 
 ## Contact and review access
 
@@ -18,7 +58,7 @@ updated production iOS Simulator bundle visibly displays that contact on Help
 Settings to Help & support was verified. The temporary screenshot status-bar
 override was cleared. No other Simulator's app data was altered.
 
-## Beta corrections and verification
+## Earlier Build 13 corrections and verification
 
 Source commit `4964f80e7f119ba35fb0bd2ec5cd69f4ce1c5961`:
 
@@ -39,7 +79,7 @@ The owner confirmed physical iPhone camera preview and zoom on Build 12. Build
 and finished-video download/export confirmation. Simulator and bridge fixtures
 do not prove camera hardware behavior.
 
-## Native release checkpoint
+## Earlier Build 13 native release checkpoint
 
 Version 1.0.0, build 13, bundle `com.aaronpilk.sidequest`, team `5F5C5G25Y6`.
 Production archive, distribution export, arm64 / entitlement / bundle-identity
@@ -92,9 +132,7 @@ proposals. [The camera roadmap](TIKTOK_CAMERA_ROADMAP_2026-10-04.md) prioritizes
 reliable recovery, a visual editor, sound/captions/timed layers, then longer
 recording and effects. These larger features are planned, not shipped in Build 13. One-minute / 40MB limits remain in the current pipeline.
 
-## Remaining App Store requirements
-
-### Build 13 beta feedback and live read repair
+## Build 13 beta feedback and live read repair
 
 A subsequent TestFlight retrieval found 28 screenshot reports and no crash
 submissions. Five reports were new: four Build 13 screenshots showed the same
@@ -135,6 +173,8 @@ succeeded. This is live API evidence, not a claim of a completed physical-device
 camera test. Private before/after evidence and feedback images stay in ignored
 `.local/`. Worker regression coverage also distinguishes sanitized HTTP 503
 loading failures from mutation conflicts while preserving authorization errors.
+
+## Remaining App Store requirements
 
 The historical hosted audit confirmed custom SMTP off, no Auth Hooks and zero
 active operator memberships. None of those settings were changed by this

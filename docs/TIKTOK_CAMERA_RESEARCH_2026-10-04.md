@@ -109,6 +109,15 @@ as a new Sidequest publication or guaranteed public TikTok post. [Share Kit](htt
 
 ## Sidequest implementation snapshot
 
+Later Build 14 increment (`62fc7983569d26b1b911e488f99387973f3471e5`): a
+single still photo now supports direct dragging, pinch resizing, an accessible
+size slider and draft persistence. Shared normalized placement drives the
+portrait preview and renderer. Local export and an authenticated production
+composition verified matching output placement. The Build 13 audit table below
+is retained as the research baseline; free positioning is no longer a current
+gap. Multiple/timed layers, rotation and a complete visual editor remain gaps,
+and physical iPhone verification remains separate.
+
 Read-only source audit on October 4, checked against release source
 `4964f80e7f119ba35fb0bd2ec5cd69f4ce1c5961`. Native import/recovery fixes are
 included in Build 13; the larger editing features below remain gaps. Code
