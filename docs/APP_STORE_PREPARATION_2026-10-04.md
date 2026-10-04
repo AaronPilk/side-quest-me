@@ -94,6 +94,48 @@ recording and effects. These larger features are planned, not shipped in Build 1
 
 ## Remaining App Store requirements
 
+### Build 13 beta feedback and live read repair
+
+A subsequent TestFlight retrieval found 28 screenshot reports and no crash
+submissions. Five reports were new: four Build 13 screenshots showed the same
+loading error on Discover, Activity, Rewards and Profile, and one Build 12
+report requested dragging and pinching a photo overlay. The latter requires a
+client/renderer change and is not part of the database repair below.
+
+The publication-review migration marked the community read RPC `STABLE`, but
+its preserved implementation called the mutation actor guard, which uses
+`SELECT ... FOR SHARE`. PostgREST invokes STABLE RPCs in read-only transactions.
+Ordinary authenticated production requests reproduced HTTP 409 and direct RPC
+reproduction returned SQLSTATE `25006`. The old test harness used read-write
+transactions and missed this regression. `/api/health` checks configuration;
+it was insufficient evidence that authenticated app reads worked.
+
+Migration `20261004194705_community_reads_without_row_locks.sql` was applied
+to the existing hosted project. It changes only actor validation in the
+preserved community reader and the two media authorization readers, retaining
+active-account checks without row locks. Publication, blocking, ownership,
+service-only grants and mutation row locks remain intact; no stored records
+were rewritten. The local filename matches Supabase's recorded migration
+version. This repair takes effect in existing Build 13 after retry/reopening.
+
+The new regression failed with the exact production error on the old code.
+The full local database/advisor suite passed with all 23 migrations, and 754
+unit tests passed. Community read/media invariants now run under `BEGIN READ
+ONLY`, including pending-owner media, operator preview, completed commercial
+access and disabled/deleted/missing actor denials. Hosted security advisors
+reported the existing service-only RLS information notices and the existing
+[disabled leaked-password protection warning](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection);
+there were no function-security errors introduced by this migration.
+
+After applying the repair, an ordinary reviewer login against production
+returned HTTP 200 for `/api/me`, `/api/social/me`, `/api/community/feed`,
+`/api/community/me`, `/api/community/activity`, `/api/community/offers`,
+`/api/rewards` and `/api/quest-runs/active`. Direct community RPC replay also
+succeeded. This is live API evidence, not a claim of a completed physical-device
+camera test. Private before/after evidence and feedback images stay in ignored
+`.local/`. Worker regression coverage also distinguishes sanitized HTTP 503
+loading failures from mutation conflicts while preserving authorization errors.
+
 The historical hosted audit confirmed custom SMTP off, no Auth Hooks and zero
 active operator memberships. None of those settings were changed by this
 release. Public new-account email delivery must work with a production sender;

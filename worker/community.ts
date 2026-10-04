@@ -171,13 +171,31 @@ function communityError(message: string): never {
   dbError(message);
 }
 
+function communityReadError(message: string, media = false): never {
+  try {
+    communityError(message);
+  } catch (error) {
+    // Keep authorization and availability failures; an unknown read failure
+    // must not tell the user that a change could not be saved.
+    if (error instanceof ApiError && error.code === "operation_failed")
+      throw new ApiError(
+        media ? "community_media_failed" : "community_read_failed",
+        media
+          ? "This video could not be loaded. Please try again."
+          : "These details could not be loaded. Please try again.",
+        503,
+      );
+    throw error;
+  }
+}
+
 async function read(c: AppContext, view: CommunityView, input: unknown = {}) {
   const { data, error } = await c.get("serviceDb").rpc("sq_community_read", {
     p_actor: c.get("actor") || null,
     p_view: view,
     p_input: communityReadSchema.parse(input),
   });
-  if (error) communityError(error.message);
+  if (error) communityReadError(error.message);
   // SQL constructs explicit view-specific DTOs. No table rows or storage keys are serialized here.
   return c.json(data);
 }
@@ -199,7 +217,7 @@ async function media(
         p_post: postId,
         p_offer: offerId,
       });
-  if (error) communityError(error.message);
+  if (error) communityReadError(error.message, true);
   const parsed = mediaGrantSchema.safeParse(data);
   if (!parsed.success)
     throw new ApiError("not_found", "This video is unavailable.", 404);

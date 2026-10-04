@@ -14,12 +14,14 @@ export async function runCommunityTests(sql) {
     sql(
       `select sq_community_mutate(${q(actor)},${q(action)},${j(input)},${q(key)},${q(hash({ action, input }))});`,
     ).then(JSON.parse);
+  // PostgREST runs STABLE RPCs in read-only transactions, even for POST.
+  const readOnly = (query) => sql(`begin read only;\n${query}\ncommit;`);
   const read = (actor, view, input = {}) =>
-    sql(
+    readOnly(
       `select sq_community_read(${actor ? q(actor) : "null"},${q(view)},${j(input)});`,
     ).then(JSON.parse);
   const media = (actor, post = null, offer = null) =>
-    sql(
+    readOnly(
       `select sq_community_media(${actor ? q(actor) : "null"},${post ? q(post) : "null"},${offer ? q(offer) : "null"});`,
     ).then(JSON.parse);
   const user = async () => {
@@ -34,6 +36,35 @@ export async function runCommunityTests(sql) {
   await sql(
     `insert into private.role_memberships(user_id,role) values(${q(operator)},'operator');`,
   );
+  console.log(
+    "Checking authenticated community reads in PostgREST read-only transactions…",
+  );
+  assert.deepEqual((await read(viewer, "feed")).posts, []);
+  assert.equal((await read(viewer, "me")).userId, viewer);
+  assert.deepEqual(await read(viewer, "activity"), {
+    items: [],
+    unreadCount: 0,
+  });
+  assert.deepEqual((await read(viewer, "offers")).offers, []);
+  const unavailable = await user();
+  await sql(
+    `update profiles set account_status='disabled' where id=${q(unavailable)};`,
+  );
+  for (const actor of [unavailable, randomUUID()]) {
+    for (const view of ["feed", "me", "activity", "offers"])
+      await assert.rejects(() => read(actor, view), /account_unavailable/);
+    await assert.rejects(
+      () => media(actor, randomUUID()),
+      /account_unavailable/,
+    );
+    await assert.rejects(
+      () =>
+        readOnly(
+          `select sq_community_review_media(${q(actor)},${q(randomUUID())});`,
+        ),
+      /account_unavailable/,
+    );
+  }
   await sql(
     `select sq_upsert_profile(${q(creator)},${j({ imported_summary: "PRIVATE_SUMMARY_NEVER_PUBLIC", preferences: { secret: "PRIVATE_ANSWER_NEVER_PUBLIC" } })});`,
   );
@@ -147,9 +178,9 @@ export async function runCommunityTests(sql) {
       key,
     );
   const reviewMedia = (actor) =>
-    sql(`select sq_community_review_media(${q(actor)},${q(post.id)});`).then(
-      JSON.parse,
-    );
+    readOnly(
+      `select sq_community_review_media(${q(actor)},${q(post.id)});`,
+    ).then(JSON.parse);
   const originalBeforeReview = await sql(
     `select jsonb_build_object('run',(select to_jsonb(r) from quest_runs r where id=${q(run.id)}),'assets',(select jsonb_agg(to_jsonb(a) order by id) from media_assets a where run_id=${q(run.id)}),'wallet',(select to_jsonb(w) from wallets w where owner_id=${q(creator)}),'ledger',(select jsonb_agg(to_jsonb(l) order by id) from reward_ledger l where run_id=${q(run.id)}));`,
   );
@@ -883,6 +914,9 @@ export async function runCommunityTests(sql) {
     /inspiration_unavailable/,
   );
   await rpc("sq_delete_account", creator);
+  await assert.rejects(() => read(creator, "me"), /account_unavailable/);
+  await assert.rejects(() => media(creator, post.id), /account_unavailable/);
+  await assert.rejects(() => reviewMedia(creator), /account_unavailable/);
   await assert.rejects(
     () => read(null, "creator", { id: creator }),
     /not_found/,

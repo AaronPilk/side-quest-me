@@ -45,7 +45,7 @@ const postId = "a012d494-69d6-413c-9e7c-2101a999f454";
 const offerId = "17e3a382-6ccd-46d4-9821-e4c8fe0746ba";
 const env = {} as AppEnv;
 
-function app() {
+function app(includeErrorMessage = false) {
   const result = new Hono<AppBindings>();
   result.use("*", async (c, next) => {
     c.header("Cache-Control", "private, no-store");
@@ -53,7 +53,12 @@ function app() {
   });
   result.onError((error, c) =>
     c.json(
-      { error: error instanceof ApiError ? error.code : "invalid_input" },
+      {
+        error: error instanceof ApiError ? error.code : "invalid_input",
+        ...(includeErrorMessage && error instanceof ApiError
+          ? { message: error.message }
+          : {}),
+      },
       error instanceof ApiError
         ? error.status
         : error instanceof z.ZodError
@@ -106,6 +111,32 @@ beforeEach(() => {
 });
 
 describe("community public read boundary", () => {
+  it.each([
+    "/api/community/feed",
+    "/api/community/me",
+    "/api/community/activity",
+    "/api/community/offers",
+  ])("returns a sanitized loading failure for %s", async (path) => {
+    state.rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: "25006",
+        message:
+          "cannot execute SELECT FOR SHARE in a read-only transaction PRIVATE_DATABASE_CONTEXT",
+      },
+    });
+    const response = await app(true).request(
+      path,
+      { headers: { Authorization: "Bearer valid-session" } },
+      env,
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: "community_read_failed",
+      message: "These details could not be loaded. Please try again.",
+    });
+  });
+
   it("requires identity for Following and bounds literal search", async () => {
     let response = await app().request(
       "/api/community/feed?followingOnly=true",
@@ -394,6 +425,31 @@ describe("community media authorization", () => {
     mime: "video/mp4",
     bytes: 1200,
   };
+
+  it.each([
+    `/api/community/posts/${postId}/media`,
+    `/api/community/offers/${offerId}/media`,
+    `/api/community/reviews/${postId}/media`,
+  ])(
+    "does not serve media after a database loading failure: %s",
+    async (path) => {
+      state.rpc.mockResolvedValue({
+        data: null,
+        error: { message: "database unavailable PRIVATE_DATABASE_CONTEXT" },
+      });
+      const response = await app(true).request(
+        path,
+        { headers: { Authorization: "Bearer valid-session" } },
+        env,
+      );
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: "community_media_failed",
+        message: "This video could not be loaded. Please try again.",
+      });
+      expect(state.media).not.toHaveBeenCalled();
+    },
+  );
 
   it("authenticates private publication previews and rechecks the operator role before every range or thumbnail", async () => {
     const path = `/api/community/reviews/${postId}/media`;
