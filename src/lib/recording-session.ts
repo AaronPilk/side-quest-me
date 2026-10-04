@@ -1,4 +1,8 @@
 import type { Clip } from "./types";
+import type {
+  OverlayPosition,
+  OverlayTransform,
+} from "../../shared/image-overlay.mjs";
 
 export type RecordedTake = {
   file: Blob;
@@ -7,8 +11,8 @@ export type RecordedTake = {
 };
 export type ImageOverlay = {
   file: Blob;
-  position:
-    "top_left" | "top_right" | "bottom_left" | "bottom_right" | "center";
+  position: OverlayPosition;
+  transform?: OverlayTransform;
 };
 export const SESSION_DRAFT_SLOT = 3;
 export const SESSION_SECONDS = 60;

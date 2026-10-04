@@ -542,6 +542,7 @@ export async function composeTakes(files, directory, imageOverlay) {
         imageOverlay.file,
         imageOverlay.position,
         overlay,
+        imageOverlay.transform,
       );
     } catch {
       throw new MediaError(

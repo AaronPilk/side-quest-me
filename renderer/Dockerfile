@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY renderer ./renderer
 COPY shared/brand.mjs ./shared/brand.mjs
+COPY shared/image-overlay.mjs ./shared/image-overlay.mjs
 ENV NODE_ENV=production SIDEQUEST_RENDERER_MODE=container PORT=8789 MEDIA_DATA_DIR=/tmp/sidequest-media
 USER node
 EXPOSE 8789

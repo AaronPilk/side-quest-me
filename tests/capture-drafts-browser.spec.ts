@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import sharp from "sharp";
 import { findDefaultQuests } from "./quest-wizard-helpers";
 
 async function openQuest(page: Page) {
@@ -635,4 +636,95 @@ test("preview secondary actions keep readable contrast even when hovered", async
       background: getComputedStyle(button).backgroundColor,
     })),
   ).toEqual({ color: "rgb(255, 255, 255)", background: "rgb(40, 37, 47)" });
+});
+
+test("photo overlays drag and pinch without zooming the camera, survive reopening, and expose a size control", async ({
+  page,
+}) => {
+  await openQuest(page);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Live camera preview")).toBeVisible();
+  await dialog.getByLabel("Import video", { exact: true }).setInputFiles({
+    name: "move-photo.png",
+    mimeType: "image/png",
+    buffer: await sharp({
+      create: { width: 800, height: 600, channels: 3, background: "red" },
+    })
+      .png()
+      .toBuffer(),
+  });
+  await dialog.getByRole("button", { name: "Done", exact: true }).click();
+  const photo = dialog.getByRole("button", { name: /^Move and resize photo/ });
+  const before = (await photo.boundingBox())!;
+  await page.mouse.move(
+    before.x + before.width / 2,
+    before.y + before.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    before.x + before.width / 2 - 40,
+    before.y + before.height / 2 - 45,
+    { steps: 8 },
+  );
+  await page.mouse.up();
+  const dragged = (await photo.boundingBox())!;
+  expect(dragged.x).toBeCloseTo(before.x - 40, 0);
+  expect(dragged.y).toBeCloseTo(before.y - 45, 0);
+  const cdp = await page.context().newCDPSession(page);
+  const x = dragged.x + dragged.width / 2,
+    y = dragged.y + dragged.height / 2;
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [
+      { x: x - 20, y, id: 1 },
+      { x: x + 20, y, id: 2 },
+    ],
+  });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [
+      { x: x - 30, y, id: 1 },
+      { x: x + 30, y, id: 2 },
+    ],
+  });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await expect
+    .poll(async () => (await photo.boundingBox())!.width)
+    .toBeGreaterThan(dragged.width * 1.45);
+  await expect(
+    dialog.getByRole("region", { name: "Quest instructions panel" }),
+  ).toHaveCount(0);
+  const pinched = (await photo.boundingBox())!;
+  await page.screenshot({ path: ".local/camera-overlay-gesture-proof.png" });
+  const canvas = (await dialog.locator(".session-video-canvas").boundingBox())!;
+  expect(canvas.width / canvas.height).toBeCloseTo(9 / 16, 3);
+  await dialog
+    .getByRole("button", { name: "Or tap to start recording" })
+    .click();
+  await page.waitForTimeout(700);
+  await dialog
+    .getByRole("button", { name: "Stop recording", exact: true })
+    .click();
+  await expect(dialog.getByText(/Draft saved on this device/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Exit capture" }).click();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Continue recording", exact: true })
+    .click();
+  await expect(photo).toBeVisible();
+  const restored = (await photo.boundingBox())!;
+  expect(restored.width).toBeCloseTo(pinched.width, 0);
+  expect(restored.x).toBeCloseTo(pinched.x, 0);
+  expect(restored.y).toBeCloseTo(pinched.y, 0);
+  await photo.focus();
+  await page.keyboard.press("ArrowDown");
+  expect((await photo.boundingBox())!.y).toBeGreaterThan(restored.y);
+  await dialog.getByRole("button", { name: "Edit image overlay" }).click();
+  const slider = dialog.getByRole("slider", { name: "Photo size" });
+  await slider.fill("40");
+  await dialog.getByRole("button", { name: "Done", exact: true }).click();
+  expect((await photo.boundingBox())!.width / canvas.width).toBeCloseTo(0.4, 2);
 });

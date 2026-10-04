@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import sharp from "sharp";
+import { overlayLayout } from "../shared/image-overlay.mjs";
 import { command, probeMedia, renderReel } from "../renderer/core.mjs";
 
 // Real FFmpeg + multipart integration; ephemeral server uses a random loopback port.
@@ -94,6 +95,10 @@ try {
     "sticker.png",
   );
   body.append("overlayPosition", "top_left");
+  const transform = process.argv.includes("--free-overlay")
+    ? { x: 0.73, y: 0.4, width: 0.42 }
+    : undefined;
+  if (transform) body.append("overlayTransform", JSON.stringify(transform));
   const response = await fetch(`${base}/api/local-media/compose`, {
     method: "POST",
     headers: { "X-Sidequest-Demo": "1" },
@@ -148,8 +153,18 @@ try {
     "1",
     proof,
   ]);
+  const layout = overlayLayout(
+    { width: 80, height: 60 },
+    "top_left",
+    transform,
+  );
   const red = await sharp(proof)
-    .extract({ left: 70, top: 190, width: 1, height: 1 })
+    .extract({
+      left: layout.left + 10,
+      top: layout.top + 10,
+      width: 1,
+      height: 1,
+    })
     .removeAlpha()
     .raw()
     .toBuffer();
@@ -187,11 +202,36 @@ try {
     body: invalid,
   });
   assert.equal(rejected.status, 400);
+  for (const badTransform of [
+    "not-json",
+    JSON.stringify({ x: 2, y: 0.5, width: 0.3 }),
+    JSON.stringify({ x: 0.5, y: 0.5, width: 1000 }),
+  ]) {
+    const invalidTransform = new FormData();
+    invalidTransform.append(
+      "take",
+      new Blob([await readFile(files[0])], { type: "video/mp4" }),
+    );
+    invalidTransform.append(
+      "overlay",
+      new Blob([image], { type: "image/png" }),
+    );
+    invalidTransform.append("overlayTransform", badTransform);
+    const invalidResponse = await fetch(`${base}/api/local-media/compose`, {
+      method: "POST",
+      headers: { "X-Sidequest-Demo": "1" },
+      body: invalidTransform,
+    });
+    assert.equal(invalidResponse.status, 400);
+    await invalidResponse.body?.cancel();
+  }
   console.log(
     JSON.stringify({
       pass: true,
       duration: rendered.metadata.duration,
       imageRetained: true,
+      freeOverlay: Boolean(transform),
+      malformedTransformsRejected: true,
       watermarkLogo: true,
       invalidImageRejected: true,
       fullRangeInput: fullRange,

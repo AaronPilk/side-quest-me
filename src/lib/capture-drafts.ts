@@ -1,4 +1,8 @@
 import { nativeCamera, usesNativeCamera } from "./native-camera";
+import {
+  OVERLAY_POSITIONS,
+  validOverlayTransform,
+} from "../../shared/image-overlay.mjs";
 
 const DATABASE = "sidequest-private-capture-drafts";
 const STORE = "drafts";
@@ -94,7 +98,10 @@ export async function materializeCaptureDraft(
     (draft.overlay &&
       (!(draft.overlay.file instanceof Blob) ||
         !draft.overlay.file.size ||
-        draft.overlay.file.size > 5 * 1024 * 1024))
+        draft.overlay.file.size > 5 * 1024 * 1024 ||
+        !OVERLAY_POSITIONS.includes(draft.overlay.position) ||
+        (draft.overlay.transform !== undefined &&
+          !validOverlayTransform(draft.overlay.transform))))
   )
     throw new Error("This saved video draft could not be restored.");
 
@@ -137,7 +144,11 @@ export async function saveCaptureDraft(
 ) {
   if (
     draft.overlay &&
-    (!draft.overlay.file.size || draft.overlay.file.size > 5 * 1024 * 1024)
+    (!draft.overlay.file.size ||
+      draft.overlay.file.size > 5 * 1024 * 1024 ||
+      !OVERLAY_POSITIONS.includes(draft.overlay.position) ||
+      (draft.overlay.transform !== undefined &&
+        !validOverlayTransform(draft.overlay.transform)))
   )
     throw new Error("Choose an overlay image no larger than 5 MB.");
   const files = draft.takes?.map((take) => take.file) || [draft.file];

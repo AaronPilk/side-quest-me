@@ -30,12 +30,16 @@
 }
 .session-video-canvas {
   position: absolute;
-  inset: 0;
+  width: min(100%, calc(100dvh * 9 / 16));
+  aspect-ratio: 9 / 16;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 .session-video-canvas > video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 .session-native-preview {
@@ -63,6 +67,9 @@ html.native-camera-active,
 .capture-overlay.session-fullscreen.is-native-camera,
 .is-native-camera .session-camera-stage {
   background: transparent;
+}
+.is-native-camera .session-video-canvas {
+  box-shadow: 0 0 0 100vmax #090a0e;
 }
 .session-zoom-choices {
   display: flex;
@@ -98,6 +105,7 @@ html.native-camera-active,
   top: calc(64px + var(--capture-safe-top));
 }
 .session-camera-stage.is-preview .session-video-canvas {
+  transform: none;
   position: relative;
   inset: auto;
   width: auto;
@@ -549,34 +557,46 @@ html.native-camera-active,
 .session-video-canvas > .session-overlay-frame {
   inset: 0;
 }
-.session-image-overlay {
+.session-capture .session-overlay-handle {
   position: absolute;
-  max-width: 33.333%;
-  max-height: 25%;
-  object-fit: contain;
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
 }
-.session-image-overlay.position-top_left {
-  left: 5.556%;
-  top: 9.375%;
+.session-capture .session-overlay-handle:active {
+  cursor: grabbing;
 }
-.session-image-overlay.position-top_right {
-  right: 5.556%;
-  top: 9.375%;
+.session-capture .session-overlay-handle:disabled {
+  opacity: 1;
+  pointer-events: none;
 }
-.session-image-overlay.position-bottom_left {
-  left: 5.556%;
-  bottom: 15.625%;
+.session-image-overlay {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  -webkit-user-drag: none;
 }
-.session-image-overlay.position-bottom_right {
-  right: 5.556%;
-  bottom: 15.625%;
+.session-overlay-size {
+  display: grid;
+  gap: 10px;
+  margin-block: 18px;
 }
-.session-image-overlay.position-center {
-  max-width: 60.185%;
-  max-height: 41.667%;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+.session-overlay-size input {
+  width: 100%;
+  min-height: 44px;
+  accent-color: #a884ff;
 }
 .session-teleprompter {
   position: absolute;

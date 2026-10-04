@@ -375,6 +375,11 @@ test("quick hold/release waits for native recording startup, then copies the fin
   });
   await expect(shutter).toBeEnabled();
   await expect(page.locator("html")).toHaveClass(/native-camera-active/);
+  const previewFrame = (await calls(page, "start"))[0].options?.preview as {
+    width: number;
+    height: number;
+  };
+  expect(previewFrame.width / previewFrame.height).toBeCloseTo(9 / 16, 3);
   expect(
     await dialog.evaluate(
       (element) => getComputedStyle(element).backgroundColor,

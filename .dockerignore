@@ -5,3 +5,4 @@
 !renderer/**
 !shared/
 !shared/brand.mjs
+!shared/image-overlay.mjs

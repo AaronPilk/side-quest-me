@@ -10,6 +10,10 @@ import {
   watermarkSvg,
   writeImageOverlay,
 } from "../renderer/overlays.mjs";
+import {
+  overlayLayout,
+  validOverlayTransform,
+} from "../shared/image-overlay.mjs";
 const folders: string[] = [];
 async function folder() {
   const value = await mkdtemp(path.join(tmpdir(), "sq-overlay-test-"));
@@ -62,6 +66,62 @@ describe("recording image overlays and export watermark", () => {
         .toBuffer();
       expect(empty[3]).toBe(0);
     }
+  });
+  it("uses the same bounded geometry for a freely positioned, enlarged photo and its exported pixels", async () => {
+    const root = await folder();
+    const source = path.join(root, "input.png");
+    await sharp({
+      create: { width: 80, height: 60, channels: 3, background: "red" },
+    })
+      .png()
+      .toFile(source);
+    for (const transform of [
+      { x: 0.7, y: 0.3, width: 0.4 },
+      { x: 0.99, y: 0.99, width: 0.9 },
+    ]) {
+      const output = path.join(root, "free.png");
+      await writeImageOverlay(source, "center", output, transform);
+      const layout = overlayLayout(
+        { width: 80, height: 60 },
+        "center",
+        transform,
+      );
+      expect(layout.width).toBe(Math.round(transform.width * 1080));
+      expect(layout.left + layout.width).toBeLessThanOrEqual(1080);
+      expect(layout.top + layout.height).toBeLessThanOrEqual(1920);
+      const first = await sharp(output)
+        .extract({ left: layout.left, top: layout.top, width: 1, height: 1 })
+        .raw()
+        .toBuffer();
+      expect([...first]).toEqual([255, 0, 0, 255]);
+      const before = await sharp(output)
+        .extract({
+          left: layout.left,
+          top: layout.top - 1,
+          width: 1,
+          height: 1,
+        })
+        .raw()
+        .toBuffer();
+      expect(before[3]).toBe(0);
+    }
+  });
+  it("bounds tall photos without distortion and rejects malformed or unbounded transforms", () => {
+    const result = overlayLayout({ width: 100, height: 1000 }, "center", {
+      x: 1,
+      y: 0,
+      width: 1,
+    });
+    expect(result).toEqual({ left: 888, top: 0, width: 192, height: 1920 });
+    for (const transform of [
+      null,
+      {},
+      { x: 0.5, y: 0.5, width: 0 },
+      { x: -1, y: 0.5, width: 1 },
+      { x: 0.5, y: NaN, width: 1 },
+      { x: 0.5, y: 0.5, width: 0.5, extra: 1 },
+    ])
+      expect(validOverlayTransform(transform)).toBe(false);
   });
   it("rejects oversized, vector and invalid-position inputs before composing video", async () => {
     const root = await folder();

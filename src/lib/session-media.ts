@@ -2,6 +2,7 @@ import { accessToken, DEMO } from "./auth";
 import { api, request } from "./api";
 import { apiUrl } from "./runtime";
 import type { Clip } from "./types";
+import { validOverlayTransform } from "../../shared/image-overlay.mjs";
 import {
   validSession,
   type RecordedTake,
@@ -27,6 +28,11 @@ export async function saveRecordingSession(
         throw new Error("Choose an overlay image no larger than 5 MB.");
       body.append("overlay", overlay.file, "overlay");
       body.append("overlayPosition", overlay.position);
+      if (overlay.transform) {
+        if (!validOverlayTransform(overlay.transform))
+          throw new Error("Choose a valid photo position and size.");
+        body.append("overlayTransform", JSON.stringify(overlay.transform));
+      }
     }
     const url = apiUrl(
       DEMO ? "/api/local-media/compose" : `/api/quest-runs/${runId}/compose`,

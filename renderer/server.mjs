@@ -17,6 +17,7 @@ import { pathToFileURL } from "node:url";
 import { assertId, MEDIA_LIMITS, renderManifestSchema } from "./contracts.mjs";
 import { MediaError, probeMedia, renderReel, composeTakes } from "./core.mjs";
 import { MAX_OVERLAY_BYTES, OVERLAY_POSITIONS } from "./overlays.mjs";
+import { validOverlayTransform } from "../shared/image-overlay.mjs";
 
 const mode = process.env.SIDEQUEST_RENDERER_MODE || "local";
 const root = path.resolve(
@@ -276,11 +277,27 @@ async function compose(req, res) {
     const takes = form.getAll("take");
     const overlays = form.getAll("overlay");
     const positions = form.getAll("overlayPosition");
+    const transforms = form.getAll("overlayTransform");
+    let transform;
+    if (transforms.length) {
+      try {
+        if (typeof transforms[0] !== "string" || transforms[0].length > 200)
+          throw new Error("Invalid transform");
+        transform = JSON.parse(transforms[0]);
+      } catch {
+        throw new MediaError("Choose a valid photo position and size.", 400);
+      }
+      if (transforms.length !== 1 || !validOverlayTransform(transform))
+        throw new MediaError("Choose a valid photo position and size.", 400);
+    }
     const image = overlays[0];
     const position = positions[0] ?? "center";
     if (
       [...form.keys()].some(
-        (key) => !["take", "overlay", "overlayPosition"].includes(key),
+        (key) =>
+          !["take", "overlay", "overlayPosition", "overlayTransform"].includes(
+            key,
+          ),
       ) ||
       !takes.length ||
       takes.length > 30 ||
@@ -292,6 +309,7 @@ async function compose(req, res) {
       positions.length > 1 ||
       !OVERLAY_POSITIONS.includes(position) ||
       (positions.length && !image) ||
+      (transforms.length && !image) ||
       (image &&
         (typeof image === "string" ||
           !image.size ||
@@ -313,7 +331,7 @@ async function compose(req, res) {
     if (image) {
       const file = path.join(directory, "overlay-source");
       await writeFile(file, Buffer.from(await image.arrayBuffer()));
-      imageOverlay = { file, position };
+      imageOverlay = { file, position, transform };
     }
     const output = await composeTakes(files, directory, imageOverlay);
     await serveFile(req, res, output, "video/mp4");

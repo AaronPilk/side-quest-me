@@ -57,6 +57,13 @@ import {
 import { saveRecordingSession } from "../lib/session-media";
 import type { Run } from "../lib/types";
 import { Button } from "./ui";
+import { ImageOverlayPreview } from "./ImageOverlayPreview";
+import {
+  boundOverlayTransform,
+  overlayLayout,
+  overlayTransformForLayout,
+  type OverlayTransform,
+} from "../../shared/image-overlay.mjs";
 import "./capture-session.css";
 import "./unified-capture.css";
 export { measuredSelection } from "../lib/clip-selection";
@@ -113,7 +120,7 @@ export default function Capture({
   const [galleryUrl, setGalleryUrl] = useState("");
   const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
   const liveVideo = useRef<HTMLVideoElement>(null);
-  const cameraStage = useRef<HTMLDivElement>(null);
+  const videoCanvas = useRef<HTMLDivElement>(null);
   const nativeSessionOpen = useRef(false);
   const nativeShutdown = useRef(Promise.resolve());
   const nativeStart = useRef(Promise.resolve());
@@ -477,7 +484,7 @@ export default function Capture({
     if (!nativeSession) return;
     document.documentElement.classList.add("native-camera-active");
     const update = () => {
-      const bounds = cameraStage.current?.getBoundingClientRect();
+      const bounds = videoCanvas.current?.getBoundingClientRect();
       if (!bounds || !nativeSessionOpen.current) return;
       void nativeCamera
         .updatePreview({
@@ -491,7 +498,7 @@ export default function Capture({
         .catch(() => {});
     };
     const observer = new ResizeObserver(update);
-    if (cameraStage.current) observer.observe(cameraStage.current);
+    if (videoCanvas.current) observer.observe(videoCanvas.current);
     window.addEventListener("resize", update);
     window.visualViewport?.addEventListener("resize", update);
     update();
@@ -648,7 +655,7 @@ export default function Capture({
     const url = URL.createObjectURL(overlay.file);
     setOverlayUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [overlay]);
+  }, [overlay?.file]);
   useEffect(() => {
     const file = takes.at(-1)?.file;
     if (!file) {
@@ -790,7 +797,7 @@ export default function Capture({
         await nativeListenersReady.current;
         if (closed.current || !active.current || id !== requestId.current)
           return;
-        const bounds = cameraStage.current?.getBoundingClientRect();
+        const bounds = videoCanvas.current?.getBoundingClientRect();
         if (!bounds) throw new Error("Camera preview is not ready. Try again.");
         nativeSessionOpen.current = true;
         const state = await nativeCamera.start({
@@ -1065,6 +1072,18 @@ export default function Capture({
       setTorchAvailable(false);
     }
   }
+  function moveOverlay(transform: OverlayTransform) {
+    if (!overlayRef.current) return;
+    const next = { ...overlayRef.current, transform };
+    overlayRef.current = next;
+    setOverlay(next);
+  }
+  function persistOverlay() {
+    if (savedTakes.current.length)
+      void persist(savedTakes.current).catch((cause) =>
+        setError((cause as Error).message),
+      );
+  }
   async function chooseOverlay(next?: ImageOverlay) {
     if (
       next &&
@@ -1245,7 +1264,6 @@ export default function Capture({
         )}
       </div>
       <div
-        ref={cameraStage}
         className={`session-camera-stage ${preview ? "is-preview" : ""}`}
         onPointerDown={(event) => {
           if (
@@ -1306,7 +1324,7 @@ export default function Capture({
           pinch.current = null;
         }}
       >
-        <div className="session-video-canvas">
+        <div ref={videoCanvas} className="session-video-canvas">
           {nativeSession ? (
             <div
               className="session-native-preview"
@@ -1376,35 +1394,22 @@ export default function Capture({
             </div>
           )}
           {overlayUrl && overlay && (
-            <div
-              className="session-overlay-frame"
-              aria-label="Image overlay preview"
-            >
-              <img
-                className={`session-image-overlay position-${overlay.position}`}
-                src={overlayUrl}
-                alt="Your image overlay"
-                style={
-                  overlaySize.width
-                    ? {
-                        width: `${((Math.min(1, (overlay.position === "center" ? 650 : 360) / overlaySize.width, (overlay.position === "center" ? 800 : 480) / overlaySize.height) * overlaySize.width) / 1080) * 100}%`,
-                      }
-                    : undefined
-                }
-                onLoad={(event) =>
-                  setOverlaySize({
-                    width: event.currentTarget.naturalWidth,
-                    height: event.currentTarget.naturalHeight,
-                  })
-                }
-                onError={() => {
-                  void chooseOverlay();
-                  setError(
-                    "This image could not be opened. Choose a different JPG, PNG or WebP image.",
-                  );
-                }}
-              />
-            </div>
+            <ImageOverlayPreview
+              overlay={overlay}
+              url={overlayUrl}
+              size={overlaySize}
+              disabled={locked}
+              onSize={setOverlaySize}
+              onChange={moveOverlay}
+              onCommit={persistOverlay}
+              onSettings={() => setSheet("overlay")}
+              onError={() => {
+                void chooseOverlay();
+                setError(
+                  "This image could not be opened. Choose a different JPG, PNG or WebP image.",
+                );
+              }}
+            />
           )}
         </div>
         {promptOn && !preview && (
@@ -1966,23 +1971,77 @@ export default function Capture({
               </>
             ) : (
               <>
-                <p>This photo appears in your saved video.</p>
+                <p>
+                  Drag your photo to move it. Pinch with two fingers to resize.
+                  Your placement appears in the saved video.
+                </p>
+                {overlay && overlaySize.width > 0 && (
+                  <label className="session-overlay-size">
+                    Photo size
+                    <input
+                      type="range"
+                      min="8"
+                      max="100"
+                      step="1"
+                      aria-label="Photo size"
+                      value={Math.round(
+                        overlayTransformForLayout(
+                          overlayLayout(
+                            overlaySize,
+                            overlay.position,
+                            overlay.transform,
+                          ),
+                        ).width * 100,
+                      )}
+                      onChange={(event) => {
+                        const transform = overlayTransformForLayout(
+                          overlayLayout(
+                            overlaySize,
+                            overlay.position,
+                            overlay.transform,
+                          ),
+                        );
+                        moveOverlay(
+                          boundOverlayTransform(overlaySize, {
+                            ...transform,
+                            width: Number(event.target.value) / 100,
+                          }),
+                        );
+                      }}
+                      onPointerUp={persistOverlay}
+                      onKeyUp={persistOverlay}
+                      onBlur={persistOverlay}
+                    />
+                  </label>
+                )}
                 <div className="session-setting-pills">
                   {positions.map(({ value, label }) => (
                     <button
                       className="session-pill"
                       key={value}
-                      aria-pressed={overlay?.position === value}
+                      aria-pressed={
+                        !overlay?.transform && overlay?.position === value
+                      }
                       onClick={() => {
                         if (overlay)
-                          void chooseOverlay({ ...overlay, position: value });
+                          void chooseOverlay({
+                            file: overlay.file,
+                            position: value,
+                          });
                       }}
                     >
                       {label}
                     </button>
                   ))}
                 </div>
-                <Button onClick={() => setSheet(null)}>Done</Button>
+                <Button
+                  onClick={() => {
+                    persistOverlay();
+                    setSheet(null);
+                  }}
+                >
+                  Done
+                </Button>
                 <button
                   className="session-pill"
                   onClick={() => {

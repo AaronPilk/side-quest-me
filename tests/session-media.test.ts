@@ -101,11 +101,17 @@ describe("unified recording upload", () => {
     await saveRecordingSession("run", [{ file, duration: 12 }], "gallery", {
       file: photo,
       position: "top_right",
+      transform: { x: 0.7, y: 0.3, width: 0.4 },
     });
     const [, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
     const body = init.body as FormData;
     expect(body.getAll("take")).toHaveLength(1);
     expect(body.get("overlayPosition")).toBe("top_right");
+    expect(JSON.parse(body.get("overlayTransform") as string)).toEqual({
+      x: 0.7,
+      y: 0.3,
+      width: 0.4,
+    });
     expect((body.get("overlay") as Blob).size).toBe(photo.size);
   });
   it("normalizes a full-minute single take to avoid encoded-container padding exceeding the sealed limit", async () => {

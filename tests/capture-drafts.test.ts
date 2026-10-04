@@ -43,7 +43,11 @@ describe("restored capture draft media", () => {
         { file: first, duration: 3.1 },
         { file: second, duration: 4.2 },
       ],
-      overlay: { file: photo, position: "center" },
+      overlay: {
+        file: photo,
+        position: "center",
+        transform: { x: 0.7, y: 0.3, width: 0.4 },
+      },
     };
     const restored = await materializeCaptureDraft(saved);
 

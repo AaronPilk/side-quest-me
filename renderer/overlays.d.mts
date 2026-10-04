@@ -12,4 +12,5 @@ export function writeImageOverlay(
   source: string,
   position: string,
   output: string,
+  transform?: import("../shared/image-overlay.mjs").OverlayTransform,
 ): Promise<void>;
