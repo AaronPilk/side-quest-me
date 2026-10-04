@@ -1,10 +1,68 @@
 # App Store preparation — October 4, 2026
 
-**Version 1.0.0 (14) is available in internal TestFlight and selected in the
-editable App Store draft.** It adds drag/pinch photo overlays. The shared
-Discover/Activity/Rewards/Profile loading failure is repaired on the live
-backend, including for Build 13. App Review submission and public release have
-not been sent.
+**Version 1.0.0 (15) is available in internal TestFlight and selected in the
+editable App Store draft.** Age-aware Demon / Full Send discovery is deployed
+in production. App Review submission and public release have not been sent.
+
+## Build 15 delivery
+
+Source `4025788af806408b6740bf3d8f12794add03df11` includes the age and quest
+routing work from `1148d52f905d1379c7055a87908838079b5c9312`, plus smaller-iPhone
+onboarding spacing and updated browser assertions for the intended nightlife
+review controls. Age is optional, private and self-reported: Under 18, 18–20 or
+21+. Imported summaries and legacy defaults cannot establish adult eligibility.
+Current stored age is checked again on cached discovery and acceptance.
+
+Demon now shapes the social mood independently of intensity, while Full Send
+requires a substantive challenge or commitment. Prompts distinguish paid venue
+staff from recruited strangers and ask for clear objectives, outcomes and
+filming moments. Eight new authored experiences bring the fallback catalog to
+12 families. Overnight activities can use Unlimited time; unknown admission,
+room and booking costs remain unconfirmed. See the detailed
+[adult routing record](ADULT_QUEST_ROUTING_2026-10-04.md).
+
+[Full source checks](https://github.com/AaronPilk/side-quest-me/actions/runs/37237781592)
+passed for this exact source: **799 unit tests, all 286 browser scenarios**,
+database checks, render fixtures, lint, typecheck and the production build.
+Local database advisor checks passed with all 23 migrations. The first CI pass
+caught a small-iPhone onboarding footer overflow and seven stale assertions
+that assumed normal Create never exposes age-aware nightlife choices. After
+correction, the 23 onboarding/age and 16 discovery/wizard focused scenarios
+passed before the full final CI run. No new database migration is required.
+
+The production iPhone Simulator build succeeded. Native interaction verified
+age selection and persistence through onboarding and navigation into a Demon /
+Full Send outing. Browser tests verify adult opt-in, age changes, stale-plan
+recovery, and 390 × 844 / 393 × 852 safe-area layout. These are not physical
+iPhone acceptance results. Camera and overlay behavior are unchanged from
+Build 14.
+
+Three synthetic live GPT-6 Astra samples passed generation and independent
+review. Earlier iterations were rejected for weak ideas or mismatched details;
+the final three passes do not guarantee every generation's quality. Production
+smoke verified private age save/read, absence from public profile data and five
+authenticated app reads. The review account's original preferences were
+restored. Production AI discovery, cached replay and acceptance were not
+exercised by that smoke; their regressions use local fixtures, separately from
+the synthetic live-provider samples.
+
+[Production deployment](https://github.com/AaronPilk/side-quest-me/actions/runs/37237810865)
+succeeded. Worker/renderer version `69795528-6290-4850-ba1b-d641113dabe3` serves
+the final source. Fresh health readback confirmed production identity,
+database/renderer configured and `demo=false`.
+
+The final v2 archive passed distribution signing, arm64, bundle/team identity,
+production asset checks, native camera symbol checks and Apple validation.
+IPA SHA256:
+`8b3fcd8469f95e85bf28c1a3109126f7fd4896a645966d8b68a601951d27688d`.
+Upload succeeded without errors, delivery UUID
+`ac191777-a5ba-4f27-ab5d-e65c2f8f4302`. Independent Apple readback at
+22:20:59 UTC confirmed that same Build 15 ID, processing `VALID`, internal state
+`IN_BETA_TESTING`, membership in **Sidequest Internal** and exact saved English
+test notes. Editable App Store version `07c31559-9097-43fb-9d6f-2744374be7aa`
+selects Build 15 and remains `PREPARE_FOR_SUBMISSION` with `MANUAL` release.
+Private evidence is recorded in `.local/beta15-delivery-verified.json` and its
+separate build, group, localization and draft API readbacks.
 
 ## Build 14 delivery
 

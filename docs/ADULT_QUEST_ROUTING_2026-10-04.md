@@ -1,6 +1,6 @@
 # Adult quest routing — October 4, 2026
 
-Sidequest now collects an optional private age group and routes Demon / Full Send toward concrete adventures, rivalry and reveals that fit the actual outing. Normal Create uses the saved preferences and separate outing permissions to shape AI ideas and authored alternatives. This is an implementation and verification record. **Build 15 is being prepared; no production deployment, TestFlight availability or App Store submission is confirmed by this document.**
+Sidequest now collects an optional private age group and routes Demon / Full Send toward concrete adventures, rivalry and reveals that fit the actual outing. Normal Create uses the saved preferences and separate outing permissions to shape AI ideas and authored alternatives. **The matching Worker is deployed and Build 15 is available in internal TestFlight.** See the [release evidence](APP_STORE_PREPARATION_2026-10-04.md). No App Review submission or public release has been sent.
 
 ## Account and outing flow
 
@@ -30,7 +30,7 @@ Three final synthetic live GPT-6 Astra discovery samples passed generation and i
 
 | Saved age / time | Returned experience | Activity time | Observed latency |
 | --- | --- | --- | --- |
-| 21+ / 180-minute outing | **Book the Roast. Reveal the Traitor.** — a booked professional roast with a secret selector | 150 minutes | 48.3 seconds |
+| 21+ / 180-minute outing | **Book the Roast. Reveal the Traitor.** — a proposed professional roast booking with a secret selector | 150 minutes | 48.3 seconds |
 | 18–20 / 180-minute outing | **Trust Nobody at This Table** — a staffed immersive mystery with group objectives | 160 minutes | 40.3 seconds |
 | 21+ / Unlimited | **Let Your Friends Book Your Bad Decisions** — a mystery dinner, lounge and show itinerary | 330 minutes | 50.7 seconds |
 
@@ -40,7 +40,7 @@ Local evidence: `.local/ai-eval/discovery/adult-demon-nightlife.json`, `young-ad
 
 **No database migration is required.** Age uses existing private preference JSON; the optional quest age floor uses existing content JSON. No stored quest rows are rewritten. The schema accepts older clients and existing content, while the server applies current age restrictions when a plan is replayed or accepted.
 
-Release requires the matching Worker logic and updated iOS bundle. Confirm the age choice, skip/clear flow, adult-nightlife controls and stale-plan recovery on the signed iPhone build. Recheck authenticated production discovery and replay after deployment, then record the actual Worker version and TestFlight build status in release evidence. Public privacy and AI consent copy were updated; no Apple privacy declaration, age-rating answer or submission was changed as part of these implementation notes.
+The matching Worker logic is deployed and the updated iOS bundle is available in internal TestFlight. The final source passed all 286 browser scenarios and 799 unit tests. Simulator interaction verified age selection and persistence; the full adult opt-in and stale-plan recovery flows are covered by browser fixtures and remain physical-iPhone checks. Production smoke verified private age persistence and public exclusion, but did not exercise production AI discovery or replay. Public privacy and AI consent copy were updated; no Apple privacy declaration, age-rating answer or submission was changed as part of this release.
 
 Live event inventory and booking confirmation are still external. Apple Maps supplies place listings, not ticket availability, hotel rooms or current all-in prices. Generation still has bounded deadlines and can fall back or fail when no strong, compatible plan survives review.
 
