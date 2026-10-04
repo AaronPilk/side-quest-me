@@ -52,6 +52,14 @@ function PrivacyPolicy() {
           of that summary.
         </p>
         <p>
+          You may also choose an age group: under 18, 18–20 or 21+. We store
+          this private account answer to match age-appropriate experiences. We
+          do not ask for a birth date or identity document, and this answer is
+          not age verification. You can change or clear it in Account & quest
+          preferences. Without a confirmed adult age group, adult experiences
+          are excluded.
+        </p>
+        <p>
           We store your outing choices, accepted quests, completion records,
           saved series, reward records and the content you upload or create:
           videos, recorded audio, photos, overlays and captions. Social actions
@@ -98,14 +106,14 @@ function PrivacyPolicy() {
       </Section>
       <Section title="Private and public content">
         <p>
-          Your journal, imported summary, confirmed preferences and source
-          footage are private to your account. A reel becomes public after you
-          submit it for publication and an independent operator approves its
-          full video, caption and quest instructions. Updates require another
-          review. Your public profile, published posts and series are visible to
-          other people. Creating a share link makes the linked content
-          accessible to people who have that link. A downloaded copy cannot be
-          recalled by unpublishing or deleting the original.
+          Your journal, imported summary, age group, confirmed preferences and
+          source footage are private to your account. A reel becomes public
+          after you submit it for publication and an independent operator
+          approves its full video, caption and quest instructions. Updates
+          require another review. Your public profile, published posts and
+          series are visible to other people. Creating a share link makes the
+          linked content accessible to people who have that link. A downloaded
+          copy cannot be recalled by unpublishing or deleting the original.
         </p>
         <p>
           Making a video available for a business offer is a separate choice. A
@@ -124,10 +132,11 @@ function PrivacyPolicy() {
         </p>
         <p>
           AI generation asks for consent to the named provider before sending
-          confirmed preferences, outing limits and relevant selected place or
-          activity context. The current provider is OpenAI. Your name, raw
-          imported summary and exact device coordinates are excluded from these
-          AI requests. Sidequest requests that OpenAI not store the generated
+          confirmed preferences, your optional age group for experience
+          planning, outing limits and relevant selected place or activity
+          context. The current provider is OpenAI. Your name, raw imported
+          summary and exact device coordinates are excluded from these AI
+          requests. Sidequest requests that OpenAI not store the generated
           response, but this is not a promise of zero provider retention; the
           provider’s applicable data controls govern its processing.
         </p>

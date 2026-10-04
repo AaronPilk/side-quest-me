@@ -278,7 +278,7 @@ describe("three-call quest drafting budget and semantic gate", () => {
     );
     expect(expanded.selectedConcept.id).toBe("B");
     expect(reviewed.selectedConcept).not.toHaveProperty("scores");
-    expect(reviewed.proposal).toEqual(proposal);
+    expect(reviewed.proposal).toEqual({ ...proposal, minimumAge: null });
     expect(reviewed).not.toHaveProperty("candidates");
     for (const body of bodies) {
       const context = JSON.parse(body.input[0].content[0].text);
@@ -409,6 +409,7 @@ describe("three-call quest drafting budget and semantic gate", () => {
     });
     const quest = questVariantSchema.parse({
       ...mismatched,
+      minimumAge: mismatched.minimumAge ?? undefined,
       ...originalQuestIdentity(input.draftId, 1),
       award: fitting.award,
       cooldownDays: 30,

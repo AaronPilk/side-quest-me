@@ -1,4 +1,6 @@
-# Sidequest AI setup — build 6, 2026-10-02
+# Sidequest AI setup
+
+Implementation updated October 4, 2026. Build 15 is being prepared; the October 4 changes described below are not yet release confirmation. Build-specific deployment evidence later in this document is historical. See [adult quest routing implementation and release notes](ADULT_QUEST_ROUTING_2026-10-04.md) for the current verification record.
 
 Sidequest can use **xAI/Grok, OpenAI or Anthropic/Claude** through a server-only
 provider adapter. The current implementation supports three consented flows:
@@ -17,6 +19,26 @@ provider adapter. The current implementation supports three consented flows:
 The imported-summary review remains manual. Browsing the published catalog stays deterministic, while normal Create now uses experience discovery when the configured provider is available. The iPhone can retrieve live Apple Maps listings across multiple activity categories; listing presence does not establish opening hours, ticket inventory, current prices, or permission. Live event inventory is not configured. Model output
 requires review; schema and metadata checks do not establish that a model's text
 is accurate or that it has honestly labeled every possible conflict.
+
+## Private age and adult experience routing — October 4
+
+Account setup asks an optional private age band (under 18 / 18–20 / 21+). Only a direct saved survey answer qualifies; imported ChatGPT prose, legacy defaults, category and intensity do not establish adulthood. The normal Create and AI draft consent copy includes this optional age group because experience-routing context sends it to the selected provider. Public creator/social profiles and public-content-screening requests exclude it. The filming-copy helper continues to use its narrower existing confirmed-preference payload, which excludes age.
+
+Age remains self-reported. Unknown/under-18 accounts receive no adult-only suggestions. An 18–20 answer does not establish alcohol or 21+ venue eligibility; 21+ experiences carry `minimumAge:21` and recheck the latest account age on acceptance. Group eligibility, adult-nightlife opt-in, boundaries and venue/activity permissions remain separate. Older adult experiences without an explicit age floor are blocked for 18–20 accounts until a fresh age-matched suggestion is requested. Clearing age does not silently change a saved outing: Create offers an explicit action to remove adult-nightlife choices and continue.
+
+## Current experience routing and fallback — October 4
+
+`shared/quest-routing.ts` builds the same structured routing brief for normal discovery and the original-draft pipeline. It combines directly confirmed preferences with the current category, intensity, group size, setting, time, travel and budget. Current outing choices take priority over usual interests; exclusions remain binding. Demon steers toward audacious rivalry, surprises and a decisive reveal. Full Send requires a substantial commitment or competition with a result the group cares about; a routine activity with extra rounds or a nickname does not qualify.
+
+For an eligible adult-nightlife outing, `worker/experience-discovery.ts` assigns the three candidate concepts different experience directions before selection. This prevents familiar sports/games interests from making every candidate another bar game. Directions include a booked participatory show, a staffed immersive experience and a spontaneous takeover or overnight stay when the time allows. A paid professional delivering a booked, advertised service is distinct from recruiting an unpaid stranger; neither staff nor other guests are presumed willing to join or be filmed. The independent reviewer checks the actual instructions, including intensity, age fit, costs, boundaries and whether the concept merely renames a previous suggestion.
+
+Nightlife can be suggested with venue approval still pending, but acceptance still requires the relevant confirmations. Every 18–20 nightlife proposal carries an 18+ floor and excludes presumed drinking/21+ admission; a 21+ nightlife proposal carries a 21+ floor. Private age is reloaded before discovery replay and before acceptance. A cached response or old proposal cannot restore eligibility after the account's age or boundaries change. Older adult proposals without an age floor require a fresh suggestion for an 18–20 account.
+
+`worker/curated-experiences.ts` provides 12 authored fallback families: a bar-route competition, mystery menu, overnight staycation, unfamiliar live show, golf rivalry, novelty fishing, e-bike exploration, a willing-group wingman challenge, operator-run adrenaline, a skill challenge, a timed competition and dining. Each has its own group, setting, intensity, age, boundary, time and budget conditions. Bar games and the mystery menu do not masquerade as Full Send. Selection can use a matching supplied place listing; it never borrows an unrelated venue's name. Previously shown titles are excluded, and a fallback returns nothing when no authored option fits. These plans stay explicitly labeled as authored alternatives rather than AI output or live availability.
+
+Unlimited time may produce an actual overnight experience. The quest activity schema supports up to 2,880 minutes; a finite outing remains capped at 720 minutes and still reserves travel separately. The authored staycation requires Unlimited and represents the overnight commitment as 1,200 minutes. Prices and bookings remain pending until confirmed, including all required rooms, tickets, rentals, meals, fees and travel within the group ceiling. Apple Maps listings are not inventory or quotes.
+
+These changes use existing private preference and quest-content JSON. **No database migration is required.** The normal two-call generation/review budget, named-provider consent, private proposal ownership and zero-award rule remain unchanged. Live samples passed on October 4, but earlier attempts also showed weak or mismatched proposals being rejected. Quality gates and fallback coverage reduce failures; they do not guarantee that every request is accepted, novel or enjoyable.
 
 ## Provider choice
 

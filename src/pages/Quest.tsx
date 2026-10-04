@@ -579,6 +579,7 @@ export default function Quest() {
           <QuestWizard
             key={`${requestedTemplate || "new-quest"}:${seriesPartId || "standalone"}`}
             outing={outing}
+            preferences={me.data?.profile.preferences}
             update={update}
             onFind={discover}
             center={center}
@@ -600,8 +601,8 @@ export default function Quest() {
                         : "Grok"}
                   </strong>
                   <p className="fine-print">
-                    Find my quests sends your confirmed preferences, this plan
-                    and nearby Apple Maps listings to{" "}
+                    Find my quests sends your confirmed preferences, optional
+                    age group, this plan and nearby Apple Maps listings to{" "}
                     {aiConfig.data.provider === "openai"
                       ? "OpenAI"
                       : aiConfig.data.provider === "anthropic"
@@ -918,6 +919,17 @@ function GeneratedQuestChecks({
             Everyone taking part meets this activity’s age requirement.
           </span>
         </label>
+      )}
+      {codes.has("age") && (
+        <Notice>
+          {pending.find((issue) => issue.code === "age")?.reason}
+          <Link
+            className="button secondary"
+            to="/preferences?step=account&returnTo=%2Fcreate"
+          >
+            Review age preferences
+          </Link>
+        </Notice>
       )}
       {pending.some((issue) => issue.code === "budget") && (
         <Notice error>

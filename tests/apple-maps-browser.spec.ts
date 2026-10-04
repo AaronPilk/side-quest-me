@@ -284,6 +284,19 @@ test("changing or removing a mocked place clears prior venue confirmations and h
 }) => {
   await installMockSdk(page);
   await openTravel(page, "At a venue");
+  await page.evaluate(async () => {
+    const apiPath = "/src/lib/api.ts";
+    const { api } = await import(apiPath);
+    const { profile } = await api.me();
+    await api.updateProfile({
+      preferences: {
+        ...profile.preferences,
+        ageBand: "21_plus",
+        sources: { ...profile.preferences.sources, ageBand: "survey" },
+      },
+    });
+  });
+  await page.reload();
   await pickMockPlace(page);
   await reviewQuestPlans(page);
   const options = page.locator(".quest-arrangements");

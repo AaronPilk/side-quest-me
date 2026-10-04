@@ -17,6 +17,7 @@ import {
   AWARDS,
   CATEGORIES,
   INTENSITIES,
+  MAX_QUEST_ACTIVITY_MINUTES,
   questVariantSchema,
   type QuestVariant,
 } from "../../shared/domain";
@@ -93,6 +94,7 @@ function DraftForm({
           category: form.get("category"),
           intensity,
           durationMinutes: Number(form.get("duration")),
+          minimumAge: q?.minimumAge,
           minParticipants: Number(form.get("minParticipants")),
           maxParticipants: Number(form.get("maxParticipants")),
           ...(q?.allowedGroups ? { allowedGroups: q.allowedGroups } : {}),
@@ -195,7 +197,7 @@ function DraftForm({
               type="number"
               required
               min="15"
-              max="720"
+              max={MAX_QUEST_ACTIVITY_MINUTES}
               defaultValue={q?.durationMinutes ?? 30}
             />
           </label>

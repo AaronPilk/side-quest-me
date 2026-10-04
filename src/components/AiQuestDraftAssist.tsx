@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
 import {
   AI_PROVIDER_LABELS,
@@ -13,6 +14,8 @@ import {
   type Outing,
 } from "../../shared/domain";
 import { originalQuestIdentity } from "../../shared/community";
+import { isAdultAgeConfirmed } from "../../shared/age-eligibility";
+import { api } from "../lib/api";
 import { aiQuestApi } from "../lib/ai-quest-api";
 import { Button, Chips, Loading, Notice, money, useResource } from "./ui";
 import "./ai-quest-assist.css";
@@ -27,6 +30,10 @@ export function AiQuestDraftAssist({
   onManual: () => void;
 }) {
   const config = useResource(aiQuestApi.config);
+  const account = useResource(api.me);
+  const accountAdult = Boolean(
+    account.data && isAdultAgeConfirmed(account.data.profile.preferences),
+  );
   const [draftId] = useState(() => crypto.randomUUID());
   const [outing, setOuting] = useState<Outing>(() =>
     outingSchema.safeParse(initialOuting).success
@@ -289,13 +296,35 @@ export function AiQuestDraftAssist({
             </label>
             {outing.setting === "venue" && (
               <>
+                {!accountAdult && (
+                  <Link
+                    className="button secondary"
+                    to="/preferences?step=account&returnTo=%2Fcreate"
+                  >
+                    Set your age group for adult experiences
+                  </Link>
+                )}
                 <div className="ai-draft-plan" style={{ gap: 10 }}>
                   <span>Age eligibility at this venue</span>
+                  {!accountAdult &&
+                    (outing.adultContext || outing.adultEligible) && (
+                    <Button
+                      type="button"
+                      secondary
+                      onClick={() =>
+                        update({ adultContext: false, adultEligible: false })
+                        }
+                      >
+                        Find ideas without adult nightlife
+                      </Button>
+                    )}
                   <Chips
                     label="AI quest age eligibility"
                     options={[
                       { id: "unknown", label: "Not confirmed" },
-                      { id: "eligible", label: "Adults and eligible" },
+                      ...(accountAdult
+                        ? [{ id: "eligible", label: "Adults and eligible" }]
+                        : []),
                     ]}
                     value={outing.adultEligible ? "eligible" : "unknown"}
                     onChange={(value) =>
@@ -312,7 +341,7 @@ export function AiQuestDraftAssist({
                     group is an adult and meets this venue’s age requirement.
                   </span>
                 </div>
-                {outing.adultEligible && (
+                {accountAdult && outing.adultEligible && (
                   <div className="ai-draft-plan" style={{ gap: 10 }}>
                     <span>Venue permission</span>
                     <Chips
@@ -336,7 +365,9 @@ export function AiQuestDraftAssist({
                     </span>
                   </div>
                 )}
-                {outing.adultEligible && outing.venuePermission ? (
+                {accountAdult &&
+                outing.adultEligible &&
+                outing.venuePermission ? (
                   <div className="ai-draft-plan" style={{ gap: 10 }}>
                     <span>Adult nightlife · optional</span>
                     <Chips
@@ -371,9 +402,9 @@ export function AiQuestDraftAssist({
                 onChange={(event) => setConsent(event.target.checked)}
               />
               <span>
-                Send my brief, this plan and confirmed preferences to{" "}
-                {AI_PROVIDER_LABELS[config.data.provider ?? "openai"]}. My
-                imported summary, account identity and device location aren’t
+                Send my brief, this plan, confirmed preferences and optional age
+                group to {AI_PROVIDER_LABELS[config.data.provider ?? "openai"]}.
+                My imported summary, account identity and device location aren’t
                 included. Anything I write in the brief will be shared.
               </span>
             </label>

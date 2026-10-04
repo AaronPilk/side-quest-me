@@ -45,6 +45,7 @@ const fieldsForIssue: Record<EligibilityIssueCode, (keyof Outing)[]> = {
   venue_permission: ["venuePermission"],
   arrangements: ["arrangementConfirmed"],
   adults: ["adultEligible"],
+  age: [],
   adult_context: ["adultContext"],
   boundary: [],
   custom_boundary: [],
@@ -149,6 +150,7 @@ function recoveryFor(
   if (
     codes.has("boundary") ||
     codes.has("custom_boundary") ||
+    codes.has("age") ||
     codes.has("currency")
   )
     return null;

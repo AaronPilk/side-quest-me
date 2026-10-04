@@ -15,6 +15,7 @@ import {
   SURVEY_QUESTIONS,
   preferenceChips,
   resetPreferenceAnswer,
+  setPreferenceAnswer,
   INTEREST_OPTIONS,
   type SurveyQuestion,
 } from "../../shared/profile";
@@ -22,6 +23,7 @@ import { api } from "../lib/api";
 import { Button, Notice, PageTitle, Loading } from "../components/ui";
 import SummaryReview from "../components/SummaryReview";
 import { AccountTypeChoice } from "../components/AccountTypeChoice";
+import { AgeBandChoice } from "../components/AgeBandChoice";
 import { PreferenceControl } from "../components/PreferenceControl";
 import {
   consumeReturnTo,
@@ -427,12 +429,14 @@ export default function Onboarding() {
       if (!skip)
         await api.updateProfile({
           displayName: profile.displayName.trim(),
+          preferences: profile.preferences,
           ...(profile.accountType ? { accountType: profile.accountType } : {}),
         });
       if (!mounted.current) return;
       if (!skip)
         recordSaved({
           displayName: profile.displayName.trim(),
+          preferences: profile.preferences,
           ...(profile.accountType ? { accountType: profile.accountType } : {}),
         });
       if (skip) {
@@ -444,6 +448,7 @@ export default function Onboarding() {
                 ...current,
                 displayName: saved.profile.displayName,
                 accountType: saved.profile.accountType,
+                preferences: saved.profile.preferences,
               }
             : current,
         );
@@ -647,6 +652,21 @@ export default function Onboarding() {
                 }
               />
             </label>
+            <AgeBandChoice
+              value={profile.preferences.ageBand}
+              disabled={busy}
+              onChange={(ageBand) =>
+                setProfile({
+                  ...profile,
+                  preferences: setPreferenceAnswer(
+                    profile.preferences,
+                    "ageBand",
+                    ageBand,
+                    "survey",
+                  ),
+                })
+              }
+            />
             <div className="survey-footer">
               <Button
                 busy={busy}

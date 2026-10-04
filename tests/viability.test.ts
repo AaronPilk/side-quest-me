@@ -54,12 +54,16 @@ describe("guided creation viability and explicit recovery", () => {
     });
     const untouched = outing({ category: "daytime", intensity: "bold" });
     expect(
-      ineligibilityReasons(demanding, untouched, prefs()).length,
+      ineligibilityReasons(
+        demanding,
+        untouched,
+        prefs({ ageBand: "21_plus", sources: { ageBand: "survey" } }),
+      ).length,
     ).toBeGreaterThan(3);
     expect(
       assessViability(
         untouched,
-        prefs(),
+        prefs({ ageBand: "21_plus", sources: { ageBand: "survey" } }),
         ["category", "intensity"],
         [demanding],
       ),
@@ -67,7 +71,7 @@ describe("guided creation viability and explicit recovery", () => {
     expect(
       assessViability(
         untouched,
-        prefs(),
+        prefs({ ageBand: "21_plus", sources: { ageBand: "survey" } }),
         ["category", "intensity", "participants", "group"],
         [demanding],
       ).viableCount,
@@ -169,7 +173,12 @@ describe("guided creation viability and explicit recovery", () => {
       setting: "venue",
       budgetMinor: 5000,
     });
-    const result = assessViability(plan, prefs(), all, [quest]);
+    const result = assessViability(
+      plan,
+      prefs({ ageBand: "21_plus", sources: { ageBand: "survey" } }),
+      all,
+      [quest],
+    );
     expect(result.viableCount).toBe(0);
     expect(result.recoveries).toHaveLength(1);
     expect(result.recoveries[0].requiresConfirmation).toBe(true);

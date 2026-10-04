@@ -1,4 +1,5 @@
 import { confirmedAiPreferences } from "./ai-quest";
+import { confirmedAgeBand } from "./age-eligibility";
 import {
   effectiveBudget,
   normalizePreferences,
@@ -46,7 +47,20 @@ const intensityDirection: Record<Outing["intensity"], string> = {
     "Make an easy-entry experience with a specific enjoyable objective and a visible payoff; keep the commitment light.",
   bold: "Create a lively experience with a real creative, social or competitive stretch and a clear payoff.",
   full_send:
-    "Deliver the strongest experiential route: an ambitious adventure, standout competition, elaborate reveal or legitimate adrenaline experience. A routine open mic, extra rounds, crafts or observation exercise alone does not meet Full Send.",
+    "Deliver the strongest experiential route: a real commitment worth telling friends about, a fiercely contested competition, a spontaneous booking with a reveal, or legitimate adrenaline. State what the group commits to, what changes because of the result, and the decisive moment. A routine open mic, extra rounds, crafts or observation exercise alone does not meet Full Send. Full Send is not synonymous with sport, expensive tickets, or intoxication.",
+};
+
+const categoryDirection: Record<Outing["category"], string> = {
+  date_night:
+    "Build chemistry through a shared adventure, rivalry or reveal for exactly this couple; a date is not automatically quiet or sentimental. Never invent shared memories.",
+  daytime:
+    "Make the day worth leaving home for: a real activity, a surprising destination or a competition with a result people care about.",
+  late_night:
+    "Make a proper night out with a decisive mission: music, a show, a venue challenge, a mystery booking or a nightlife route when eligible. Do not default to a cozy reflection exercise.",
+  street_challenges:
+    "Give the group a concrete public-world mission and a finish line. Public space does not make bystanders participants; strangers join only through an allowed, genuinely optional invitation.",
+  demon:
+    "Demon means cheeky rivalry, audacious surprises, ridiculous-but-playable rules and a story friends will retell. It is a mood, not an age rating. For eligible adults it can be irreverent nightlife or flirtatious fun among willing adults. For everyone, preserve the edge with a real winner, a reveal or a meaningful commitment; not a wholesome scavenger hunt, observation task, craft or generic team-building exercise. The joke targets the willing group, never workers or vulnerable strangers.",
 };
 
 const exclusionDomains: Partial<Record<Exclusion, QuestExperienceDomain[]>> = {
@@ -67,6 +81,8 @@ export function buildQuestRoutingBrief(
   outing: Outing,
 ) {
   const preferences = normalizePreferences(preferencesInput);
+  const ageBand = confirmedAgeBand(preferences);
+  const ageEligible = ageBand === "18_20" || ageBand === "21_plus";
   const confirmed = confirmedAiPreferences(
     preferences,
   ) as ConfirmedRoutingPreferences;
@@ -93,6 +109,10 @@ export function buildQuestRoutingBrief(
       : outing.durationMinutes - outing.travelMinutes;
   const adultBlockers: string[] = [];
   if (outing.adultContext) {
+    if (!ageEligible)
+      adultBlockers.push(
+        ageBand === "under_18" ? "under_adult_age" : "age_not_confirmed",
+      );
     if (!outing.adultEligible)
       adultBlockers.push("adult_eligibility_not_self_confirmed");
     if (outing.setting !== "venue") adultBlockers.push("venue_required");
@@ -102,6 +122,11 @@ export function buildQuestRoutingBrief(
       adultBlockers.push("adult_venues_excluded");
   }
   const adultNightlife = outing.adultContext && adultBlockers.length === 0;
+  const nightlifeSuggestionAllowed =
+    outing.adultContext &&
+    adultBlockers.every(
+      (blocker) => blocker === "venue_permission_not_confirmed",
+    );
   const excludedDomains = [
     ...new Set(exclusions.flatMap((value) => exclusionDomains[value] ?? [])),
   ];
@@ -186,18 +211,37 @@ export function buildQuestRoutingBrief(
       domainsRequiringActivityOptIn,
       excludedDomains,
       direction: intensityDirection[outing.intensity],
+      categoryDirection: categoryDirection[outing.category],
+      challengeDesign: {
+        requireConcreteActivity: true as const,
+        objective:
+          "Name the actual activity and the rules that make it this group's quest, then a clear finish or honest failed attempt.",
+        stakes:
+          "For friends, use an agreed winner privilege, a capped group-funded dinner, next-stop control, a trophy or an earned reveal when it strengthens the activity. Get agreement and count every required purchase in the budget; never promise app-funded prizes or require a loser to pay an uncapped bill.",
+        novelty:
+          "Change the actual experience and decisive mechanic, not just the title or number of rounds. The selected mood should survive budget, time and participation limits.",
+        filmHook:
+          "Open with the actual bet-free challenge, commitment or mystery in one sentence; capture the decisive attempt and the real result. Filming helps tell the experience and must not become the whole activity.",
+      },
       preserveIntensityUnderConstraints: true as const,
       noFeasibleMatch: "return_no_fit_instead_of_a_weak_placeholder" as const,
     },
     adultContext: {
       requested: outing.adultContext,
+      participantAgeBand: ageBand,
+      ageEligible,
       venueMinimumSelfConfirmed: outing.adultEligible,
       ageVerified: false as const,
       legalDrinkingAgeVerified: false as const,
       nightlifeRouteAllowed: adultNightlife,
+      nightlifeSuggestionAllowed,
+      alcoholSuggestionAllowed:
+        nightlifeSuggestionAllowed &&
+        ageBand === "21_plus" &&
+        !excluded.has("alcohol"),
       blockers: adultBlockers,
       direction:
-        "Adult flags are self-confirmation of the venue minimum, not verified age or verified 21+ status. Group, category and intensity never establish adulthood. Adult nightlife does not require alcohol.",
+        "Age band is this account owner's private self-report, not ID verification or the ages of friends. Unknown or under-18 age cannot unlock adult-only suggestions. Outing flags separately confirm every participant meets the chosen venue's age rules and opts in. 18–20 allows only age-appropriate adult venues, never presumed alcohol eligibility. Even 21+ needs the actual venue and local rules; alcohol is optional and never a score, quota, forfeit or prerequisite. Adult nightlife does not require alcohol.",
     },
     boundaries: {
       exclusions,
@@ -216,8 +260,9 @@ export function buildQuestRoutingBrief(
       confirmedNonTargetSurpriseRole,
       requiredIntoxication: false as const,
       drinkingBeforePhysicalActivities: false as const,
+      paidGambling: false as const,
       direction:
-        "Firm exclusions override interests and preferred domains. Food challenges excludes challenge mechanics, not ordinary cooking or dining. Being surprised excludes making this user the target; a confirmed mastermind or camera-person role can organize or film a willing group's surprise while remaining outside the reveal. Without that confirmed role, do not assume surprise participation. Unknown answers grant no permissions. Do not require intoxication, drinking quotas, or drinking before driving or physical activities.",
+        "Firm exclusions override interests and preferred domains. Food challenges excludes challenge mechanics, not ordinary cooking or dining. Being surprised excludes making this user the target; a confirmed mastermind or camera-person role can organize or film a willing group's surprise while remaining outside the reveal. Without that confirmed role, do not assume surprise participation. Unknown answers grant no permissions. No drinking quotas, chugging, required intoxication, or drinking before driving, cycling, water or physical activities. Do not create paid gambling, wagers or parlays; use a non-cash scoreboard. Do not use fake disabilities, pressure workers for personal contact, send messages without the account owner's approval, or make unwilling/vulnerable people the punchline.",
     },
     resources: {
       currency: outing.currency,

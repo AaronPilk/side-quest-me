@@ -11,6 +11,20 @@ async function prepare(
 ) {
   await page.goto("/");
   await page.getByRole("button", { name: "Explore the demo first" }).click();
+  // These proposal fixtures include eligible adult venues. Production accounts
+  // still start with unknown age; the age suite covers the unconfirmed gate.
+  await page.evaluate(async () => {
+    const apiPath = "/src/lib/api.ts";
+    const { api } = await import(apiPath);
+    const { profile } = await api.me();
+    await api.updateProfile({
+      preferences: {
+        ...profile.preferences,
+        ageBand: "21_plus",
+        sources: { ...profile.preferences.sources, ageBand: "survey" },
+      },
+    });
+  });
   // Load the actual lazy client module before mocking it. A running Vite server
   // may use a timestamped module URL after other AI source edits.
   await page.getByRole("link", { name: "Draft with AI", exact: true }).click();
@@ -171,7 +185,7 @@ test("AI quest proposal requires Grok consent and stays unsaved until the editab
   expect(await calls(page)).toEqual([]);
   await page
     .getByRole("checkbox", {
-      name: /Send my brief, this plan and confirmed preferences to xAI/,
+      name: /Send my brief, this plan, confirmed preferences and optional age group to xAI/,
     })
     .check();
   await create.click();
@@ -459,7 +473,7 @@ test("AI draft explains a pending comparison without inventing progress or accep
   await page.getByRole("button", { name: "Shape the plan" }).click();
   await page
     .getByRole("checkbox", {
-      name: /Send my brief, this plan and confirmed preferences to OpenAI/,
+      name: /Send my brief, this plan, confirmed preferences and optional age group to OpenAI/,
     })
     .check();
   const create = page.getByRole("button", {

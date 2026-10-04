@@ -97,6 +97,14 @@ export const aiQuestDraftProposalSchema = z
     privateGenerated: true,
   })
   .required({ allowedGroups: true })
+  // Strict model output requires every field; null means no additional age
+  // restriction and becomes omitted in the canonical quest after generation.
+  .extend({
+    minimumAge: z
+      .union([z.literal(18), z.literal(21)])
+      .nullable()
+      .default(null),
+  })
   .strict();
 export type AiQuestDraftResult = {
   draftId: string;

@@ -106,7 +106,11 @@ function seedRuns(value: DemoPersona, runs: Run[]) {
         profile: {
           displayName: DEMO_PEOPLE[value].name,
           summary: privateProfileText,
-          preferences: DEFAULT_PREFERENCES,
+          preferences: {
+            ...DEFAULT_PREFERENCES,
+            ageBand: "21_plus",
+            sources: { ageBand: "survey" },
+          },
           timezone: "UTC",
           locale: "en",
           onboardingCompleted: true,
@@ -550,6 +554,8 @@ describe("isolated demo publication", () => {
     for (const hidden of [
       privateProfileText,
       "preferences",
+      "ageBand",
+      "21_plus",
       "ownerId",
       "assetId",
       "runId",

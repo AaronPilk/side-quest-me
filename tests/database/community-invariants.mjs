@@ -66,7 +66,7 @@ export async function runCommunityTests(sql) {
     );
   }
   await sql(
-    `select sq_upsert_profile(${q(creator)},${j({ imported_summary: "PRIVATE_SUMMARY_NEVER_PUBLIC", preferences: { secret: "PRIVATE_ANSWER_NEVER_PUBLIC" } })});`,
+    `select sq_upsert_profile(${q(creator)},${j({ imported_summary: "PRIVATE_SUMMARY_NEVER_PUBLIC", preferences: { secret: "PRIVATE_ANSWER_NEVER_PUBLIC", ageBand: "21_plus", sources: { ageBand: "survey" } } })});`,
   );
   const template = JSON.parse(
     await sql(
@@ -444,6 +444,8 @@ export async function runCommunityTests(sql) {
   for (const secret of [
     "PRIVATE_SUMMARY",
     "PRIVATE_ANSWER",
+    "ageBand",
+    "21_plus",
     "PRECISE_PRIVATE",
     "PRIVATE_RAW",
     "PRIVATE_REEL",

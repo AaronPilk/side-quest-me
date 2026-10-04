@@ -88,6 +88,8 @@ export function discoveryEligibility(
     "arrangements",
     "adults",
   ]);
+  // The separate `age` issue is always blocking: missing account age cannot
+  // become a conditional booking requirement or be supplied by an outing flag.
   const issues = ineligibilityIssues(quest, outing, preferences);
   const pendingAdultPermission =
     outing.adultContext &&

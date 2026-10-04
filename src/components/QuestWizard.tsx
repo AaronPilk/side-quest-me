@@ -14,7 +14,12 @@ import {
   outingSchema,
   type Outing,
   type QuestVariant,
+  type Preferences,
 } from "../../shared/domain";
+import {
+  confirmedAgeBand,
+  isAdultAgeConfirmed,
+} from "../../shared/age-eligibility";
 import { rememberReturnTo } from "../lib/internal-return";
 import { ApplePlacePicker, ApplePlaceCard } from "./ApplePlaces";
 import { QuestFit, useQuestFit } from "./QuestFit";
@@ -148,6 +153,7 @@ export function editQuestPlans(
 
 export function QuestWizard({
   outing,
+  preferences,
   update: updateOuting,
   onFind,
   targetId,
@@ -162,6 +168,7 @@ export function QuestWizard({
   discoveryConsent,
 }: {
   outing: Outing;
+  preferences?: Preferences;
   update: (patch: Partial<Outing>) => void;
   onFind: () => Promise<void>;
   targetId?: string;
@@ -192,6 +199,12 @@ export function QuestWizard({
   const index = steps.indexOf(step);
   const question = questions[step];
   const review = step === "review";
+  const accountAdult = Boolean(preferences && isAdultAgeConfirmed(preferences));
+  const targetAgeEligible =
+    accountAdult &&
+    (target?.minimumAge !== 21 ||
+      (preferences && confirmedAgeBand(preferences) === "21_plus"));
+  const agePreferencesUrl = `/preferences?step=account&returnTo=${encodeURIComponent(location.pathname + location.search)}`;
   const matching = useQuestFit(
     outing,
     Object.keys(outingSchema.shape) as (keyof Outing)[],
@@ -199,6 +212,7 @@ export function QuestWizard({
     review && Boolean(targetId),
   );
   const adultConfirmationNeeded = Boolean(
+    target?.minimumAge ||
     target?.adultOnly ||
     target?.requiresVolunteer ||
     outing.category === "street_challenges" ||
@@ -630,6 +644,7 @@ export function QuestWizard({
                 outing.travelCostMinor > 0 ||
                 target?.arrangementRequired ||
                 (target?.privateGenerated && target.cost.venueCostUnknown) ||
+                target?.minimumAge ||
                 target?.adultOnly ||
                 target?.requiresVolunteer ||
                 target?.venuePermissionRequired ||
@@ -666,6 +681,12 @@ export function QuestWizard({
                 Only add details you already know. These help match quests that
                 need a booking, equipment or permission.
               </p>
+              {!targetAgeEligible &&
+                (adultConfirmationNeeded || outing.setting === "venue") && (
+                  <Link className="button secondary" to={agePreferencesUrl}>
+                    Set your age group for adult experiences
+                  </Link>
+                )}
               <label className="check-row">
                 <input
                   type="checkbox"
@@ -684,6 +705,7 @@ export function QuestWizard({
                   <input
                     type="checkbox"
                     checked={outing.adultEligible}
+                    disabled={!targetAgeEligible}
                     onChange={(e) =>
                       update({ adultEligible: e.target.checked })
                     }
@@ -741,6 +763,7 @@ export function QuestWizard({
                     <input
                       type="checkbox"
                       checked={outing.adultEligible}
+                      disabled={!targetAgeEligible}
                       onChange={(e) =>
                         update({
                           adultEligible: e.target.checked,
@@ -757,7 +780,7 @@ export function QuestWizard({
                     <input
                       type="checkbox"
                       checked={outing.adultContext}
-                      disabled={!outing.adultEligible}
+                      disabled={!targetAgeEligible || !outing.adultEligible}
                       onChange={(e) =>
                         update({ adultContext: e.target.checked })
                       }
@@ -773,6 +796,75 @@ export function QuestWizard({
                 confirm them.
               </p>
             </details>
+          )}
+          {review && !targetId && outing.setting === "venue" && (
+            <section
+              className="quest-arrangements"
+              aria-label="Adult nightlife preferences"
+            >
+              <h3>Make it a grown-up night?</h3>
+              <p className="support">
+                Optional nightlife, playful competition and a night worth
+                talking about. Your boundaries still apply.
+              </p>
+              {!accountAdult ? (
+                <>
+                  <Link className="button secondary" to={agePreferencesUrl}>
+                    Set your age group for adult experiences
+                  </Link>
+                  {(outing.adultContext || outing.adultEligible) && (
+                    <Button
+                      type="button"
+                      secondary
+                      onClick={() =>
+                        update({ adultContext: false, adultEligible: false })
+                      }
+                    >
+                      Find ideas without adult nightlife
+                    </Button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={outing.adultEligible}
+                      onChange={(event) =>
+                        update({
+                          adultEligible: event.target.checked,
+                          ...(!event.target.checked
+                            ? { adultContext: false }
+                            : {}),
+                        })
+                      }
+                    />
+                    <span>
+                      Everyone is an adult and can meet the age rules for the
+                      venues we choose.
+                    </span>
+                  </label>
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={outing.adultContext}
+                      disabled={!outing.adultEligible}
+                      onChange={(event) =>
+                        update({ adultContext: event.target.checked })
+                      }
+                    />
+                    <span>
+                      Include adult nightlife. Everyone in our group is up for
+                      it.
+                    </span>
+                  </label>
+                  <p className="fine-print">
+                    Check each venue’s age, activity and filming rules before
+                    starting. Drinks are optional.
+                  </p>
+                </>
+              )}
+            </section>
           )}
         </div>
         {review && outing.applePlaceId && outing.setting !== "home" && (

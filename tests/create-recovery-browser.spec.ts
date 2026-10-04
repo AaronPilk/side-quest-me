@@ -242,7 +242,11 @@ for (const requirement of ["adultOnly", "requiresVolunteer"] as const)
   test(`a targeted Daytime original exposes and enforces ${requirement} at home`, async ({
     page,
   }) => {
-    await openOriginal(page, original({ [requirement]: true }));
+    await openOriginal(page, original({ [requirement]: true }), {
+      ...DEFAULT_PREFERENCES,
+      ageBand: "21_plus",
+      sources: { ageBand: "survey" },
+    });
     await reviewQuestPlans(page);
     const adultConfirmation = page.getByRole("checkbox", { name: /adults/i });
     await expect(adultConfirmation).toBeVisible();

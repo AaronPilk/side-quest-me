@@ -285,9 +285,10 @@ describe("deterministic hard filters and preference precedence", () => {
       ),
     ).toBe(false);
     expect(
-      recommend({ ...settings, adultEligible: true }, prefs()).some(
-        (q) => q.familyId === "street_meal_choice",
-      ),
+      recommend(
+        { ...settings, adultEligible: true },
+        prefs({ ageBand: "21_plus", sources: { ageBand: "survey" } }),
+      ).some((q) => q.familyId === "street_meal_choice"),
     ).toBe(true);
     const adult = outing({
       category: "late_night",
@@ -298,9 +299,12 @@ describe("deterministic hard filters and preference precedence", () => {
       confirmedVenueCostMinor: 0,
       durationMinutes: 120,
     });
-    expect(recommend(adult, prefs()).every((q) => q.supportsAdultContext)).toBe(
-      true,
-    );
+    expect(
+      recommend(
+        adult,
+        prefs({ ageBand: "21_plus", sources: { ageBand: "survey" } }),
+      ).every((q) => q.supportsAdultContext),
+    ).toBe(true);
     expect(recommend(adult, prefs({ exclusions: ["adult_venues"] }))).toEqual(
       [],
     );
@@ -546,6 +550,8 @@ describe("confirmed, explainable profile matching", () => {
   });
 
   it("uses confirmed participation style and keeps firm stranger exclusions authoritative", () => {
+    const adultPrefs = (patch: Partial<Preferences> = {}) =>
+      prefs({ ageBand: "21_plus", sources: { ageBand: "survey" }, ...patch });
     const street = outing({
       category: "street_challenges",
       group: "friends",
@@ -556,13 +562,21 @@ describe("confirmed, explainable profile matching", () => {
       confirmedVenueCostMinor: 0,
       budgetMinor: 3000,
     });
-    expect(recommend(street, prefs())[0].familyId).toBe("street_make_us_break");
-    const invitation = recommend(street, prefs({ approach: "invitation" }));
+    expect(recommend(street, adultPrefs())[0].familyId).toBe(
+      "street_make_us_break",
+    );
+    const invitation = recommend(
+      street,
+      adultPrefs({ approach: "invitation" }),
+    );
     expect(invitation[0].familyId).toBe("street_meal_choice");
     expect(invitation[0].whyFits[0]).toBe(
       "Uses a clear invitation, as you prefer",
     );
-    const conversation = recommend(street, prefs({ approach: "conversation" }));
+    const conversation = recommend(
+      street,
+      adultPrefs({ approach: "conversation" }),
+    );
     expect(conversation[0].familyId).toBe("street_meal_choice");
     expect(conversation[0].whyFits[0]).toBe(
       "Fits your willingness to start a conversation",
@@ -570,7 +584,7 @@ describe("confirmed, explainable profile matching", () => {
     expect(
       recommend(
         street,
-        prefs({
+        adultPrefs({
           approach: "conversation",
           premises: ["meal_challenge"],
           exclusions: ["strangers"],
@@ -578,7 +592,7 @@ describe("confirmed, explainable profile matching", () => {
       ).some((q) => q.familyId === "street_meal_choice"),
     ).toBe(false);
     expect(
-      recommend(street, prefs({ approach: "group_only" })).map(
+      recommend(street, adultPrefs({ approach: "group_only" })).map(
         (q) => q.familyId,
       ),
     ).toEqual(["street_make_us_break"]);

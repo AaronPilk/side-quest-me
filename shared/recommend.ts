@@ -1,5 +1,6 @@
 import { placeFitReason, type PlaceContext } from "./place-matching";
 import { catalog } from "./catalog";
+import { confirmedAgeBand, isAdultAgeConfirmed } from "./age-eligibility";
 import {
   CATEGORIES,
   INTENSITIES,
@@ -82,6 +83,7 @@ export type EligibilityIssueCode =
   | "venue_permission"
   | "arrangements"
   | "adults"
+  | "age"
   | "adult_context"
   | "boundary"
   | "custom_boundary";
@@ -161,8 +163,36 @@ export function ineligibilityIssues(
       "arrangements",
       "Arrange the required friends, space, or performance slot before accepting.",
     );
+  if (quest.minimumAge === 21 && confirmedAgeBand(preferences) !== "21_plus")
+    issue(
+      "age",
+      "This experience is for ages 21+. Update your age group in Account & quest preferences or choose another experience.",
+    );
+  else if (
+    confirmedAgeBand(preferences) === "18_20" &&
+    quest.minimumAge === undefined &&
+    (quest.adultOnly || (outing.adultContext && quest.supportsAdultContext))
+  )
+    issue(
+      "age",
+      "This older adult experience needs a fresh age-matched suggestion. Find another experience for your current age group.",
+    );
+  else if (
+    (quest.minimumAge === 18 ||
+      quest.adultOnly ||
+      quest.requiresVolunteer ||
+      outing.adultContext) &&
+    !isAdultAgeConfirmed(preferences)
+  )
+    issue(
+      "age",
+      "This activity is for adults. Confirm your age group in Account & quest preferences to see eligible options.",
+    );
   if (
-    (quest.adultOnly || quest.requiresVolunteer || outing.adultContext) &&
+    (quest.minimumAge ||
+      quest.adultOnly ||
+      quest.requiresVolunteer ||
+      outing.adultContext) &&
     !outing.adultEligible
   )
     issue(

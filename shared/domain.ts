@@ -84,6 +84,7 @@ export const APP_CONFIG = {
 const boundedText = (max: number) => z.string().trim().max(max);
 const unique = <T>(values: T[]) => new Set(values).size === values.length;
 export const PREFERENCE_KEYS = [
+  "ageBand",
   "categories",
   "premises",
   "humor",
@@ -112,6 +113,9 @@ export const interestSchema = z.enum([
   "local_knowledge",
 ]);
 const preferenceFields = {
+  // Private self-report, not a birth date or verified identity. Default preserves
+  // compatibility with existing v2 profiles and older app writes.
+  ageBand: z.enum(["under_18", "18_20", "21_plus"]).nullable().default(null),
   categories: z
     .array(categorySchema)
     .max(5)
@@ -196,6 +200,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   version: 2,
   sources: {},
   legacyUnconfirmed: [],
+  ageBand: null,
   categories: null,
   premises: null,
   humor: null,
@@ -235,6 +240,9 @@ export function normalizePreferences(input: unknown): Preferences {
     legacyUnconfirmed: [],
   };
   for (const key of PREFERENCE_KEYS) {
+    // Older profiles never asked age. Do not promote imported or legacy prose
+    // into the explicit account confirmation introduced in v2.
+    if (legacy && key === "ageBand") continue;
     const value = raw[key];
     if (legacy && defaults[key] === value && value !== undefined) {
       result.legacyUnconfirmed.push(key);
@@ -379,6 +387,7 @@ export const beatSchema = z
     caption: boundedText(80),
   })
   .strict();
+export const MAX_QUEST_ACTIVITY_MINUTES = 2880;
 export const questVariantSchema = z
   .object({
     id: z
@@ -399,7 +408,8 @@ export const questVariantSchema = z
     hook: boundedText(260),
     sponsorDisclosure: boundedText(120).optional(),
     privateGenerated: z.literal(true).optional(),
-    durationMinutes: z.number().int().min(15).max(720),
+    minimumAge: z.union([z.literal(18), z.literal(21)]).optional(),
+    durationMinutes: z.number().int().min(15).max(MAX_QUEST_ACTIVITY_MINUTES),
     minParticipants: z.number().int().min(1),
     maxParticipants: z.number().int().max(12),
     allowedGroups: z

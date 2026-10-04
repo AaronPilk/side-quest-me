@@ -10,9 +10,10 @@ import { buildQuestRoutingBrief } from "../shared/quest-routing";
 function confirmed(patch: Partial<Preferences>): Preferences {
   return {
     ...DEFAULT_PREFERENCES,
+    ageBand: "21_plus",
     ...patch,
     sources: Object.fromEntries(
-      Object.keys(patch).map((key) => [key, "survey"]),
+      ["ageBand", ...Object.keys(patch)].map((key) => [key, "survey"]),
     ),
   };
 }
@@ -32,8 +33,77 @@ const fullSendFriends: Outing = {
   venuePermission: true,
   confirmedVenueCostMinor: 0,
 };
+const adultPreferences = confirmed({});
 
 describe("quest audience and experience routing", () => {
+  it.each([null, "under_18"] as const)(
+    "keeps age %s out of adult discovery even when outing flags claim eligibility",
+    (ageBand) => {
+      const brief = buildQuestRoutingBrief(
+        confirmed({ ageBand }),
+        fullSendFriends,
+      );
+      expect(brief.adultContext.ageEligible).toBe(false);
+      expect(brief.adultContext.nightlifeSuggestionAllowed).toBe(false);
+      expect(brief.adultContext.alcoholSuggestionAllowed).toBe(false);
+      expect(brief.adultContext.blockers).toContain(
+        ageBand === "under_18" ? "under_adult_age" : "age_not_confirmed",
+      );
+    },
+  );
+
+  it("keeps an unsourced age private value from unlocking adult suggestions", () => {
+    const brief = buildQuestRoutingBrief(
+      { ...DEFAULT_PREFERENCES, ageBand: "21_plus" },
+      fullSendFriends,
+    );
+    expect(brief.adultContext.participantAgeBand).toBeNull();
+    expect(brief.adultContext.nightlifeSuggestionAllowed).toBe(false);
+  });
+
+  it("allows pending nightlife discovery for adults without presuming drinking eligibility", () => {
+    const outing = { ...fullSendFriends, venuePermission: false };
+    const youngerAdult = buildQuestRoutingBrief(
+      confirmed({ ageBand: "18_20" }),
+      outing,
+    );
+    expect(youngerAdult.adultContext.nightlifeSuggestionAllowed).toBe(true);
+    expect(youngerAdult.adultContext.nightlifeRouteAllowed).toBe(false);
+    expect(youngerAdult.adultContext.alcoholSuggestionAllowed).toBe(false);
+    const adult = buildQuestRoutingBrief(adultPreferences, outing);
+    expect(adult.adultContext.alcoholSuggestionAllowed).toBe(true);
+    expect(
+      buildQuestRoutingBrief(confirmed({ exclusions: ["alcohol"] }), outing)
+        .adultContext.alcoholSuggestionAllowed,
+    ).toBe(false);
+  });
+
+  it("routes Demon mood separately from the selected intensity and keeps stakes explicit", () => {
+    const demon = buildQuestRoutingBrief(adultPreferences, {
+      ...fullSendFriends,
+      category: "demon",
+    });
+    const date = buildQuestRoutingBrief(adultPreferences, {
+      ...fullSendFriends,
+      category: "date_night",
+      group: "couple",
+      participants: 2,
+    });
+    expect(demon.experience.categoryDirection).toContain("cheeky rivalry");
+    expect(demon.experience.challengeDesign.stakes).toContain("capped");
+    expect(demon.experience.direction).toContain(
+      "what changes because of the result",
+    );
+    expect(date.experience.categoryDirection).toContain(
+      "not automatically quiet",
+    );
+    expect(demon.experience.categoryDirection).not.toEqual(
+      date.experience.categoryDirection,
+    );
+    expect(demon.boundaries.paidGambling).toBe(false);
+    expect(demon.experience.intensity).toBe("full_send");
+  });
+
   it("separates five-person Full Send adult nightlife from a Chill couple", () => {
     const preferences = confirmed({
       humor: ["competitive", "absurd"],
@@ -232,7 +302,7 @@ describe("quest audience and experience routing", () => {
     ["not a venue", { setting: "outside" as const }],
     ["no venue permission", { venuePermission: false }],
   ])("keeps adult nightlife gated with %s", (_label, patch) => {
-    const brief = buildQuestRoutingBrief(DEFAULT_PREFERENCES, {
+    const brief = buildQuestRoutingBrief(adultPreferences, {
       ...fullSendFriends,
       ...patch,
     });
@@ -244,7 +314,7 @@ describe("quest audience and experience routing", () => {
   });
 
   it("records eligible adult context as self-confirmation, never age or drinking verification", () => {
-    const brief = buildQuestRoutingBrief(DEFAULT_PREFERENCES, fullSendFriends);
+    const brief = buildQuestRoutingBrief(adultPreferences, fullSendFriends);
     expect(brief.adultContext).toMatchObject({
       requested: true,
       venueMinimumSelfConfirmed: true,
@@ -256,7 +326,7 @@ describe("quest audience and experience routing", () => {
   });
 
   it("reserves group travel and confirmed venue costs and subtracts travel time", () => {
-    const brief = buildQuestRoutingBrief(DEFAULT_PREFERENCES, {
+    const brief = buildQuestRoutingBrief(adultPreferences, {
       ...fullSendFriends,
       budgetMinor: 2_000,
       travelCostMinor: 1_500,
@@ -276,7 +346,7 @@ describe("quest audience and experience routing", () => {
   });
 
   it("keeps unlimited time null and unconfirmed venue charges unknown", () => {
-    const brief = buildQuestRoutingBrief(DEFAULT_PREFERENCES, {
+    const brief = buildQuestRoutingBrief(adultPreferences, {
       ...fullSendFriends,
       durationMinutes: null,
       travelMinutes: 240,
@@ -309,7 +379,7 @@ describe("quest audience and experience routing", () => {
   });
 
   it("keeps Full Send under low resources and reports impossible reservations", () => {
-    const brief = buildQuestRoutingBrief(DEFAULT_PREFERENCES, {
+    const brief = buildQuestRoutingBrief(adultPreferences, {
       ...fullSendFriends,
       budgetMinor: 0,
       travelCostMinor: 500,

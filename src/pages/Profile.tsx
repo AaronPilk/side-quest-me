@@ -10,6 +10,10 @@ import { api } from "../lib/api";
 import { preferenceProgress } from "../../shared/preference-progress";
 import { preferenceChips } from "../../shared/profile";
 import {
+  AGE_BAND_OPTIONS,
+  confirmedAgeBand,
+} from "../../shared/age-eligibility";
+import {
   Button,
   PageTitle,
   Notice,
@@ -89,6 +93,11 @@ export default function Profile() {
                 : profile.accountType === "personal"
                   ? "Personal"
                   : "Choose account type"}
+              {" · "}
+              {AGE_BAND_OPTIONS.find(
+                (option) =>
+                  option.value === confirmedAgeBand(profile.preferences),
+              )?.label ?? "Add age group for adult experiences"}
             </small>
           </span>
           <ArrowRight />

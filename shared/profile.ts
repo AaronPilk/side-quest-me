@@ -228,6 +228,8 @@ export function setPreferenceAnswer<K extends PreferenceKey>(
   value: Preferences[K],
   source: PreferenceSource,
 ): Preferences {
+  if (key === "ageBand" && source !== "survey")
+    throw new Error("Choose your age group directly in account preferences.");
   const current = normalizePreferences(preferences);
   let answer = value;
   const neutral =

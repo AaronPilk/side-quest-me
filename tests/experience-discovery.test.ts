@@ -3,8 +3,10 @@ import { Hono } from "hono";
 import {
   DEFAULT_OUTING,
   DEFAULT_PREFERENCES,
+  MAX_QUEST_ACTIVITY_MINUTES,
   questVariantSchema,
   type QuestVariant,
+  type Preferences,
 } from "../shared/domain";
 import {
   discoveryEligibility,
@@ -15,6 +17,7 @@ import {
 } from "../shared/experience-discovery";
 import {
   curatedDiscoveryFallback,
+  discoveryConceptLanes,
   generateDiscoveredExperience,
   registerExperienceDiscovery,
 } from "../worker/experience-discovery";
@@ -348,6 +351,11 @@ describe("private experience discovery", () => {
       scope: "total",
     });
     expect(generated.quest.cost.note).toContain("complete group charge");
+    expect(generated.quest.cost.note).toContain("not a free estimate");
+    expect(generated.quest.cost.note).toContain("rooms, meals, tickets");
+    expect(generated.quest.cost.note).not.toContain(
+      "no separate activity purchase",
+    );
     expect(generated.quest.beats.map(({ label }) => label)).toEqual([
       "Preparation",
       "The challenge",
@@ -452,6 +460,7 @@ describe("private experience discovery", () => {
     expect(properties.intensity).toMatchObject({ const: "full_send" });
     expect(properties.minParticipants).toMatchObject({ const: 5 });
     expect(properties.maxParticipants).toMatchObject({ const: 5 });
+    expect(properties.requiresVolunteer).toMatchObject({ const: false });
     expect(properties.settings).toMatchObject({
       minItems: 1,
       maxItems: 1,
@@ -472,6 +481,211 @@ describe("private experience discovery", () => {
       items: { properties: { action: { minLength: 1 } } },
     });
   });
+  it("routes confirmed adult Full Send beyond ordinary hobby games", () => {
+    const preferences: Preferences = {
+      ...DEFAULT_PREFERENCES,
+      ageBand: "21_plus" as const,
+      interests: ["sports", "games"],
+      sources: { ageBand: "survey" as const, interests: "survey" as const },
+    };
+    const outing = {
+      ...base.outing,
+      adultEligible: true,
+      adultContext: true,
+      durationMinutes: 180,
+    };
+    expect(
+      discoveryConceptLanes(preferences, outing)?.map(({ id, mechanic }) => ({
+        id,
+        mechanic,
+      })),
+    ).toEqual([
+      { id: "A", mechanic: "discovery" },
+      { id: "B", mechanic: "live_show" },
+      { id: "C", mechanic: "competition" },
+    ]);
+    expect(
+      discoveryConceptLanes(preferences, {
+        ...outing,
+        durationMinutes: null,
+      })?.[2].mechanic,
+    ).toBe("discovery");
+    expect(discoveryConceptLanes(DEFAULT_PREFERENCES, outing)).toBeNull();
+    expect(
+      discoveryConceptLanes(preferences, { ...outing, intensity: "chill" }),
+    ).toBeNull();
+    expect(
+      discoveryConceptLanes(preferences, { ...outing, adultContext: false }),
+    ).toBeNull();
+  });
+
+  it.each([
+    "age_floor",
+    "adult_context",
+    "ordinary_game_lane",
+    "paid_cast_as_volunteers",
+  ])(
+    "rejects %s drift before reviewing an adult nightlife proposal",
+    async (field) => {
+      const comparison = comparisonFixture();
+      const proposal = {
+        ...comparison.proposal,
+        adultOnly: true,
+        supportsAdultContext: true,
+        minimumAge: 21,
+      };
+      const response = {
+        ...comparison,
+        candidates: comparison.candidates.map((candidate, index) => ({
+          ...candidate,
+          mechanic: ["discovery", "live_show", "competition"][index],
+        })),
+        proposal,
+      };
+      if (field === "age_floor") response.proposal.minimumAge = 18;
+      if (field === "adult_context")
+        response.proposal.supportsAdultContext = false;
+      if (field === "paid_cast_as_volunteers")
+        response.proposal.requiresVolunteer = true;
+      if (field === "ordinary_game_lane")
+        response.candidates[0].mechanic = "competition";
+      model.mockReset().mockResolvedValueOnce(response);
+      await expect(
+        generateDiscoveredExperience(
+          { OPENAI_API_KEY: "fixture" },
+          {
+            ...DEFAULT_PREFERENCES,
+            ageBand: "21_plus",
+            sources: { ageBand: "survey" },
+          },
+          {
+            ...base,
+            outing: {
+              ...base.outing,
+              adultEligible: true,
+              adultContext: true,
+              durationMinutes: 180,
+            },
+          },
+        ),
+      ).rejects.toThrow();
+      expect(model).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    {
+      ageBand: null,
+      source: undefined,
+      allowed: false,
+      blocker: "age_not_confirmed",
+    },
+    {
+      ageBand: "under_18" as const,
+      source: "survey" as const,
+      allowed: false,
+      blocker: "under_adult_age",
+    },
+    {
+      ageBand: "21_plus" as const,
+      source: undefined,
+      allowed: false,
+      blocker: "age_not_confirmed",
+    },
+    {
+      ageBand: "18_20" as const,
+      source: "survey" as const,
+      allowed: true,
+      blocker: null,
+    },
+    {
+      ageBand: "21_plus" as const,
+      source: "survey" as const,
+      allowed: true,
+      blocker: null,
+    },
+  ])(
+    "retains the saved $ageBand age gate when venue permission is pending ($source)",
+    async ({ ageBand, source, allowed, blocker }) => {
+      model
+        .mockReset()
+        .mockRejectedValueOnce(
+          new Error("stop after reading synthetic context"),
+        );
+      await expect(
+        generateDiscoveredExperience(
+          { OPENAI_API_KEY: "fixture" },
+          {
+            ...DEFAULT_PREFERENCES,
+            ageBand,
+            sources: source ? { ageBand: source } : {},
+          },
+          {
+            ...base,
+            outing: {
+              ...base.outing,
+              adultEligible: true,
+              adultContext: true,
+              venuePermission: false,
+            },
+          },
+        ),
+      ).rejects.toThrow("stop after reading synthetic context");
+      const routing = model.mock.calls[0][2].experience_routing;
+      expect(routing.adultContext.nightlifeRouteAllowed).toBe(allowed);
+      expect(routing.adultContext.venuePermissionPending).toBe(true);
+      expect(routing.adultContext.blockers).not.toContain(
+        "venue_permission_not_confirmed",
+      );
+      if (blocker) expect(routing.adultContext.blockers).toContain(blocker);
+      expect(routing.audience.context).toBe(
+        allowed ? "adult_nightlife" : "general",
+      );
+      expect(routing.adultContext.alcoholSuggestionAllowed).toBe(
+        allowed && ageBand === "21_plus",
+      );
+    },
+  );
+  it("permits a genuine overnight stay only with enough available time", async () => {
+    const comparison = comparisonFixture();
+    comparison.proposal.durationMinutes = 1440;
+    comparison.proposal.title = "The Mystery Staycation";
+    comparison.candidates[0].durationMinutes = 1440;
+    comparison.candidates[0].title = "The Mystery Staycation";
+    const overnight = {
+      ...base,
+      outing: { ...base.outing, travelMinutes: 60 },
+    };
+    model
+      .mockReset()
+      .mockResolvedValueOnce(comparison)
+      .mockResolvedValueOnce(approvedQuestQualityFixture());
+    const result = await generateDiscoveredExperience(
+      { OPENAI_API_KEY: "fixture" },
+      DEFAULT_PREFERENCES,
+      overnight,
+    );
+    expect(result.quest.durationMinutes).toBe(1440);
+    expect(
+      model.mock.calls[0][3].properties.proposal.properties.durationMinutes
+        .maximum,
+    ).toBe(MAX_QUEST_ACTIVITY_MINUTES);
+    expect(model).toHaveBeenCalledTimes(2);
+
+    model.mockReset().mockResolvedValueOnce(comparison);
+    await expect(
+      generateDiscoveredExperience(
+        { OPENAI_API_KEY: "fixture" },
+        DEFAULT_PREFERENCES,
+        { ...overnight, outing: { ...overnight.outing, durationMinutes: 120 } },
+      ),
+    ).rejects.toThrow();
+    expect(model).toHaveBeenCalledTimes(1);
+    expect(
+      model.mock.calls[0][3].properties.proposal.properties.durationMinutes
+        .maximum,
+    ).toBe(60);
+  });
   it.each(["category", "intensity", "duration", "blank_text"])(
     "rejects %s metadata drift before independent review",
     async (field) => {
@@ -481,7 +695,8 @@ describe("private experience discovery", () => {
       };
       if (field === "category") response.proposal.category = "date_night";
       if (field === "intensity") response.proposal.intensity = "chill";
-      if (field === "duration") response.proposal.durationMinutes = 721;
+      if (field === "duration")
+        response.proposal.durationMinutes = MAX_QUEST_ACTIVITY_MINUTES + 1;
       if (field === "blank_text") response.proposal.hook = " ";
       model.mockReset().mockResolvedValueOnce(response);
       await expect(
