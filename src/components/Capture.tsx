@@ -1171,6 +1171,9 @@ export default function Capture({
   }
   const locked =
     busy || finishing || recording || countdown > 0 || nativeTakePending;
+  const takeRecovery = nativeTakePending && !recording;
+  const previewRecovery = !preview && camera && cameraPreview === "blocked";
+  const cameraRecovery = takeRecovery || previewRecovery;
   const positions: { value: ImageOverlay["position"]; label: string }[] = [
     { value: "top_left", label: "Top left" },
     { value: "top_right", label: "Top right" },
@@ -1180,7 +1183,7 @@ export default function Capture({
   ];
   return (
     <div
-      className={`capture-overlay session-capture session-fullscreen ${nativeSession ? "is-native-camera" : ""}`}
+      className={`capture-overlay session-capture session-fullscreen ${nativeSession ? "is-native-camera" : ""} ${cameraRecovery ? "is-camera-recovery" : ""} ${takeRecovery ? "is-take-recovery" : ""}`}
       role="dialog"
       aria-modal="true"
       aria-label="Record your quest"
@@ -1367,34 +1370,9 @@ export default function Capture({
               )}
             </div>
           )}
-          {camera && cameraPreview !== "ready" && (
-            <div className="session-camera-empty session-camera-recovery">
-              <p role="status">
-                {cameraPreview === "starting"
-                  ? "Starting camera preview…"
-                  : "Camera preview isn’t playing. Your saved takes are kept."}
-              </p>
-              {cameraPreview === "blocked" && (
-                <>
-                  <Button
-                    onClick={() =>
-                      nativeSession
-                        ? void openCamera()
-                        : livePreview.current?.retry()
-                    }
-                    disabled={locked}
-                  >
-                    Start preview
-                  </Button>
-                  <Button
-                    secondary
-                    onClick={() => void openCamera(device || undefined)}
-                    disabled={locked || opening}
-                  >
-                    Restart camera
-                  </Button>
-                </>
-              )}
+          {camera && cameraPreview === "starting" && !takeRecovery && (
+            <div className="session-camera-empty session-camera-starting">
+              <p role="status">Starting camera preview…</p>
             </div>
           )}
           {overlayUrl && overlay && (
@@ -1446,6 +1424,78 @@ export default function Capture({
           </div>
         )}
       </div>
+      {cameraRecovery && (
+        <div className="session-recovery-layer">
+          <section
+            className="session-recovery-panel"
+            aria-label="Camera recovery"
+          >
+            <Camera size={26} aria-hidden="true" />
+            <h2>
+              {takeRecovery ? "Save this take" : "Let’s restart your camera"}
+            </h2>
+            <p role="status">
+              {takeRecovery
+                ? "Your recorded take is still on this device. Save it before filming more."
+                : "The preview paused. Your saved takes are kept."}
+            </p>
+            {error && (
+              <p className="session-recovery-error" role="alert">
+                {error}
+              </p>
+            )}
+            {message && !error && (
+              <p className="session-recovery-note" role="status">
+                {message}
+              </p>
+            )}
+            <div className="session-recovery-actions">
+              {takeRecovery ? (
+                <>
+                  <Button
+                    onClick={() => void retryNativeTakes()}
+                    busy={finishing || busy}
+                  >
+                    Retry saving take
+                  </Button>
+                  <Button
+                    secondary
+                    onClick={() => void discardPendingNativeTakes()}
+                    disabled={finishing || busy}
+                  >
+                    Discard unsaved take
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    onClick={() =>
+                      nativeSession
+                        ? void openCamera()
+                        : livePreview.current?.retry()
+                    }
+                    disabled={locked || opening}
+                  >
+                    Start preview
+                  </Button>
+                  <Button
+                    secondary
+                    onClick={() => void openCamera(device || undefined)}
+                    disabled={locked || opening}
+                  >
+                    Restart camera
+                  </Button>
+                </>
+              )}
+            </div>
+            <p className="session-recovery-note">
+              {takeRecovery
+                ? "Discard removes only this unsaved take. Earlier saved takes stay."
+                : "You can also import a video from your gallery below."}
+            </p>
+          </section>
+        </div>
+      )}
       {!preview && (
         <aside className="session-tools" aria-label="Camera tools">
           <button
@@ -1571,39 +1621,22 @@ export default function Capture({
       <footer
         className={`session-camera-footer ${preview ? "is-preview" : ""}`}
       >
-        {nativeTakePending && !recording && (
-          <div className="session-review-actions">
-            <Button
-              secondary
-              onClick={() => void retryNativeTakes()}
-              busy={finishing || busy}
-            >
-              Retry saving take
-            </Button>
-            <Button
-              secondary
-              onClick={() => void discardPendingNativeTakes()}
-              disabled={finishing || busy}
-            >
-              Discard unsaved take
-            </Button>
-          </div>
-        )}
-        {error ? (
-          <div className="session-feedback" role="alert">
-            {error}
-            <button aria-label="Dismiss message" onClick={() => setError("")}>
-              <X size={16} />
-            </button>
-          </div>
-        ) : (
-          message &&
-          !recording && (
-            <p className="session-draft-message" role="status">
-              {message}
-            </p>
-          )
-        )}
+        {!cameraRecovery &&
+          (error ? (
+            <div className="session-feedback" role="alert">
+              {error}
+              <button aria-label="Dismiss message" onClick={() => setError("")}>
+                <X size={16} />
+              </button>
+            </div>
+          ) : (
+            message &&
+            !recording && (
+              <p className="session-draft-message" role="status">
+                {message}
+              </p>
+            )
+          ))}
         {preview ? (
           <>
             <div className="session-review-actions">

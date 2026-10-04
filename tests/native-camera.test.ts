@@ -30,15 +30,17 @@ const take: NativeCameraTake = {
   durationMs: 2450,
   mimeType: "video/quicktime",
 };
-const localUrl =
-  "capacitor://localhost/_capacitor_file_/SidequestCamera/take.mov";
+const localUrl = `capacitor://localhost/_capacitor_file_${new URL(take.fileUrl).pathname}`;
 const fetchMock = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
   bridge.platform.mockReturnValue("ios");
   bridge.available.mockReturnValue(true);
-  bridge.convert.mockReturnValue(localUrl);
+  bridge.convert.mockImplementation(
+    (fileUrl: string) =>
+      `capacitor://localhost/_capacitor_file_${new URL(fileUrl).pathname}`,
+  );
   vi.stubGlobal("fetch", fetchMock);
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -91,6 +93,67 @@ describe("native finalized camera take import", () => {
     });
     expect(imported.type).toBe("video/mp4");
     expect(new Uint8Array(await imported.arrayBuffer())).toEqual(bytes);
+  });
+
+  it.each(["mov", "mp4"])(
+    "imports readable iOS %s media with WebKit's non-HTTP status 0 and no MIME header",
+    async (extension) => {
+      const bytes = new Uint8Array([0, 255, 128, 7, 0, 242, 1, 254]);
+      const source = new Blob([bytes]);
+      const { arrayBuffer, body } = download(source);
+      fetchMock.mockResolvedValue({
+        status: 0,
+        ok: false,
+        type: "basic",
+        blob: body,
+      });
+      const imported = await readNativeCameraTake({
+        ...take,
+        fileUrl: take.fileUrl.replace(/\.mov$/, `.${extension}`),
+        mimeType: extension === "mp4" ? "video/mp4" : "video/quicktime",
+      });
+      expect(new Uint8Array(await imported.arrayBuffer())).toEqual(bytes);
+      expect(imported.type).toBe(
+        extension === "mp4" ? "video/mp4" : "video/quicktime",
+      );
+      expect(arrayBuffer).toHaveBeenCalledOnce();
+      expect(bridge.plugin.discardRecording).not.toHaveBeenCalled();
+    },
+  );
+
+  it("never treats opaque/error, remote, unrelated or non-iOS status 0 as readable camera files", async () => {
+    const body = vi.fn().mockResolvedValue(new Blob(["untrusted"]));
+    for (const type of ["opaque", "opaqueredirect", "error", undefined]) {
+      fetchMock.mockResolvedValue({ status: 0, ok: false, type, blob: body });
+      await expect(readNativeCameraTake(take)).rejects.toThrow(
+        /could not be read/i,
+      );
+    }
+    fetchMock.mockResolvedValue({
+      status: 0,
+      ok: false,
+      type: "basic",
+      blob: body,
+    });
+    for (const address of [
+      `https://example.test/_capacitor_file_${new URL(take.fileUrl).pathname}`,
+      localUrl.replace("localhost", "remote"),
+      localUrl.replace("take-1.mov", "other.mov"),
+      `${localUrl}?redirect=1`,
+      `${localUrl}#fragment`,
+    ]) {
+      bridge.convert.mockReturnValue(address);
+      await expect(readNativeCameraTake(take)).rejects.toThrow(
+        /could not be read/i,
+      );
+    }
+    bridge.convert.mockReturnValue(localUrl);
+    bridge.platform.mockReturnValue("web");
+    await expect(readNativeCameraTake(take)).rejects.toThrow(
+      /could not be read/i,
+    );
+    expect(body).not.toHaveBeenCalled();
+    expect(bridge.plugin.discardRecording).not.toHaveBeenCalled();
   });
 
   it("rejects external or unrelated paths and link decorations before any file conversion or fetch", async () => {

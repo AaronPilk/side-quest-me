@@ -1,6 +1,6 @@
 /** Public support contact. Replace only with an owner-approved, monitored inbox. */
-export const PUBLIC_SUPPORT_EMAIL = "";
-export const POLICY_UPDATED = "October 3, 2026";
+export const PUBLIC_SUPPORT_EMAIL = "aaron@pilk.ai";
+export const POLICY_UPDATED = "October 4, 2026";
 
 export const INFORMATION_LINKS = [
   { path: "/support", label: "Help & support" },

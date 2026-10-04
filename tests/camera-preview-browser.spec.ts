@@ -16,7 +16,11 @@ async function openCapture(page: Page) {
 
 async function previewPlays(page: Page) {
   await expect(
-    page.getByRole("button", { name: "Hold to record", exact: true }),
+    page.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeEnabled();
   expect(
     await page.getByLabel("Live camera preview").evaluate((element) => {
@@ -78,7 +82,11 @@ for (const failure of ["rejected", "no_frames"] as const) {
     }, failure);
     const dialog = await openCapture(page);
     await expect(
-      dialog.getByRole("button", { name: "Hold to record", exact: true }),
+      dialog.getByRole("button", {
+        name: "Hold to record",
+        exact: true,
+        includeHidden: true,
+      }),
     ).toBeDisabled();
     await expect(dialog.getByLabel("Import video")).toBeEnabled();
     const retry = dialog.getByRole("button", {
@@ -150,7 +158,11 @@ test("a muted camera seals the current take and recovers preview without resumin
     dialog.getByText("Draft saved on this device.", { exact: true }),
   ).toBeVisible();
   await expect(
-    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    dialog.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
   await dialog.getByLabel("Live camera preview").evaluate((element) => {
     const track = (
@@ -296,7 +308,11 @@ test("a preview frame stall seals a take and a user retry keeps it without resta
   });
   await expect(retry).toBeEnabled();
   await expect(
-    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    dialog.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
   await expect(dialog.locator(".session-timeline > span")).toHaveCount(1);
   await expect(
@@ -365,7 +381,11 @@ test("genuinely paused video resumes its preview on fresh frames without resumin
     dialog.getByRole("button", { name: "Start preview", exact: true }),
   ).toBeEnabled();
   await expect(
-    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    dialog.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
   await expect(dialog.locator(".session-timeline > span")).toHaveCount(1);
   await expect(

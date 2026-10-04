@@ -121,7 +121,7 @@ async function nativeBridge(
         },
       ],
       convertFileSrc(fileUrl: string) {
-        return `${location.origin}/native-camera-fixture/${encodeURIComponent(fileUrl)}`;
+        return `capacitor://localhost/_capacitor_file_${new URL(fileUrl).pathname}`;
       },
       nativeCallback(
         plugin: string,
@@ -282,20 +282,26 @@ async function nativeBridge(
     const fetchNormally = window.fetch.bind(window);
     window.fetch = async (input, init) => {
       const address = input instanceof Request ? input.url : String(input);
-      if (!address.includes("/native-camera-fixture/"))
-        return fetchNormally(input, init);
-      const fileUrl = decodeURIComponent(
-        address.split("/native-camera-fixture/")[1],
-      );
+      const filePrefix = "capacitor://localhost/_capacitor_file_";
+      if (!address.startsWith(filePrefix)) return fetchNormally(input, init);
+      const fileUrl = `file://${address.slice(filePrefix.length)}`;
       state.reads.push(fileUrl);
       if (state.failures > 0) {
         state.failures--;
         return new Response("not ready", { status: 503 });
       }
       const bytes = state.files.get(fileUrl);
-      return bytes === undefined
-        ? new Response("missing", { status: 404 })
-        : new Response(new Blob([bytes], { type: "video/quicktime" }));
+      if (bytes === undefined) return new Response("missing", { status: 404 });
+      // Capacitor 8.5.2's actual WKURLSchemeHandler returns URLResponse for
+      // local MOV/MP4, so fetch receives status 0/ok false/basic and readable
+      // bytes with no MIME header. HTTP 200 hid the TestFlight import failure.
+      const response = new Response(new Blob([bytes]));
+      Object.defineProperties(response, {
+        status: { value: 0 },
+        ok: { value: false },
+        type: { value: "basic" },
+      });
+      return response;
     };
   }, options);
 }
@@ -479,7 +485,11 @@ test("background interruption and duplicate promise/event completion preserve a 
     .getByRole("button", { name: "Continue recording", exact: true })
     .click();
   await expect(
-    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    dialog.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeEnabled();
   expect(await calls(page, "startRecording")).toHaveLength(1);
 });
@@ -513,7 +523,11 @@ test("failed native file copy retains the original, blocks leaving and rerecordi
   });
   await expect(retry).toBeEnabled();
   await expect(
-    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    dialog.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
   await expect(dialog.getByLabel("Import video")).toBeDisabled();
   await dialog
@@ -608,6 +622,11 @@ test("stale capture events cannot restore preview or attach a prior quest take, 
 }) => {
   await nativeBridge(page);
   const dialog = await openCapture(page);
+  // Apply the interruption after this session is ready, rather than racing the
+  // ordinary startup response that correctly enables the initial preview.
+  await expect(
+    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+  ).toBeEnabled();
   await page.evaluate(() => {
     const state = (window as unknown as { nativeCameraFixture: BridgeFixture })
       .nativeCameraFixture;
@@ -633,7 +652,11 @@ test("stale capture events cannot restore preview or attach a prior quest take, 
     });
   });
   await expect(
-    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    dialog.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
   await expect(
     dialog.getByRole("button", { name: "Start preview", exact: true }),
@@ -661,7 +684,11 @@ test("stale capture events cannot restore preview or attach a prior quest take, 
     });
   });
   await expect(
-    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    dialog.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeEnabled();
   await dialog
     .getByRole("button", { name: "Or tap to start recording", exact: true })
@@ -720,7 +747,11 @@ test("native preview startup failure restores opaque app styling and can reopen 
     .getByRole("button", { name: "Open camera", exact: true })
     .click();
   await expect(
-    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    dialog.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeEnabled();
   await expect(page.locator("html")).toHaveClass(/native-camera-active/);
   expect(await calls(page, "start")).toHaveLength(2);
@@ -777,14 +808,22 @@ test("recording waits for the opposite native camera preview to finish flipping"
   await nativeBridge(page, { deferFlip: true });
   const dialog = await openCapture(page);
   await expect(
-    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    dialog.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeEnabled();
   await dialog
     .getByRole("button", { name: "Flip camera", exact: true })
     .click();
   await expect.poll(async () => (await calls(page, "flip")).length).toBe(1);
   await expect(
-    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    dialog.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
   await expect(
     dialog.getByRole("button", {
@@ -799,7 +838,11 @@ test("recording waits for the opposite native camera preview to finish flipping"
     ).nativeCameraFixture.resolveFlip?.(),
   );
   await expect(
-    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    dialog.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeEnabled();
   await expect(
     dialog.getByRole("button", { name: "Zoom 0.5×", exact: true }),
@@ -838,7 +881,11 @@ test("discarding an unsaved native take keeps all earlier durable takes and make
   await discard.click();
   await expect(discard).toHaveCount(0);
   await expect(
-    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    dialog.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeEnabled();
   await expect(dialog.locator(".session-timeline > span")).toHaveCount(1);
   expect(await draftBytes(page)).toEqual([
@@ -983,7 +1030,11 @@ test("sign-out cleanup removes durable drafts and retained native recordings so 
     .first()
     .click();
   await expect(
-    dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    dialog.getByRole("button", {
+      name: "Hold to record",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeEnabled();
   await expect(dialog.locator(".session-timeline > span")).toHaveCount(0);
   await page.evaluate(
@@ -1003,3 +1054,145 @@ test("sign-out cleanup removes durable drafts and retained native recordings so 
     ),
   ).toHaveLength(1);
 });
+
+for (const viewport of [
+  { width: 393, height: 852 },
+  { width: 390, height: 844 },
+]) {
+  test(`unsaved-take recovery stays readable and tappable inside the iPhone safe area at ${viewport.width}×${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await nativeBridge(page);
+    const dialog = await openCapture(page);
+    // Chromium has no physical iPhone notch or home indicator. Reserve their
+    // space explicitly while checking the real capture layout and bridge flow.
+    await dialog.evaluate((element) => {
+      (element as HTMLElement).style.setProperty("--capture-safe-top", "59px");
+      (element as HTMLElement).style.setProperty(
+        "--capture-safe-bottom",
+        "34px",
+      );
+    });
+    await page.evaluate(() => {
+      (
+        window as unknown as { nativeCameraFixture: BridgeFixture }
+      ).nativeCameraFixture.failures = 100;
+    });
+    await dialog
+      .getByRole("button", { name: "Or tap to start recording", exact: true })
+      .click();
+    await dialog
+      .getByRole("button", { name: "Stop recording", exact: true })
+      .click();
+    const recovery = dialog.getByRole("region", { name: "Camera recovery" });
+    const retry = recovery.getByRole("button", {
+      name: "Retry saving take",
+      exact: true,
+    });
+    const discard = recovery.getByRole("button", {
+      name: "Discard unsaved take",
+      exact: true,
+    });
+    await expect(retry).toBeEnabled();
+    // Reproduce both failures being present together in the beta screenshot.
+    await page.evaluate(() => {
+      (
+        window as unknown as { nativeCameraFixture: BridgeFixture }
+      ).nativeCameraFixture.emit("cameraError", {
+        message: "The camera could not start. Restart it or import a video.",
+      });
+    });
+    await expect(recovery.getByRole("alert")).toContainText(
+      "The camera could not start.",
+    );
+    await expect(dialog.getByRole("alert")).toHaveCount(1);
+    await expect(
+      dialog.getByRole("button", { name: "Restart camera", exact: true }),
+    ).toHaveCount(0);
+    await expect(dialog.locator(".session-tools")).toBeHidden();
+    await expect(
+      dialog.getByRole("button", {
+        name: "Hold to record",
+        includeHidden: true,
+      }),
+    ).toBeHidden();
+    await expect(
+      dialog.getByRole("button", {
+        name: "Or tap to start recording",
+        exact: true,
+        includeHidden: true,
+      }),
+    ).toBeHidden();
+    await expect(discard).toBeEnabled();
+
+    const panelBounds = (await recovery.boundingBox())!;
+    const headerBounds = (await dialog
+      .locator(".session-capture-header")
+      .boundingBox())!;
+    const questBounds = (await dialog
+      .getByRole("button", { name: "Quest instructions" })
+      .boundingBox())!;
+    const retryBounds = (await retry.boundingBox())!;
+    const discardBounds = (await discard.boundingBox())!;
+    expect(panelBounds.x).toBeGreaterThanOrEqual(20);
+    expect(panelBounds.x + panelBounds.width).toBeLessThanOrEqual(
+      viewport.width - 20,
+    );
+    expect(panelBounds.y).toBeGreaterThanOrEqual(
+      headerBounds.y + headerBounds.height + 8,
+    );
+    expect(panelBounds.y + panelBounds.height).toBeLessThanOrEqual(
+      questBounds.y - 12,
+    );
+    expect(discardBounds.y).toBeGreaterThanOrEqual(
+      retryBounds.y + retryBounds.height + 8,
+    );
+    for (const action of [retry, discard]) {
+      const bounds = (await action.boundingBox())!;
+      expect(bounds.height).toBeGreaterThanOrEqual(48);
+      expect(
+        await action.evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          return (
+            document
+              .elementFromPoint(
+                bounds.x + bounds.width / 2,
+                bounds.y + bounds.height / 2,
+              )
+              ?.closest("button") === element
+          );
+        }),
+      ).toBe(true);
+    }
+    expect(await draftBytes(page)).toEqual([]);
+    expect(await calls(page, "discardRecording")).toHaveLength(0);
+    await page.screenshot({
+      path: `.local/camera-recovery-${viewport.width}x${viewport.height}.png`,
+    });
+
+    await page.evaluate(() => {
+      (
+        window as unknown as { nativeCameraFixture: BridgeFixture }
+      ).nativeCameraFixture.failures = 0;
+    });
+    await retry.click();
+    await expect(retry).toHaveCount(0);
+    await expect(dialog.locator(".session-timeline > span")).toHaveCount(1);
+    await recovery
+      .getByRole("button", { name: "Start preview", exact: true })
+      .click();
+    await expect(recovery).toHaveCount(0);
+    await expect(dialog.locator(".session-tools")).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: "Hold to record", exact: true }),
+    ).toBeEnabled();
+    expect(await draftBytes(page)).toEqual([
+      { duration: 6, text: "Native take 1: preserved video bytes" },
+    ]);
+    expect(await calls(page, "startRecording")).toHaveLength(1);
+  });
+}

@@ -92,10 +92,28 @@ export async function readNativeCameraTake(
     throw new Error(
       "The camera could not prepare this take. Your earlier takes are saved.",
     );
-  const response = await fetch(Capacitor.convertFileSrc(take.fileUrl), {
+  const localUrl = Capacitor.convertFileSrc(take.fileUrl);
+  const response = await fetch(localUrl, {
     signal: AbortSignal.timeout(30_000),
   });
-  if (!response.ok)
+  // Capacitor's WKURLSchemeHandler serves MOV/MP4 using URLResponse rather
+  // than HTTPURLResponse. WebKit returns its readable body with status 0,
+  // ok=false, type=basic, and no MIME header. That is a local media response,
+  // not a failed HTTP download. Never accept opaque/error or remote responses
+  // this way, and still copy/check every byte before the caller removes a take.
+  const converted = new URL(localUrl);
+  const localMediaResponse =
+    response.status === 0 &&
+    response.type === "basic" &&
+    Capacitor.getPlatform() === "ios" &&
+    converted.protocol === "capacitor:" &&
+    converted.host === "localhost" &&
+    !converted.username &&
+    !converted.password &&
+    !converted.search &&
+    !converted.hash &&
+    converted.pathname === `/_capacitor_file_${url.pathname}`;
+  if (!response.ok && !localMediaResponse)
     throw new Error(
       "This take could not be read. Keep the camera open and try again.",
     );
