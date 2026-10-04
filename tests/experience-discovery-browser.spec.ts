@@ -241,7 +241,7 @@ async function continueStep(page: Page) {
 async function planJourney(page: Page) {
   await page
     .getByRole("group", { name: "Scene", exact: true })
-    .getByRole("button", { name: "Demon", exact: true })
+    .getByRole("button", { name: "Down for Anything", exact: true })
     .click();
   await continueStep(page);
   await page
@@ -355,7 +355,7 @@ async function confirmBooking(page: Page, price = "180") {
     .check();
 }
 
-test("normal Find my quests sends the unchanged Demon Full Send outing to OpenAI and checks the chosen private experience before accepting", async ({
+test("normal Find my quests sends the unchanged Down for Anything Full Send outing to OpenAI and checks the chosen private experience before accepting", async ({
   page,
 }) => {
   const control = await prepare(page, { location: stop });

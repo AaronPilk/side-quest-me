@@ -7,7 +7,7 @@ export const CATEGORIES = [
   { id: "daytime", label: "Daytime" },
   { id: "late_night", label: "Late Night" },
   { id: "street_challenges", label: "Street Challenges" },
-  { id: "demon", label: "Demon" },
+  { id: "demon", label: "Down for Anything" },
 ] as const;
 export const INTENSITIES = [
   {

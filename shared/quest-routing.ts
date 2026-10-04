@@ -60,7 +60,7 @@ const categoryDirection: Record<Outing["category"], string> = {
   street_challenges:
     "Give the group a concrete public-world mission and a finish line. Public space does not make bystanders participants; strangers join only through an allowed, genuinely optional invitation.",
   demon:
-    "Demon means cheeky rivalry, audacious surprises, ridiculous-but-playable rules and a story friends will retell. It is a mood, not an age rating. For eligible adults it can be irreverent nightlife or flirtatious fun among willing adults. For everyone, preserve the edge with a real winner, a reveal or a meaningful commitment; not a wholesome scavenger hunt, observation task, craft or generic team-building exercise. The joke targets the willing group, never workers or vulnerable strangers.",
+    "Down for Anything means cheeky rivalry, audacious surprises, ridiculous-but-playable rules and a story friends will retell. It is a mood, not an age rating. For eligible adults it can be irreverent nightlife or flirtatious fun among willing adults. For everyone, preserve the edge with a real winner, a reveal or a meaningful commitment; not a wholesome scavenger hunt, observation task, craft or generic team-building exercise. The joke targets the willing group, never workers or vulnerable strangers.",
 };
 
 const exclusionDomains: Partial<Record<Exclusion, QuestExperienceDomain[]>> = {

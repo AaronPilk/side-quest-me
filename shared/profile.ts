@@ -71,7 +71,7 @@ export const SURVEY_QUESTIONS: SurveyQuestion[] = [
       ["daytime", "Daytime"],
       ["late_night", "Late Night"],
       ["street_challenges", "Street Challenges"],
-      ["demon", "Demon"],
+      ["demon", "Down for Anything"],
     ]),
   },
   {
