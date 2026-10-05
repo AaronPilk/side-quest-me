@@ -191,6 +191,8 @@ and [preview limitations](https://developers.openai.com/siwc/token-sharing-open-
 
 ## Adult-drinking verification — October 4, later update
 
+Production deployed from `eee5adcfc2cd60be61776f5e26d9028844289b7c` via [run 37252608891](https://github.com/AaronPilk/side-quest-me/actions/runs/37252608891) at October 4, 9:46 p.m. EDT. Worker version: `42e09847-e0e3-4f79-9ac9-1ceefe2d8f9f`. The workflow repeated lint, typecheck, all 828 unit tests and the configured build successfully. Post-deploy `/api/health` returned `status:ok`, `environment:production`, `demo:false`. This is a backend release; no new TestFlight binary was uploaded for this change.
+
 - Full unit suite: **828 tests across 70 files pass**; typecheck, lint and build pass. Regression coverage preserves age, consent, personal exclusions and concrete quality checks while allowing low novelty/filmability scores and removing fixed candidate lanes.
 - A synthetic, real-provider request through the authored-draft pipeline produced **“Let the Bartender Beat Your Palates”** in 40.3 seconds with three bounded GPT-6 Astra calls. Actual actions include bartender-selected cocktails and flavor guesses; `minimumAge:21` and the alcohol conflict survive validation. The independent reviewer approved it. It was a **Bold** scenario, not evidence of Full Send quality. Evidence: `.local/ai-eval/gpt-6-astra/adult-bartender-choice.json`.
 - A separate normal-Create synthetic nightlife case passed in 41.1 seconds, but selected private karaoke rather than a cocktail outing. This verifies the pipeline, not consistently exciting Full Send output; open-ended selection still needs continued product evaluation. Evidence: `.local/ai-eval/adult-drinking-2026-10-04/adult-cocktail-outing.json`.
