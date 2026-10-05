@@ -1,6 +1,6 @@
 # Sidequest AI setup
 
-Implementation updated October 4, 2026. Build 15 is being prepared; the October 4 changes described below are not yet release confirmation. Build-specific deployment evidence later in this document is historical. See [adult quest routing implementation and release notes](ADULT_QUEST_ROUTING_2026-10-04.md) for the current verification record.
+Implementation updated October 4, 2026. Build 15 is available in internal TestFlight. The later server-side changes below open adult/drinking suggestions and remove parental-style editorial vetoes; their deployment is recorded separately from the native build. Historical evidence later in this document describes its named source, not the current review rules.
 
 Sidequest can use **xAI/Grok, OpenAI or Anthropic/Claude** through a server-only
 provider adapter. The current implementation supports three consented flows:
@@ -28,9 +28,11 @@ Age remains self-reported. Unknown/under-18 accounts receive no adult-only sugge
 
 ## Current experience routing and fallback — October 4
 
-`shared/quest-routing.ts` builds the same structured routing brief for normal discovery and the original-draft pipeline. It combines directly confirmed preferences with the current category, intensity, group size, setting, time, travel and budget. Current outing choices take priority over usual interests; exclusions remain binding. Down for Anything (stored category ID `demon`) steers toward audacious rivalry, surprises and a decisive reveal. Full Send requires a substantial commitment or competition with a result the group cares about; a routine activity with extra rounds or a nickname does not qualify.
+`shared/quest-routing.ts` combines confirmed preferences with the current category, intensity, group, setting, time, travel and budget. Current choices take priority over usual interests; explicit exclusions remain binding. Down for Anything (stored ID `demon`) is open-ended. Full Send expresses appetite for ambition, spontaneity and intensity without a fixed genre, competition, winner, twist or filming formula.
 
-For an eligible adult-nightlife outing, `worker/experience-discovery.ts` assigns the three candidate concepts different experience directions before selection. This prevents familiar sports/games interests from making every candidate another bar game. Directions include a booked participatory show, a staffed immersive experience and a spontaneous takeover or overnight stay when the time allows. A paid professional delivering a booked, advertised service is distinct from recruiting an unpaid stranger; neither staff nor other guests are presumed willing to join or be filmed. The independent reviewer checks the actual instructions, including intensity, age fit, costs, boundaries and whether the concept merely renames a previous suggestion.
+Adult Full Send concepts no longer have three assigned activity lanes or a schema-enforced mechanic per candidate. The shared creative guidance explicitly permits adult venues, consensual flirting, crude language and irreverent humor. Eligible 21+ opted-in outings without an alcohol exclusion receive an affirmative `permitted_for_21_plus_outing` signal. Cocktails, bar crawls, brewery/wine tastings and drinking-focused nights are allowed; they are not automatically rewritten as mocktail or family-friendly plans. Age remains self-reported, and venue/local rules still apply. Binge/timed drinking, intoxication targets, drinking before dangerous activities, coercion and nonconsenting targets remain excluded.
+
+Core quality checks remain: playability, goal and audienceIntensity each need a score of at least 4, and the review must confirm audience fit. Originality and filmability rank alternatives without a minimum score or total-score requirement. The reviewer still blocks actual incoherence, missing essential actions, hidden purchases, fabricated facts, metadata mismatches, age/consent/safety issues and violations of the user's plan. A rejection solely for weak novelty or limited filming cannot veto an otherwise qualifying plan; an unexplained rejection or a real quality, factual or safety defect remains blocked. Adult content and ordinary legal drinking are expressly not quality defects. This broadens suggestions without claiming that every idea will be enjoyable.
 
 Nightlife can be suggested with venue approval still pending, but acceptance still requires the relevant confirmations. Every 18–20 nightlife proposal carries an 18+ floor and excludes presumed drinking/21+ admission; a 21+ nightlife proposal carries a 21+ floor. Private age is reloaded before discovery replay and before acceptance. A cached response or old proposal cannot restore eligibility after the account's age or boundaries change. Older adult proposals without an age floor require a fresh suggestion for an 18–20 account.
 
@@ -38,7 +40,7 @@ Nightlife can be suggested with venue approval still pending, but acceptance sti
 
 Unlimited time may produce an actual overnight experience. The quest activity schema supports up to 2,880 minutes; a finite outing remains capped at 720 minutes and still reserves travel separately. The authored staycation requires Unlimited and represents the overnight commitment as 1,200 minutes. Prices and bookings remain pending until confirmed, including all required rooms, tickets, rentals, meals, fees and travel within the group ceiling. Apple Maps listings are not inventory or quotes.
 
-These changes use existing private preference and quest-content JSON. **No database migration is required.** The normal two-call generation/review budget, named-provider consent, private proposal ownership and zero-award rule remain unchanged. Live samples passed on October 4, but earlier attempts also showed weak or mismatched proposals being rejected. Quality gates and fallback coverage reduce failures; they do not guarantee that every request is accepted, novel or enjoyable.
+These changes use existing private preference and quest-content JSON. **No database migration is required.** The normal two-call generation/review budget, named-provider consent, private proposal ownership and zero-award rule remain unchanged. Earlier live samples and release evidence remain historical. The current factual/eligibility review can still reject unusable or contradictory output; fallback coverage does not guarantee that every request is accepted, novel or enjoyable.
 
 ## Provider choice
 
@@ -187,29 +189,22 @@ See [Sign in with ChatGPT](https://learn.chatgpt.com/docs/sign-in-with-chatgpt),
 [subscription inference](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference),
 and [preview limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations).
 
+## Adult-drinking verification — October 4, later update
+
+- Full unit suite: **828 tests across 70 files pass**; typecheck, lint and build pass. Regression coverage preserves age, consent, personal exclusions and concrete quality checks while allowing low novelty/filmability scores and removing fixed candidate lanes.
+- A synthetic, real-provider request through the authored-draft pipeline produced **“Let the Bartender Beat Your Palates”** in 40.3 seconds with three bounded GPT-6 Astra calls. Actual actions include bartender-selected cocktails and flavor guesses; `minimumAge:21` and the alcohol conflict survive validation. The independent reviewer approved it. It was a **Bold** scenario, not evidence of Full Send quality. Evidence: `.local/ai-eval/gpt-6-astra/adult-bartender-choice.json`.
+- A separate normal-Create synthetic nightlife case passed in 41.1 seconds, but selected private karaoke rather than a cocktail outing. This verifies the pipeline, not consistently exciting Full Send output; open-ended selection still needs continued product evaluation. Evidence: `.local/ai-eval/adult-drinking-2026-10-04/adult-cocktail-outing.json`.
+- These are synthetic checks with no real user data. No model test changes provider safeguards or establishes venue availability. Server deployment is separate from TestFlight; existing clients use the revised instructions on new generation requests after deployment.
+
 ## Quest quality pipeline
 
 Normal Create experience discovery uses two bounded provider calls with GPT-6
 Astra at low reasoning effort:
 
-1. Compare three materially different, scored concepts and return the complete
-   selected proposal in the same structured response. `selectedConceptId` must
-   identify one of the three distinct concepts. The selected concept must pass
-   the existing feasibility and playability, goal and audience/intensity
-   thresholds; subjective score ties do not introduce an additional rejection.
-   The response schema fixes the outing's category, intensity, group, participant
-   range and setting, and bounds activity time by the time remaining after travel.
-2. Independently review the selected instructions using the unchanged quality
-   gates. This checks coherence, concrete intensity, completeness, hidden
-   requirements, boundaries, unsupported place facts, filming compatibility and
-   whether a reroll merely renames a previous activity. A weak or contradictory
-   proposal is withheld; a fallback remains explicitly labeled.
+1. Compare three distinct, scored concepts and return the selected proposal in the same structured response. The selected concept must fit actual time and budget and score at least 4 on playability, goal and audienceIntensity. There is no minimum originality, filmability or total score. The schema preserves category, intensity, group, participant count and setting.
+2. Independently review concrete usability, coherence, completeness, required resources, facts, metadata, age, consent and explicit boundaries. The same three core quality scores and audience fit must pass independently. Novelty and filmability alone do not veto a proposal; adult content and ordinary legal drinking are not quality defects. An exact previously shown title is still rejected locally to avoid replaying the same suggestion.
 
-The total deadline is **90 seconds**, with up to **60 seconds** for comparison
-and proposal and up to **30 seconds** for review, both bounded by the remaining
-overall time. Combining comparison and expansion removes a provider round trip;
-it does not lower quality scores or remove independent review. There is no
-automatic paid retry of the full generation and no silent provider switch.
+The total deadline remains **90 seconds**: up to **60 seconds** for comparison/proposal and **30 seconds** for review, bounded by remaining time. There is no automatic paid retry of the full generation and no silent provider switch.
 
 The separate **Draft with AI** original-draft flow retains three bounded stages:
 
@@ -262,8 +257,8 @@ resolves these against the authenticated owner's private proposals and unpublish
 templates before any generation. Missing, invalid or other-owner history is
 rejected. Only bounded summaries of previous titles, actions and mechanics reach
 the model; prior proposal IDs, identity and stored location details do not. An
-exact previous title is rejected locally, and independent review checks for a
-renamed repeat. The curated fallback skips exact prior titles when another fitting
+exact previous title is rejected locally. Independent review can suggest more
+variety but does not veto an otherwise usable plan for editorial similarity alone. The curated fallback skips exact prior titles when another fitting
 option exists. This improves variety without promising every reroll is novel.
 
 The client keeps the exact payload and idempotency key for a transport retry.

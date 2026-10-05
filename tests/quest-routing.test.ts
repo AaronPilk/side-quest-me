@@ -46,6 +46,7 @@ describe("quest audience and experience routing", () => {
       expect(brief.adultContext.ageEligible).toBe(false);
       expect(brief.adultContext.nightlifeSuggestionAllowed).toBe(false);
       expect(brief.adultContext.alcoholSuggestionAllowed).toBe(false);
+      expect(brief.boundaries.alcohol).not.toBe("permitted_for_21_plus_outing");
       expect(brief.adultContext.blockers).toContain(
         ageBand === "under_18" ? "under_adult_age" : "age_not_confirmed",
       );
@@ -70,15 +71,23 @@ describe("quest audience and experience routing", () => {
     expect(youngerAdult.adultContext.nightlifeSuggestionAllowed).toBe(true);
     expect(youngerAdult.adultContext.nightlifeRouteAllowed).toBe(false);
     expect(youngerAdult.adultContext.alcoholSuggestionAllowed).toBe(false);
+    expect(youngerAdult.boundaries.alcohol).not.toBe(
+      "permitted_for_21_plus_outing",
+    );
     const adult = buildQuestRoutingBrief(adultPreferences, outing);
     expect(adult.adultContext.alcoholSuggestionAllowed).toBe(true);
-    expect(
-      buildQuestRoutingBrief(confirmed({ exclusions: ["alcohol"] }), outing)
-        .adultContext.alcoholSuggestionAllowed,
-    ).toBe(false);
+    expect(adult.boundaries.alcohol).toBe("permitted_for_21_plus_outing");
+    expect(adult.experience.preferredDomains[0]).toBe("adult_nightlife");
+    expect(adult.adultContext.nightlifeRouteAllowed).toBe(false);
+    const excludesAlcohol = buildQuestRoutingBrief(
+      confirmed({ exclusions: ["alcohol"] }),
+      outing,
+    );
+    expect(excludesAlcohol.adultContext.alcoholSuggestionAllowed).toBe(false);
+    expect(excludesAlcohol.boundaries.alcohol).toBe("excluded");
   });
 
-  it("routes Demon mood separately from the selected intensity and keeps stakes explicit", () => {
+  it("keeps Down for Anything open-ended and distinct from the selected intensity", () => {
     const demon = buildQuestRoutingBrief(adultPreferences, {
       ...fullSendFriends,
       category: "demon",
@@ -89,10 +98,12 @@ describe("quest audience and experience routing", () => {
       group: "couple",
       participants: 2,
     });
-    expect(demon.experience.categoryDirection).toContain("cheeky rivalry");
+    expect(demon.experience.categoryDirection).toContain("open invitation");
     expect(demon.experience.challengeDesign.stakes).toContain("capped");
-    expect(demon.experience.direction).toContain(
-      "what changes because of the result",
+    expect(demon.experience.challengeDesign.stakes).toContain("optional");
+    expect(demon.experience.direction).toContain("never a required formula");
+    expect(demon.experience.challengeDesign.objective).toContain(
+      "does not need to become a challenge or competition",
     );
     expect(date.experience.categoryDirection).toContain(
       "not automatically quiet",
@@ -136,7 +147,7 @@ describe("quest audience and experience routing", () => {
     expect(couple.experience.preferredDomains).not.toContain("adult_nightlife");
     expect(couple.experience.domainsRequiringActivityOptIn).toEqual([]);
     expect(friends.boundaries.requiredIntoxication).toBe(false);
-    expect(friends.boundaries.drinkingBeforePhysicalActivities).toBe(false);
+    expect(friends.boundaries.drinkingBeforeHazardousActivities).toBe(false);
   });
 
   it("makes the current outing authoritative over usual profile answers", () => {
@@ -148,13 +159,32 @@ describe("quest audience and experience routing", () => {
     expect(brief.currentOuting.category).toBe("date_night");
     expect(brief.experience.intensity).toBe("full_send");
     expect(brief.audience.energy).toBe("adventurous");
-    expect(brief.experience.direction).toContain(
-      "strongest experiential route",
-    );
-    expect(brief.experience.direction).toContain("extra rounds");
+    expect(brief.experience.direction).toContain("go all in");
     expect(brief.direction.join(" ")).toContain(
       "A couple or date can be adventurous",
     );
+  });
+
+  it("prioritizes an eligible nightlife outing over usual interests without a genre allowlist", () => {
+    const brief = buildQuestRoutingBrief(
+      confirmed({
+        interests: ["sports", "games"],
+        usualIntensity: "chill",
+        categories: ["daytime"],
+      }),
+      { ...fullSendFriends, category: "demon", venuePermission: false },
+    );
+    expect(brief.experience.preferredDomains[0]).toBe("adult_nightlife");
+    expect(brief.experience.preferredDomains).toContain("competition");
+    expect(brief.experience.intensity).toBe("full_send");
+    expect(brief.direction.join(" ")).toContain("not an allowlist");
+    expect(brief.adultContext.nightlifeSuggestionAllowed).toBe(true);
+    expect(brief.adultContext.nightlifeRouteAllowed).toBe(false);
+    expect(brief.adultContext.alcoholSuggestionAllowed).toBe(true);
+    expect(brief.boundaries.alcohol).toBe("permitted_for_21_plus_outing");
+    expect(brief.adultContext.blockers).toEqual([
+      "venue_permission_not_confirmed",
+    ]);
   });
 
   it("uses confirmed creative signals without treating skills as a tame default", () => {
@@ -300,13 +330,15 @@ describe("quest audience and experience routing", () => {
     ["no explicit opt-in", { adultContext: false }],
     ["no self-confirmation", { adultEligible: false }],
     ["not a venue", { setting: "outside" as const }],
-    ["no venue permission", { venuePermission: false }],
+    ["an at-home setting", { setting: "home" as const }],
   ])("keeps adult nightlife gated with %s", (_label, patch) => {
     const brief = buildQuestRoutingBrief(adultPreferences, {
       ...fullSendFriends,
       ...patch,
     });
     expect(brief.adultContext.nightlifeRouteAllowed).toBe(false);
+    expect(brief.adultContext.alcoholSuggestionAllowed).toBe(false);
+    expect(brief.boundaries.alcohol).not.toBe("permitted_for_21_plus_outing");
     expect(brief.audience.context).toBe("general");
     expect(brief.experience.preferredDomains).not.toContain("adult_nightlife");
     expect(brief.adultContext.ageVerified).toBe(false);
@@ -322,7 +354,10 @@ describe("quest audience and experience routing", () => {
       ageVerified: false,
       legalDrinkingAgeVerified: false,
     });
-    expect(brief.boundaries.alcohol).toBe("not_requested_or_required");
+    expect(brief.adultContext.alcoholSuggestionAllowed).toBe(true);
+    expect(brief.boundaries.alcohol).toBe("permitted_for_21_plus_outing");
+    expect(brief.boundaries.requiredIntoxication).toBe(false);
+    expect(brief.boundaries.drinkingBeforeHazardousActivities).toBe(false);
   });
 
   it("reserves group travel and confirmed venue costs and subtracts travel time", () => {
@@ -368,9 +403,7 @@ describe("quest audience and experience routing", () => {
       { ...DEFAULT_OUTING, intensity: "full_send", durationMinutes: 15 },
     );
     expect(brief.currentOuting.intensity).toBe("full_send");
-    expect(brief.experience.direction).toContain(
-      "strongest experiential route",
-    );
+    expect(brief.experience.direction).toContain("go all in");
     expect(brief.resources.remainingActivityBudgetMinor).toBe(0);
     expect(brief.resources.remainingActivityMinutes).toBe(15);
     expect(brief.resources.blockers).toEqual([]);
@@ -389,7 +422,7 @@ describe("quest audience and experience routing", () => {
     expect(brief.experience.intensity).toBe("full_send");
     expect(brief.experience.preserveIntensityUnderConstraints).toBe(true);
     expect(brief.experience.noFeasibleMatch).toBe(
-      "return_no_fit_instead_of_a_weak_placeholder",
+      "return_no_fit_for_constraints_or_unmet_experience_quality",
     );
     expect(brief.resources).toMatchObject({
       remainingActivityBudgetMinor: 0,

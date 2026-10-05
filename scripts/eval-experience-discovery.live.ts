@@ -30,6 +30,7 @@ const cases: {
   budget: number;
   setting?: Outing["setting"];
   exclusions: Preferences["exclusions"];
+  interests?: Preferences["interests"];
   places: { name: string; category: string }[];
 }[] = [
   {
@@ -55,6 +56,20 @@ const cases: {
       { name: "Synthetic Downtown Bar", category: "Bar with darts and pool" },
       { name: "Synthetic Late Lounge", category: "Lounge" },
       { name: "Synthetic Music Room", category: "Live music venue" },
+    ],
+  },
+  {
+    id: "adult-cocktail-outing",
+    ageBand: "21_plus",
+    adultContext: true,
+    duration: 180,
+    budget: 50000,
+    exclusions: ["strangers"],
+    interests: ["music", "comedy"],
+    places: [
+      { name: "Synthetic Cocktail House", category: "Cocktail bar" },
+      { name: "Synthetic Tasting Cellar", category: "Wine bar" },
+      { name: "Synthetic Rooftop Lounge", category: "Rooftop bar" },
     ],
   },
   {
@@ -108,7 +123,7 @@ for (const scenario of cases.filter(
     const fields = {
       ageBand: scenario.ageBand,
       humor: ["competitive", "absurd", "surprises"],
-      interests: ["sports", "games"],
+      interests: scenario.interests ?? ["sports", "games"],
       approach: "group_only",
       preparation: "proper_setup",
       role: "rotate",
@@ -146,7 +161,9 @@ for (const scenario of cases.filter(
       });
       return result;
     };
-    const dir = resolve(".local/ai-eval/discovery");
+    const dir = resolve(
+      process.env.SIDEQUEST_AI_EVAL_OUTPUT_DIR || ".local/ai-eval/discovery",
+    );
     mkdirSync(dir, { recursive: true });
     try {
       const result = await generateDiscoveredExperience(

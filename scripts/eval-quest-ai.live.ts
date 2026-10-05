@@ -47,6 +47,38 @@ const scenarios: {
   preferences: Preferences;
 }[] = [
   {
+    id: "adult-bartender-choice",
+    brief:
+      "Three 21+ friends want a bartender-picked cocktail night: we tell the bartender flavors we dislike, then let them choose a surprise drink for each willing drinker and compare guesses before learning the names. Keep it an adult drinking outing, not mocktails or karaoke. Nobody has to finish a drink, drink quickly or order extra rounds. We have a confirmed bar visit and public transit home; no filming staff or other patrons.",
+    outing: {
+      ...DEFAULT_OUTING,
+      category: "demon",
+      intensity: "bold",
+      group: "friends",
+      participants: 3,
+      setting: "venue",
+      budgetMinor: 18000,
+      budgetScope: "total",
+      durationMinutes: 180,
+      travelMinutes: 30,
+      travelCostMinor: 1800,
+      transport: "transit",
+      adultEligible: true,
+      adultContext: true,
+      venuePermission: true,
+      arrangementConfirmed: true,
+      confirmedVenueCostMinor: 0,
+    },
+    preferences: confirmed({
+      ageBand: "21_plus",
+      humor: ["surprises"],
+      approach: "group_only",
+      preparation: "proper_setup",
+      role: "rotate",
+      exclusions: ["strangers"],
+    }),
+  },
+  {
     id: "five-friends-full-send",
     brief:
       "Five friends with a confirmed private venue booking want a rowdy Full Send experience: fierce team rivalry, absurd surprises and an outrageous finale worth talking about tomorrow. Everyone must have an active role. No cute date exercise, photo hunt, crafts or ordinary open mic. No drinking requirement.",
@@ -257,6 +289,13 @@ for (const scenario of scenarios.filter(
       expect(result.quest.intensity).toBe(scenario.outing.intensity);
       expect(result.quest.settings).toContain(scenario.outing.setting);
       expect(calls).toHaveLength(3);
+      if (scenario.id === "adult-bartender-choice") {
+        expect(result.quest.minimumAge).toBe(21);
+        expect(result.quest.conflicts).toContain("alcohol");
+        expect(
+          result.quest.beats.map(({ action }) => action).join(" "),
+        ).toMatch(/cocktail/i);
+      }
       report.passed = true;
     } catch (error) {
       report.passed = false;

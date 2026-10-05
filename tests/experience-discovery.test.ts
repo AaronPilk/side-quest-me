@@ -17,7 +17,6 @@ import {
 } from "../shared/experience-discovery";
 import {
   curatedDiscoveryFallback,
-  discoveryConceptLanes,
   generateDiscoveredExperience,
   registerExperienceDiscovery,
 } from "../worker/experience-discovery";
@@ -481,50 +480,54 @@ describe("private experience discovery", () => {
       items: { properties: { action: { minLength: 1 } } },
     });
   });
-  it("routes confirmed adult Full Send beyond ordinary hobby games", () => {
+  it("allows adult nightlife to explore any mechanic without fixed concept lanes", async () => {
     const preferences: Preferences = {
       ...DEFAULT_PREFERENCES,
-      ageBand: "21_plus" as const,
+      ageBand: "21_plus",
       interests: ["sports", "games"],
-      sources: { ageBand: "survey" as const, interests: "survey" as const },
+      sources: { ageBand: "survey", interests: "survey" },
     };
-    const outing = {
-      ...base.outing,
-      adultEligible: true,
-      adultContext: true,
-      durationMinutes: 180,
-    };
-    expect(
-      discoveryConceptLanes(preferences, outing)?.map(({ id, mechanic }) => ({
-        id,
-        mechanic,
+    const comparison = comparisonFixture();
+    const response = {
+      ...comparison,
+      candidates: comparison.candidates.map((candidate) => ({
+        ...candidate,
+        mechanic: "competition",
       })),
-    ).toEqual([
-      { id: "A", mechanic: "discovery" },
-      { id: "B", mechanic: "live_show" },
-      { id: "C", mechanic: "competition" },
-    ]);
-    expect(
-      discoveryConceptLanes(preferences, {
-        ...outing,
-        durationMinutes: null,
-      })?.[2].mechanic,
-    ).toBe("discovery");
-    expect(discoveryConceptLanes(DEFAULT_PREFERENCES, outing)).toBeNull();
-    expect(
-      discoveryConceptLanes(preferences, { ...outing, intensity: "chill" }),
-    ).toBeNull();
-    expect(
-      discoveryConceptLanes(preferences, { ...outing, adultContext: false }),
-    ).toBeNull();
+      proposal: {
+        ...comparison.proposal,
+        adultOnly: true,
+        supportsAdultContext: true,
+        minimumAge: 21,
+      },
+    };
+    model
+      .mockReset()
+      .mockResolvedValueOnce(response)
+      .mockResolvedValueOnce(approvedQuestQualityFixture());
+    const result = await generateDiscoveredExperience(
+      { OPENAI_API_KEY: "fixture" },
+      preferences,
+      {
+        ...base,
+        outing: {
+          ...base.outing,
+          adultEligible: true,
+          adultContext: true,
+          durationMinutes: 180,
+        },
+      },
+    );
+    expect(result.mechanic).toBe("competition");
+    expect(model.mock.calls[0][2]).not.toHaveProperty("conceptLanes");
+    const candidateSchema = model.mock.calls[0][3].properties.candidates.items;
+    expect(candidateSchema).not.toHaveProperty("anyOf");
+    expect(candidateSchema.properties.mechanic.enum).toContain("competition");
+    expect(candidateSchema.properties.mechanic.enum).toContain("live_show");
+    expect(model).toHaveBeenCalledTimes(2);
   });
 
-  it.each([
-    "age_floor",
-    "adult_context",
-    "ordinary_game_lane",
-    "paid_cast_as_volunteers",
-  ])(
+  it.each(["age_floor", "adult_context", "paid_cast_as_volunteers"])(
     "rejects %s drift before reviewing an adult nightlife proposal",
     async (field) => {
       const comparison = comparisonFixture();
@@ -547,8 +550,6 @@ describe("private experience discovery", () => {
         response.proposal.supportsAdultContext = false;
       if (field === "paid_cast_as_volunteers")
         response.proposal.requiresVolunteer = true;
-      if (field === "ordinary_game_lane")
-        response.candidates[0].mechanic = "competition";
       model.mockReset().mockResolvedValueOnce(response);
       await expect(
         generateDiscoveredExperience(
@@ -731,14 +732,19 @@ describe("private experience discovery", () => {
     expect(model).toHaveBeenCalledTimes(2);
   });
   it.each([
-    "weak",
+    "weak_playability",
+    "weak_goal",
+    "weak_intensity",
     "over_budget",
     "over_time",
     "duplicate_id",
     "missing_selection",
   ])("rejects %s selected concepts without retrying", async (failure) => {
     const comparison = comparisonFixture();
-    if (failure === "weak")
+    if (failure === "weak_playability")
+      comparison.candidates[0].scores.playability = 3;
+    if (failure === "weak_goal") comparison.candidates[0].scores.goal = 3;
+    if (failure === "weak_intensity")
       comparison.candidates[0].scores.audienceIntensity = 3;
     if (failure === "over_budget")
       comparison.candidates[0].estimatedCostMinor = base.outing.budgetMinor + 1;
@@ -755,7 +761,33 @@ describe("private experience discovery", () => {
     ).rejects.toThrow();
     expect(model).toHaveBeenCalledTimes(1);
   });
-  it("retains every independent quality gate and rejects renamed prior activities", async () => {
+  it("accepts low novelty and filmability scores when the actual experience is strong", async () => {
+    const comparison = comparisonFixture();
+    comparison.candidates[0].scores = {
+      playability: 4,
+      goal: 4,
+      originality: 1,
+      audienceIntensity: 4,
+      filmability: 1,
+    };
+    const review = {
+      ...approvedQuestQualityFixture(),
+      scores: comparison.candidates[0].scores,
+    };
+    model
+      .mockReset()
+      .mockResolvedValueOnce(comparison)
+      .mockResolvedValueOnce(review);
+    const result = await generateDiscoveredExperience(
+      { OPENAI_API_KEY: "fixture" },
+      DEFAULT_PREFERENCES,
+      base,
+    );
+    expect(result.quest.title).toBe(comparison.proposal.title);
+    expect(model).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats a subjective similarity criticism as advice while supplying prior experience context", async () => {
     const comparison = comparisonFixture();
     const rejected = {
       ...approvedQuestQualityFixture(),
@@ -764,8 +796,8 @@ describe("private experience discovery", () => {
         {
           code: "weak_twist",
           severity: "blocking",
-          evidence: "Same activity under a new name.",
-          reason: "The previous proposal already suggested this experience.",
+          evidence: "This uses a familiar activity family.",
+          reason: "A different mechanic would offer more variety.",
         },
       ],
     };
@@ -780,22 +812,74 @@ describe("private experience discovery", () => {
         mechanic: "competition",
       },
     ];
-    await expect(
-      generateDiscoveredExperience(
-        { OPENAI_API_KEY: "fixture" },
-        DEFAULT_PREFERENCES,
-        base,
-        fetch,
-        () => {},
-        history,
-      ),
-    ).rejects.toMatchObject({
-      kind: "review_rejected",
-      detailCodes: ["weak_twist"],
-    });
+    const result = await generateDiscoveredExperience(
+      { OPENAI_API_KEY: "fixture" },
+      DEFAULT_PREFERENCES,
+      base,
+      fetch,
+      () => {},
+      history,
+    );
+    expect(result.quest.title).toBe(comparison.proposal.title);
     expect(model.mock.calls[1][2].previousExperiences).toEqual(history);
     expect(model).toHaveBeenCalledTimes(2);
   });
+
+  it.each([
+    "unsafe_mechanic",
+    "boundary_mismatch",
+    "unsupported_facts",
+    "intensity_mismatch",
+    "audience_mismatch",
+  ] as const)(
+    "still rejects a discovered experience with objective finding %s",
+    async (code) => {
+      model
+        .mockReset()
+        .mockResolvedValueOnce(comparisonFixture())
+        .mockResolvedValueOnce({
+          ...approvedQuestQualityFixture(),
+          decision: "reject",
+          findings: [
+            {
+              code,
+              severity: "blocking",
+              evidence: "A concrete prohibited condition is present.",
+              reason: "The proposal breaks a required constraint.",
+            },
+          ],
+        });
+      await expect(
+        generateDiscoveredExperience(
+          { OPENAI_API_KEY: "fixture" },
+          DEFAULT_PREFERENCES,
+          base,
+        ),
+      ).rejects.toMatchObject({ kind: "review_rejected", detailCodes: [code] });
+      expect(model).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(["playability", "goal", "audienceIntensity"] as const)(
+    "rejects a selected concept when the independent review finds weak %s",
+    async (criterion) => {
+      const review = approvedQuestQualityFixture();
+      review.scores[criterion] = 3;
+      model
+        .mockReset()
+        .mockResolvedValueOnce(comparisonFixture())
+        .mockResolvedValueOnce(review);
+      await expect(
+        generateDiscoveredExperience(
+          { OPENAI_API_KEY: "fixture" },
+          DEFAULT_PREFERENCES,
+          base,
+        ),
+      ).rejects.toMatchObject({ kind: "review_rejected" });
+      expect(model).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it("rejects an exact prior AI title before paying for its review", async () => {
     const comparison = comparisonFixture();
     model.mockReset().mockResolvedValueOnce(comparison);

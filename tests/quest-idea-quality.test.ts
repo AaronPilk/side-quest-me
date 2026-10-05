@@ -155,37 +155,127 @@ describe("bounded concept comparison and independent quality review", () => {
     ).toBe(false);
   });
 
-  it("allows harmless optional improvements while refusing a weak or vague mission", () => {
+  it("allows low novelty and filmability scores without a total score threshold", () => {
     const reviewed = questQualityReviewSchema.parse({
       ...approvedQuestQualityFixture(),
       scores: {
         playability: 4,
         goal: 4,
-        originality: 4,
+        originality: 1,
         audienceIntensity: 4,
-        filmability: 4,
+        filmability: 1,
       },
       findings: [
         {
           code: "weak_twist",
           severity: "note",
-          evidence: "Use the same route for your last attempt",
+          evidence: "The basic activity is familiar.",
           reason: "A different route could add optional variety.",
         },
       ],
     });
     expect(acceptsQuestQuality(reviewed)).toBe(true);
+  });
+
+  it.each(["weak_twist", "unfilmable"] as const)(
+    "does not reject a valid experience for the editorial finding %s",
+    (code) => {
+      const reviewed = questQualityReviewSchema.parse({
+        ...approvedQuestQualityFixture(),
+        decision: "reject",
+        findings: [
+          {
+            code,
+            severity: "blocking",
+            evidence:
+              "The proposed experience is not the critic's preferred style.",
+            reason:
+              "This is editorial advice, not a constraint or safety defect.",
+          },
+        ],
+      });
+      expect(acceptsQuestQuality(reviewed)).toBe(true);
+    },
+  );
+
+  it.each([
+    "unsafe_mechanic",
+    "boundary_mismatch",
+    "unsupported_facts",
+    "constraint_mismatch",
+    "misleading_metadata",
+    "intensity_mismatch",
+    "audience_mismatch",
+  ] as const)(
+    "still blocks objective finding %s even with an approval and high scores",
+    (code) => {
+      expect(
+        acceptsQuestQuality(
+          questQualityReviewSchema.parse({
+            ...approvedQuestQualityFixture(),
+            findings: [
+              {
+                code,
+                severity: "blocking",
+                evidence: "The proposal contradicts an explicit requirement.",
+                reason: "Editorial freedom does not override this requirement.",
+              },
+            ],
+          }),
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it.each(["playability", "goal", "audienceIntensity"] as const)(
+    "does not return a weak %s score as a successful recommendation",
+    (criterion) => {
+      const review = questQualityReviewSchema.parse(
+        approvedQuestQualityFixture(),
+      );
+      expect(
+        acceptsQuestQuality({
+          ...review,
+          scores: { ...review.scores, [criterion]: 3 },
+        }),
+      ).toBe(false);
+    },
+  );
+
+  it("does not let an editorial finding hide a real blocking finding", () => {
     expect(
-      acceptsQuestQuality({
-        ...reviewed,
-        scores: { ...reviewed.scores, playability: 3 },
-      }),
+      acceptsQuestQuality(
+        questQualityReviewSchema.parse({
+          ...approvedQuestQualityFixture(),
+          decision: "reject",
+          findings: [
+            {
+              code: "weak_twist",
+              severity: "blocking",
+              evidence: "Familiar activity",
+              reason: "Subjective taste",
+            },
+            {
+              code: "unsafe_mechanic",
+              severity: "blocking",
+              evidence: "Drinking before driving",
+              reason: "Unsafe prerequisite",
+            },
+          ],
+        }),
+      ),
     ).toBe(false);
+  });
+
+  it("fails closed on an unexplained rejection", () => {
     expect(
-      acceptsQuestQuality({
-        ...reviewed,
-        scores: { ...reviewed.scores, originality: 2 },
-      }),
+      acceptsQuestQuality(
+        questQualityReviewSchema.parse({
+          ...approvedQuestQualityFixture(),
+          decision: "reject",
+          findings: [],
+        }),
+      ),
     ).toBe(false);
   });
 
@@ -203,7 +293,7 @@ describe("bounded concept comparison and independent quality review", () => {
       ).toBe(false);
   });
 
-  it("requires the critic to assess the experience even when every numeric score is high", () => {
+  it("requires the critic to verify audience fit even when every numeric score is high", () => {
     const inflated = questQualityReviewSchema.parse({
       ...approvedQuestQualityFixture(),
       audienceExperienceFits: false,
@@ -290,21 +380,75 @@ describe("three-call quest drafting budget and semantic gate", () => {
     }
   });
 
-  it("does not expand a weak Full Send just to return something", async () => {
+  it("expands a strong Full Send despite low novelty and filmability scores", async () => {
     const concepts = questConceptsFixture(fitting);
     for (const concept of concepts.candidates) {
-      concept.scores.audienceIntensity = 2;
+      concept.scores = {
+        playability: 4,
+        goal: 4,
+        originality: 1,
+        audienceIntensity: 4,
+        filmability: 1,
+      };
       concept.intensityMechanic =
-        "This is a mild observation exercise with more rounds, not a substantial experience.";
+        "A challenge with rules and a visible result.";
     }
-    const send = vi.fn(async () => envelope(concepts));
-    await expect(
-      generateAiQuestDraft(env, DEFAULT_PREFERENCES, input, send),
-    ).rejects.toMatchObject({ code: "ai_quality_retry", status: 503 });
-    expect(send).toHaveBeenCalledTimes(1);
+    const stages = [concepts, proposal, approvedQuestQualityFixture()];
+    const send = vi.fn(async () => envelope(stages.shift()));
+    const result = await generateAiQuestDraft(
+      env,
+      DEFAULT_PREFERENCES,
+      input,
+      send,
+    );
+    expect(result.quest.title).toBe(proposal.title);
+    expect(send).toHaveBeenCalledTimes(3);
   });
 
-  it("rejects an inflated audience fit after expansion without retrying or accepting", async () => {
+  it("returns a valid expanded idea despite a purely editorial rejection", async () => {
+    const stages = [
+      questConceptsFixture(fitting),
+      proposal,
+      {
+        ...approvedQuestQualityFixture(),
+        decision: "reject",
+        intensityEvidence:
+          "The critic would prefer a different kind of challenge.",
+        findings: [
+          {
+            code: "weak_twist",
+            severity: "blocking",
+            evidence: "The activity is not the critic's preferred style.",
+            reason: "Taste should not veto a feasible idea.",
+          },
+        ],
+      },
+    ];
+    const send = vi.fn(async () => envelope(stages.shift()));
+    const result = await generateAiQuestDraft(
+      env,
+      DEFAULT_PREFERENCES,
+      input,
+      send,
+    );
+    expect(result.quest.title).toBe(proposal.title);
+    expect(send).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(["playability", "goal", "audienceIntensity"] as const)(
+    "does not expand concepts that all have weak %s",
+    async (criterion) => {
+      const concepts = questConceptsFixture(fitting);
+      for (const concept of concepts.candidates) concept.scores[criterion] = 3;
+      const send = vi.fn(async () => envelope(concepts));
+      await expect(
+        generateAiQuestDraft(env, DEFAULT_PREFERENCES, input, send),
+      ).rejects.toMatchObject({ code: "ai_quality_retry", status: 503 });
+      expect(send).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("rejects an expanded idea whose real experience does not fit the audience", async () => {
     const stages = [
       questConceptsFixture(fitting),
       proposal,
@@ -312,7 +456,7 @@ describe("three-call quest drafting budget and semantic gate", () => {
         ...approvedQuestQualityFixture(),
         audienceExperienceFits: false,
         intensityEvidence:
-          "A longer sound hunt still lacks the substantial experience the group requested.",
+          "The actual activity falls short of the requested experience.",
       },
     ];
     const send = vi.fn(async () => envelope(stages.shift()));

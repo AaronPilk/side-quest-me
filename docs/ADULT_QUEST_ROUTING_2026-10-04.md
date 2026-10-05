@@ -2,6 +2,8 @@
 
 Sidequest now collects an optional private age group and routes Demon / Full Send toward concrete adventures, rivalry and reveals that fit the actual outing. Normal Create uses the saved preferences and separate outing permissions to shape AI ideas and authored alternatives. **The matching Worker is deployed and Build 15 is available in internal TestFlight.** See the [release evidence](APP_STORE_PREPARATION_2026-10-04.md). No App Review submission or public release has been sent.
 
+**Later server update:** the owner subsequently requested removing parental/adult-content restrictions. The current [AI setup](AI_SETUP.md#current-experience-routing-and-fallback--october-4) documents affirmative 21+ drinking suggestions, removal of preset concept lanes and advisory novelty/filmability scores, while retaining core quest-quality checks. The Build 15 implementation and live samples below remain historical evidence.
+
 ## Account and outing flow
 
 - Account setup offers **Under 18**, **18–20** and **21+**, plus a way to skip or clear the answer. It collects no date of birth or ID. Only a directly saved survey answer counts; a ChatGPT summary or legacy default cannot establish age.
