@@ -6,6 +6,7 @@ export default defineConfig({
     include: [
       "scripts/eval-quest-ai.live.ts",
       "scripts/eval-experience-discovery.live.ts",
+      "scripts/eval-audit-discovery.live.ts",
     ],
     testTimeout: 100_000,
     fileParallelism: false,

@@ -60,7 +60,7 @@
   font-size: 1.8rem;
   line-height: 1.15;
 }
-.preferences-journey .preference-question-panel .page-title p {
+.preferences-journey .preference-question-panel .page-title-description {
   font-size: 0.84rem;
   line-height: 1.5;
 }
@@ -235,7 +235,7 @@
 .preferences-direct .preference-question-panel h1 {
   font-size: 1.55rem;
 }
-.preferences-direct .preference-question-panel .page-title p {
+.preferences-direct .preference-question-panel .page-title-description {
   font-size: 0.8rem;
   line-height: 1.4;
 }
@@ -568,7 +568,7 @@
   font-size: 1.6rem;
   line-height: 1.14;
 }
-.preferences-journey .page-title p {
+.preferences-journey .page-title-description {
   font-size: 0.84rem;
   line-height: 1.4;
   margin-top: 10px;

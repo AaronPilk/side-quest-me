@@ -23,6 +23,7 @@ import {
 import type { AppBindings, AppContext } from "../worker/services";
 import { ApiError } from "../worker/services";
 import { AiProviderError } from "../worker/ai-provider";
+import { QUEST_IDEA_RUBRIC } from "../worker/quest-idea-quality";
 import {
   approvedQuestQualityFixture,
   questConceptsFixture,
@@ -59,6 +60,9 @@ const kart = {
 let cache: Record<string, unknown> | null;
 let saved: Record<string, unknown>;
 let inProgress: boolean;
+let persistenceFailure: "store" | "finish" | undefined;
+let releaseFailure: boolean;
+const leaseUntil = "2030-01-01T00:02:00.000Z";
 let historyProposals: {
   id: string;
   owner_id: string;
@@ -101,12 +105,27 @@ const historyQuery = vi.fn((table: string) => {
 });
 const calls = vi.fn(
   async (name: string, args: { p_input: Record<string, unknown> }) => {
-    if (name === "sq_reserve_experience_discovery")
+    if (name === "sq_reserve_experience_discovery") {
+      const acquired = !inProgress;
+      if (!cache && acquired) inProgress = true;
       return {
-        data: cache ? { response: cache } : { acquired: !inProgress },
+        data: cache
+          ? { response: cache }
+          : acquired
+            ? { acquired: true, leaseUntil }
+            : { acquired: false },
         error: null,
       };
+    }
+    if (name === "sq_release_experience_discovery") {
+      if (releaseFailure) throw new Error("synthetic private release error");
+      const released = !cache && args.p_input.leaseUntil === leaseUntil;
+      if (released) inProgress = false;
+      return { data: { released }, error: null };
+    }
     if (name === "sq_store_private_proposal") {
+      if (persistenceFailure === "store")
+        throw new Error("synthetic unknown storage outcome");
       saved = args.p_input;
       return {
         data: {
@@ -120,7 +139,10 @@ const calls = vi.fn(
       };
     }
     if (name === "sq_finish_experience_discovery") {
+      if (persistenceFailure === "finish")
+        throw new Error("synthetic unknown completion outcome");
       cache = args.p_input.response as Record<string, unknown>;
+      inProgress = false;
       return { data: cache, error: null };
     }
     throw new Error(name);
@@ -156,6 +178,7 @@ registerExperienceDiscovery(app);
 const send = (
   body: unknown = base,
   key: string | null = "discovery-test-key",
+  environment: Partial<AppBindings["Bindings"]> = {},
 ) =>
   app.fetch(
     new Request("https://app.test/api/quests/discover", {
@@ -169,13 +192,17 @@ const send = (
     {
       OPENAI_API_KEY: "fixture",
       AI_RATE_LIMITER: { limit: async () => ({ success: true }) },
+      ...environment,
     } as unknown as AppBindings["Bindings"],
   );
 afterEach(() => vi.restoreAllMocks());
 beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "info").mockImplementation(() => {});
   cache = null;
   inProgress = false;
+  persistenceFailure = undefined;
+  releaseFailure = false;
   calls.mockClear();
   historyQuery.mockClear();
   historyProposals = [];
@@ -196,7 +223,12 @@ function comparisonFixture() {
   } = curatedDiscoveryFallback(DEFAULT_PREFERENCES, base)!.quest;
   return {
     candidates: questConceptsFixture(proposal, 5).candidates.map(
-      (candidate) => ({
+      ({
+        mission: _mission,
+        goal: _goal,
+        intensityMechanic: _mechanic,
+        ...candidate
+      }) => ({
         ...candidate,
         mechanic: "competition",
         placeId: null as string | null,
@@ -237,7 +269,7 @@ describe("private experience discovery", () => {
       outing: { ...base.outing, applePlaceId: kart.id },
       nearbyPlaces: [{ ...kart, name: "The Ordinary Bar", category: "Bar" }],
     })!;
-    expect(unrelated.quest.title).toContain("Room");
+    expect(unrelated.mechanic).toBe("immersive_horror");
     expect(unrelated.location).toBeNull();
   });
   it("keeps boundaries and realistic setup/time/budget limits in curated fallback", () => {
@@ -245,7 +277,7 @@ describe("private experience discovery", () => {
       { ...DEFAULT_PREFERENCES, exclusions: ["physical_challenges"] },
       { ...base, nearbyPlaces: [kart] },
     )!;
-    expect(limited.quest.title).toContain("Room");
+    expect(limited.quest.conflicts).not.toContain("physical_challenges");
     expect(
       curatedDiscoveryFallback(DEFAULT_PREFERENCES, {
         ...base,
@@ -361,8 +393,12 @@ describe("private experience discovery", () => {
       "The result",
     ]);
     expect(model).toHaveBeenCalledTimes(2);
+    // Discovery's combined writer must receive the same intensity calibration
+    // as its critic, not merely the shorter creative-direction introduction.
+    expect(model.mock.calls[0][1]).toContain(QUEST_IDEA_RUBRIC);
+    expect(model.mock.calls[1][1]).toContain(QUEST_IDEA_RUBRIC);
     expect(model.mock.calls[1][2].proposal.cost.maxMinor).toBe(0);
-    expect(model.mock.calls[1][2].selectedConcept.id).toBe("A");
+    expect(model.mock.calls[1][2]).not.toHaveProperty("selectedConcept");
   });
   it("logs bounded failure stage and status without request data or exception text", async () => {
     model.mockRejectedValueOnce(new AiProviderError("http", 401));
@@ -419,8 +455,37 @@ describe("private experience discovery", () => {
     );
     expect(model).toHaveBeenCalledTimes(2);
     expect(model.mock.calls.map((call) => call[7].timeoutMs)).toEqual([
-      60000, 30000,
+      70000, 30000,
     ]);
+  });
+  it("keeps a late proposal and its independent review within the same 90-second budget", async () => {
+    let now = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    model
+      .mockReset()
+      .mockImplementationOnce(async () => {
+        now = 69000;
+        return comparisonFixture();
+      })
+      .mockImplementationOnce(async () => {
+        now = 89500;
+        return approvedQuestQualityFixture();
+      });
+    await generateDiscoveredExperience(
+      { OPENAI_API_KEY: "fixture" },
+      DEFAULT_PREFERENCES,
+      base,
+    );
+    expect(model.mock.calls.map((call) => call[7].timeoutMs)).toEqual([
+      70000, 21000,
+    ]);
+    const concepts =
+      model.mock.calls[0][3].properties.candidates.items.properties;
+    expect(concepts).not.toHaveProperty("mission");
+    expect(concepts).not.toHaveProperty("goal");
+    expect(concepts).not.toHaveProperty("intensityMechanic");
+    expect(concepts).toHaveProperty("ordinaryVersion");
+    expect(concepts).toHaveProperty("experienceUpgrade");
   });
   it("never starts a review after the total deadline or retries rejected generation automatically", async () => {
     let now = 0;
@@ -527,6 +592,93 @@ describe("private experience discovery", () => {
     expect(model).toHaveBeenCalledTimes(2);
   });
 
+  it.each(["18_20", "21_plus"] as const)(
+    "does not classify an unrestricted outing as adult-only for opted-in %s users",
+    async (ageBand) => {
+      const comparison = comparisonFixture();
+      const response = {
+        ...comparison,
+        proposal: {
+          ...comparison.proposal,
+          title: "An unrestricted group experience",
+          adultOnly: false,
+          supportsAdultContext: false,
+          minimumAge: null,
+          venuePermissionRequired: false,
+          conflicts: [],
+        },
+      };
+      model
+        .mockReset()
+        .mockResolvedValueOnce(response)
+        .mockResolvedValueOnce(approvedQuestQualityFixture());
+      const preferences: Preferences = {
+        ...DEFAULT_PREFERENCES,
+        ageBand,
+        sources: { ageBand: "survey" },
+      };
+      const request = {
+        ...base,
+        outing: { ...base.outing, adultEligible: true, adultContext: true },
+      };
+      const { quest } = await generateDiscoveredExperience(
+        { OPENAI_API_KEY: "fixture" },
+        preferences,
+        request,
+      );
+      expect(quest.adultOnly).toBe(false);
+      expect(quest.minimumAge).toBeUndefined();
+      const eligibility = discoveryEligibility(
+        quest,
+        request.outing,
+        preferences,
+      );
+      expect(eligibility.blocking).toEqual([]);
+      expect(eligibility.requirements.map(({ code }) => code)).not.toContain(
+        "venue_permission",
+      );
+      expect(eligibility.requirements.map(({ code }) => code)).not.toContain(
+        "adults",
+      );
+      const properties = model.mock.calls[0][3].properties.proposal.properties;
+      expect(properties.minimumAge).not.toHaveProperty("const");
+      expect(properties.adultOnly).not.toHaveProperty("const");
+      expect(properties.supportsAdultContext).not.toHaveProperty("const");
+      expect(model.mock.calls[1][2]).not.toHaveProperty("selectedConcept");
+    },
+  );
+
+  it("keeps an actual 18+ non-alcohol experience at 18 even for an opted-in 21+ user", async () => {
+    const comparison = comparisonFixture();
+    const response = {
+      ...comparison,
+      proposal: {
+        ...comparison.proposal,
+        adultOnly: true,
+        supportsAdultContext: true,
+        minimumAge: 18,
+        conflicts: ["adult_venues"],
+      },
+    };
+    model
+      .mockReset()
+      .mockResolvedValueOnce(response)
+      .mockResolvedValueOnce(approvedQuestQualityFixture());
+    const { quest } = await generateDiscoveredExperience(
+      { OPENAI_API_KEY: "fixture" },
+      {
+        ...DEFAULT_PREFERENCES,
+        ageBand: "21_plus",
+        sources: { ageBand: "survey" },
+      },
+      {
+        ...base,
+        outing: { ...base.outing, adultEligible: true, adultContext: true },
+      },
+    );
+    expect(quest.minimumAge).toBe(18);
+  });
+
   it.each(["age_floor", "adult_context", "paid_cast_as_volunteers"])(
     "rejects %s drift before reviewing an adult nightlife proposal",
     async (field) => {
@@ -536,6 +688,7 @@ describe("private experience discovery", () => {
         adultOnly: true,
         supportsAdultContext: true,
         minimumAge: 21,
+        conflicts: ["alcohol" as const, "adult_venues" as const],
       };
       const response = {
         ...comparison,
@@ -761,6 +914,30 @@ describe("private experience discovery", () => {
     ).rejects.toThrow();
     expect(model).toHaveBeenCalledTimes(1);
   });
+  it("rejects ordinary Full Send padding despite high self-reported review scores", async () => {
+    const review = approvedQuestQualityFixture();
+    model
+      .mockReset()
+      .mockResolvedValueOnce(comparisonFixture())
+      .mockResolvedValueOnce({
+        ...review,
+        fullSendAssessment: {
+          ordinaryVersion: "Visit a bowling alley.",
+          actualDifference: "Play more rounds of the same bowling game.",
+          changesExperience: false,
+          paddingOnly: true,
+        },
+      });
+    await expect(
+      generateDiscoveredExperience(
+        { OPENAI_API_KEY: "fixture" },
+        DEFAULT_PREFERENCES,
+        base,
+      ),
+    ).rejects.toMatchObject({ kind: "review_rejected" });
+    expect(model).toHaveBeenCalledTimes(2);
+  });
+
   it("accepts low novelty and filmability scores when the actual experience is strong", async () => {
     const comparison = comparisonFixture();
     comparison.candidates[0].scores = {
@@ -987,5 +1164,107 @@ describe("private experience discovery", () => {
     inProgress = true;
     expect((await send()).status).toBe(409);
     expect(model).not.toHaveBeenCalled();
+    expect(calls).not.toHaveBeenCalledWith(
+      "sq_release_experience_discovery",
+      expect.anything(),
+    );
+  });
+  it("releases a terminal no-fallback failure so the exact request can retry immediately", async () => {
+    const unsupported = {
+      ...base,
+      outing: {
+        ...base.outing,
+        setting: "home" as const,
+        budgetMinor: 0,
+        durationMinutes: 60,
+      },
+    };
+    expect(
+      curatedDiscoveryFallback(DEFAULT_PREFERENCES, unsupported),
+    ).toBeNull();
+    const first = await send(unsupported);
+    expect(first.status).toBe(503);
+    expect(await first.json()).toEqual({ error: "discovery_unavailable" });
+    expect(calls).toHaveBeenCalledWith(
+      "sq_release_experience_discovery",
+      expect.objectContaining({
+        p_actor: "11111111-1111-4111-8111-111111111111",
+        p_input: { leaseUntil },
+        p_key: "discovery-test-key",
+        p_hash: expect.any(String),
+      }),
+    );
+    expect((await send(unsupported)).status).toBe(503);
+    expect(model).toHaveBeenCalledTimes(2);
+    const reserves = calls.mock.calls.filter(
+      ([name]) => name === "sq_reserve_experience_discovery",
+    );
+    expect(reserves[1]).toEqual(reserves[0]);
+  });
+  it.each(["missing_config", "changed_provider", "rate_limited"])(
+    "releases an acquired lease after %s without spending on generation",
+    async (failure) => {
+      const environment =
+        failure === "missing_config"
+          ? { OPENAI_API_KEY: "" }
+          : failure === "changed_provider"
+            ? { AI_QUEST_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "fixture" }
+            : {
+                AI_RATE_LIMITER: {
+                  limit: async () => ({ success: false }),
+                } as AppBindings["Bindings"]["AI_RATE_LIMITER"],
+              };
+      const response = await send(base, "discovery-test-key", environment);
+      expect(response.status).toBe(
+        failure === "missing_config"
+          ? 503
+          : failure === "changed_provider"
+            ? 409
+            : 429,
+      );
+      expect(model).not.toHaveBeenCalled();
+      expect(inProgress).toBe(false);
+      expect((await send()).status).toBe(200);
+    },
+  );
+  it.each(["store", "finish"] as const)(
+    "retains the lease when the %s outcome is uncertain",
+    async (failure) => {
+      persistenceFailure = failure;
+      expect((await send()).status).toBe(500);
+      expect(calls).not.toHaveBeenCalledWith(
+        "sq_release_experience_discovery",
+        expect.anything(),
+      );
+      expect((await send()).status).toBe(409);
+      expect(model).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("keeps the original failure and existing lease if release itself is uncertain", async () => {
+    releaseFailure = true;
+    const response = await send(base, "discovery-test-key", {
+      OPENAI_API_KEY: "",
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "ai_not_configured" });
+    expect(inProgress).toBe(true);
+    expect(console.warn).toHaveBeenCalledWith({
+      event: "experience_discovery_release_failed",
+    });
+  });
+  it("logs safe completion timings and source only after persisting the response", async () => {
+    expect((await send()).status).toBe(200);
+    expect(console.info).toHaveBeenCalledWith({
+      event: "experience_discovery_completed",
+      source: "curated_fallback",
+      provider: "openai",
+      elapsedMs: expect.any(Number),
+      generationElapsedMs: expect.any(Number),
+      stageDurationsMs: expect.any(Object),
+    });
+    const finished = calls.mock.invocationCallOrder.at(-1)!;
+    expect(vi.mocked(console.info).mock.invocationCallOrder[0]).toBeGreaterThan(
+      finished,
+    );
   });
 });

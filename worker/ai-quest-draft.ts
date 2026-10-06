@@ -23,6 +23,7 @@ import {
   hasCompleteQuestText,
   questConceptsSchema,
   questQualityReviewSchema,
+  QUEST_IDEA_RUBRIC,
   REVIEW_INSTRUCTIONS,
 } from "./quest-idea-quality";
 import { ApiError } from "./services";
@@ -147,12 +148,15 @@ export async function generateAiQuestDraft(
         "AI couldn’t finish a clear, engaging idea that fits your plan. Your choices are unchanged; try another theme or adjust your plan.",
         503,
       );
-    const selected = chooseQuestConcept(feasibleConcepts);
+    const selected = chooseQuestConcept(
+      feasibleConcepts,
+      request.outing.intensity,
+    );
     const { scores: _scores, ...selectedConcept } = selected;
     const proposed = aiQuestDraftProposalSchema.parse(
       await requestAiJson(
         config,
-        `${INSTRUCTIONS}\n\nExpand selectedConcept into one complete, playable quest. Keep its core goal and twist; clarify setup, rules, attempts and the exact finish condition. Three distinct stages must cause the promised payoff. Do not stretch a trivial task to fill time. Write compact COMPLETE sentences, never fragments cut at field limits. Target about 1000 output tokens total. Title under 60 characters, hook under 160, each action at most two short sentences and ideally under 300 characters; filming under 150; caption under 50. Use at most two short requirements and four materials unless essential. Completion questions are requirements users attest to: check genuine attempts, honest result and cleanup, never require winning or a successful trick. A valid failed attempt or fallback must satisfy them truthfully. Fallback preserves a playable activity within the same plan. Return original quest proposal fields only.`,
+        `${INSTRUCTIONS}\n\n${QUEST_IDEA_RUBRIC}\n\nExpand selectedConcept into one complete, playable quest. Preserve its concrete experienceUpgrade and commitment in the actual actions; a special twist or competition is optional; clarify setup, rules, attempts and the exact finish condition. Three distinct stages must cause the promised payoff. Do not stretch a trivial task to fill time. Write compact COMPLETE sentences, never fragments cut at field limits. Target about 1000 output tokens total. Title under 60 characters, hook under 160, each action at most two short sentences and ideally under 300 characters; filming under 150; caption under 50. Use at most two short requirements and four materials unless essential. Completion questions are requirements users attest to: check genuine attempts, honest result and cleanup, never require winning or a successful trick. A valid failed attempt or fallback must satisfy them truthfully. Fallback preserves a playable activity within the same plan. Return original quest proposal fields only.`,
         { ...context, selectedConcept },
         schema as Record<string, unknown>,
         "original_quest_proposal",
@@ -177,7 +181,7 @@ export async function generateAiQuestDraft(
       await requestAiJson(
         config,
         `${INSTRUCTIONS}\n\n${REVIEW_INSTRUCTIONS}`,
-        { ...context, selectedConcept, proposal: proposed },
+        { ...context, proposal: proposed },
         z.toJSONSchema(questQualityReviewSchema) as Record<string, unknown>,
         "quest_quality_review",
         send,
@@ -186,7 +190,7 @@ export async function generateAiQuestDraft(
       ),
     );
     remaining(MAX_DRAFT_TIME_MS);
-    if (!acceptsQuestQuality(review))
+    if (!acceptsQuestQuality(review, request.outing.intensity))
       throw new ApiError(
         "ai_quality_retry",
         "AI couldn’t make this idea clear and playable enough within your plan. Try a different theme or a more specific mission. Your draft is unchanged.",

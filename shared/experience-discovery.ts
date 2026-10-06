@@ -8,7 +8,11 @@ import {
   type QuestVariant,
 } from "./domain";
 import { applePlaceIdSchema } from "./places";
-import { ineligibilityIssues, type EligibilityIssueCode } from "./recommend";
+import {
+  ineligibilityIssues,
+  usesAdultVenueContext,
+  type EligibilityIssueCode,
+} from "./recommend";
 
 /** Public Apple listings supplied with named provider consent. Coordinates are
  * transient discovery context, never copied into a private proposal or run. */
@@ -92,7 +96,7 @@ export function discoveryEligibility(
   // become a conditional booking requirement or be supplied by an outing flag.
   const issues = ineligibilityIssues(quest, outing, preferences);
   const pendingAdultPermission =
-    outing.adultContext &&
+    usesAdultVenueContext(quest, outing) &&
     quest.supportsAdultContext &&
     outing.setting === "venue" &&
     !outing.venuePermission;

@@ -71,6 +71,7 @@ async function seed(page: Page) {
           JSON.stringify({
             me: {
               profile: {
+                accountType: "personal",
                 displayName: "Fixture creator",
                 timezone: "UTC",
                 locale: "en",
@@ -242,11 +243,92 @@ test("five primary destinations work and local identity tools stay in Settings w
   ).toBeVisible();
 });
 
+test("profile and series empty states keep their descriptions and actions together without nesting errors", async ({
+  page,
+}) => {
+  const nestingErrors: string[] = [];
+  page.on("console", (message) => {
+    if (
+      /cannot (?:be|contain)|validateDOMNesting|hydration error/i.test(
+        message.text(),
+      )
+    )
+      nestingErrors.push(message.text());
+  });
+  await seed(page);
+  await page.goto("/profile");
+  const profileEmpty = page
+    .locator(".empty")
+    .filter({ hasText: "No public videos yet." });
+  await expect(profileEmpty.locator(".empty-description > p")).toHaveText(
+    "Finished reels stay private until you choose to publish them.",
+  );
+  await profileEmpty
+    .getByRole("link", { name: "Create your first story", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/create$/);
+  await page.goto("/series/new");
+  const seriesEmpty = page.locator(".empty");
+  await expect(seriesEmpty.locator(".empty-description > p")).toContainText(
+    "Accept a quest, film it",
+  );
+  const findQuest = seriesEmpty.getByRole("link", {
+    name: "Find a quest",
+    exact: true,
+  });
+  const journal = seriesEmpty.getByRole("link", {
+    name: "Open your journal",
+    exact: true,
+  });
+  const first = await findQuest.boundingBox();
+  const second = await journal.boundingBox();
+  expect(first).not.toBeNull();
+  expect(second).not.toBeNull();
+  expect(first!.y + first!.height).toBeLessThanOrEqual(second!.y);
+  await journal.click();
+  await expect(page).toHaveURL(/\/journal$/);
+  expect(nestingErrors).toEqual([]);
+});
+
+test("Rewards opens on quest points while creator earnings and brand access remain available", async ({
+  page,
+}) => {
+  await seed(page);
+  for (const path of ["/rewards", "/rewards?tab=unknown"]) {
+    await page.goto(path);
+    await expect(
+      page.getByRole("tab", { name: "Perks", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".wallet-card strong")).toHaveText("73points");
+    await expect(
+      page.getByRole("region", { name: "Verified payments", exact: true }),
+    ).toHaveCount(0);
+  }
+  await page.getByRole("tab", { name: "Earnings", exact: true }).click();
+  await expect(page).toHaveURL(/tab=earnings/);
+  await expect(
+    page.getByRole("region", { name: "Verified payments", exact: true }),
+  ).toContainText("$125.00");
+  await page.getByRole("tab", { name: "Brand offers", exact: true }).click();
+  await expect(
+    page.getByRole("link", { name: /Here on behalf of a business/ }),
+  ).toHaveCount(0);
+  await selectDemoPersona(page, "brand");
+  await page.goto("/rewards?tab=offers");
+  await page
+    .getByRole("link", { name: /Here on behalf of a business/ })
+    .click();
+  await expect(page).toHaveURL(/\/business$/);
+  await expect(
+    page.getByRole("heading", { name: "Business workspace", exact: true }),
+  ).toBeVisible();
+});
+
 test("Rewards keeps verified income, accepted pending amounts, proposals and points distinct after refresh", async ({
   page,
 }, testInfo) => {
   await seed(page);
-  await page.goto("/rewards");
+  await page.goto("/rewards?tab=earnings");
   await expect(
     page.getByRole("region", { name: "Verified payments", exact: true }),
   ).toContainText("$125.00");
@@ -299,7 +381,7 @@ test("Rewards keeps verified income, accepted pending amounts, proposals and poi
   ).toBeVisible();
   await page.goto("/rewards?tab=earnings");
   await page.getByRole("tab", { name: "Earnings", exact: true }).focus();
-  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowLeft");
   await expect(
     page.getByRole("tab", { name: "Perks", exact: true }),
   ).toBeFocused();
@@ -352,7 +434,7 @@ test("Rewards shows failed reads honestly and retries without inventing a zero b
       };`,
     });
   });
-  await page.goto("/rewards");
+  await page.goto("/rewards?tab=earnings");
   await expect(
     page.getByText("Fixture rewards read failed", { exact: true }),
   ).toBeVisible();

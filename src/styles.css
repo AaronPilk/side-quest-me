@@ -329,11 +329,17 @@ main {
 .page-title {
   margin-bottom: 32px;
 }
-.page-title p {
+.page-title-description {
   color: var(--secondary);
   font-size: 1rem;
   line-height: 1.45;
   max-width: 560px;
+  margin: 12px 0 0;
+}
+.page-title-description > :first-child {
+  margin-top: 0;
+}
+.page-title-description > :last-child {
   margin-bottom: 0;
 }
 .eyebrow {
@@ -1288,15 +1294,22 @@ main {
 .empty-icon {
   margin: 0 auto 24px;
 }
-.empty p {
+.empty-description {
   max-width: 340px;
   margin: 12px auto 24px;
   color: var(--secondary);
   font-size: 0.8824rem;
 }
+.empty-description > p {
+  margin: 0;
+}
 .empty .button {
   width: fit-content;
   margin: 0 auto;
+}
+.empty-description > .button {
+  display: flex;
+  margin-top: 16px;
 }
 .journal-grid {
   display: grid;

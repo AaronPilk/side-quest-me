@@ -56,7 +56,7 @@ export function Empty({
         <BrandMark size={30} />
       </div>
       <h2>{title}</h2>
-      <p>{children}</p>
+      <div className="empty-description">{children}</div>
       {to && (
         <Link className="button" to={to}>
           {action}
@@ -79,7 +79,9 @@ export function PageTitle({
     <header className="page-title">
       {eyebrow && <div className="eyebrow">{eyebrow}</div>}
       <h1>{title}</h1>
-      {children && <p>{children}</p>}
+      {children != null && (
+        <div className="page-title-description">{children}</div>
+      )}
     </header>
   );
 }

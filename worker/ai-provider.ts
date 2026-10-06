@@ -73,6 +73,34 @@ export type AiRequestOptions = {
   /** The caller can shorten this to respect a multi-stage request deadline. */
   timeoutMs?: number;
 };
+
+// Only numeric usage counters survive diagnostics. Provider text, IDs, input
+// context and credentials must never become log fields, including on failure.
+function usageCounters(raw: unknown) {
+  const parsed = z
+    .object({
+      usage: z
+        .object({
+          input_tokens: z.number().int().nonnegative().optional(),
+          output_tokens: z.number().int().nonnegative().optional(),
+          prompt_tokens: z.number().int().nonnegative().optional(),
+          completion_tokens: z.number().int().nonnegative().optional(),
+          output_tokens_details: z
+            .object({
+              reasoning_tokens: z.number().int().nonnegative().optional(),
+            })
+            .optional(),
+        })
+        .optional(),
+    })
+    .safeParse(raw);
+  const usage = parsed.success ? parsed.data.usage : undefined;
+  return {
+    inputTokens: usage?.input_tokens ?? usage?.prompt_tokens,
+    outputTokens: usage?.output_tokens ?? usage?.completion_tokens,
+    reasoningTokens: usage?.output_tokens_details?.reasoning_tokens,
+  };
+}
 async function boundedJson(response: Response): Promise<unknown> {
   const length = Number(response.headers.get("Content-Length") || 0);
   if (length > MAX_PROVIDER_BYTES || !response.body) {
@@ -238,7 +266,7 @@ export async function requestAiJson(
   const requestedTimeout = options.timeoutMs ?? AI_TIMEOUT_MS;
   if (!Number.isFinite(requestedTimeout) || requestedTimeout <= 0)
     throw new AiProviderError("timeout");
-  const timeoutMs = Math.min(60_000, requestedTimeout);
+  const timeoutMs = Math.min(70_000, requestedTimeout);
   const input = JSON.stringify(context);
   const target =
     provider === "openai"
@@ -288,6 +316,10 @@ export async function requestAiJson(
           };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const started = Date.now();
+  let outcome: "completed" | AiProviderError["kind"] = "invalid_response";
+  let usage: Partial<ReturnType<typeof usageCounters>> = {};
+  let httpStatus: number | undefined;
   let receivedResponse = false;
   try {
     const response = await send(target, {
@@ -305,11 +337,13 @@ export async function requestAiJson(
       body: JSON.stringify(body),
     });
     receivedResponse = true;
+    httpStatus = response.status;
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});
       throw new AiProviderError("http", response.status);
     }
     const raw = await boundedJson(response);
+    usage = usageCounters(raw);
     rejectProviderFailure(provider, raw);
     let text: string;
     if (provider === "xai") {
@@ -331,17 +365,33 @@ export async function requestAiJson(
       if (texts.length !== 1) throw new AiProviderError("incomplete");
       text = texts[0].text!;
     }
-    return JSON.parse(text) as unknown;
+    const result: unknown = JSON.parse(text);
+    outcome = "completed";
+    return result;
   } catch (error) {
-    if (error instanceof AiProviderError) throw error;
-    throw new AiProviderError(
-      controller.signal.aborted
-        ? "timeout"
-        : receivedResponse
-          ? "invalid_response"
-          : "network",
-    );
+    const failure =
+      error instanceof AiProviderError
+        ? error
+        : new AiProviderError(
+            controller.signal.aborted
+              ? "timeout"
+              : receivedResponse
+                ? "invalid_response"
+                : "network",
+          );
+    outcome = failure.kind;
+    throw failure;
   } finally {
     clearTimeout(timer);
+    console.info({
+      event: "ai_provider_request",
+      provider,
+      operation: /^[a-z_]{1,64}$/.test(name) ? name : "structured_output",
+      outcome,
+      elapsedMs: Date.now() - started,
+      timeoutMs,
+      httpStatus,
+      ...usage,
+    });
   }
 }

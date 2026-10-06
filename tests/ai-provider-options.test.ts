@@ -71,7 +71,7 @@ describe("AI reasoning and deadline budgets", () => {
 
   it.each([
     [17, 17],
-    [90_000, 60_000],
+    [90_000, 70_000],
   ])("aborts a %sms call at its %sms bound", async (requested, effective) => {
     vi.useFakeTimers();
     const send = vi.fn<typeof fetch>(

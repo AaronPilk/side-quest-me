@@ -21,7 +21,7 @@
   font-size: 1.875rem;
   line-height: 1.15;
 }
-.settings-page > .page-title p {
+.settings-page > .page-title .page-title-description {
   margin: 7px 0 0;
   color: var(--secondary);
   font-size: 0.875rem;

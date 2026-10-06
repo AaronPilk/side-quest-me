@@ -89,6 +89,21 @@ export type EligibilityIssueCode =
   | "custom_boundary";
 export type EligibilityIssue = { code: EligibilityIssueCode; reason: string };
 
+/** Adult-nightlife opt-in broadens private discovery, not the age of every
+ * suggestion. Catalog entries keep their established adult-context contract. */
+export function usesAdultVenueContext(quest: QuestVariant, outing: Outing) {
+  const actualAdultVenue = quest.conflicts.some(
+    (conflict) => conflict === "alcohol" || conflict === "adult_venues",
+  );
+  return (
+    actualAdultVenue ||
+    (outing.adultContext &&
+      (!quest.privateGenerated ||
+        (quest.supportsAdultContext &&
+          (quest.adultOnly || quest.minimumAge !== undefined))))
+  );
+}
+
 /** The single source of truth for previews, recovery explanations, and acceptance. */
 export function ineligibilityIssues(
   quest: QuestVariant,
@@ -97,6 +112,10 @@ export function ineligibilityIssues(
 ): EligibilityIssue[] {
   const preferences = normalizePreferences(preferencesInput);
   const exclusions = preferences.exclusions ?? [];
+  const adultVenueContext = usesAdultVenueContext(quest, outing);
+  const minimumAge = quest.conflicts.includes("alcohol")
+    ? 21
+    : quest.minimumAge;
   const reasons: EligibilityIssue[] = [];
   const issue = (code: EligibilityIssueCode, reason: string) =>
     reasons.push({ code, reason });
@@ -163,25 +182,25 @@ export function ineligibilityIssues(
       "arrangements",
       "Arrange the required friends, space, or performance slot before accepting.",
     );
-  if (quest.minimumAge === 21 && confirmedAgeBand(preferences) !== "21_plus")
+  if (minimumAge === 21 && confirmedAgeBand(preferences) !== "21_plus")
     issue(
       "age",
       "This experience is for ages 21+. Update your age group in Account & quest preferences or choose another experience.",
     );
   else if (
     confirmedAgeBand(preferences) === "18_20" &&
-    quest.minimumAge === undefined &&
-    (quest.adultOnly || (outing.adultContext && quest.supportsAdultContext))
+    minimumAge === undefined &&
+    (quest.adultOnly || (adultVenueContext && quest.supportsAdultContext))
   )
     issue(
       "age",
       "This older adult experience needs a fresh age-matched suggestion. Find another experience for your current age group.",
     );
   else if (
-    (quest.minimumAge === 18 ||
+    (minimumAge === 18 ||
       quest.adultOnly ||
       quest.requiresVolunteer ||
-      outing.adultContext) &&
+      adultVenueContext) &&
     !isAdultAgeConfirmed(preferences)
   )
     issue(
@@ -189,10 +208,10 @@ export function ineligibilityIssues(
       "This activity is for adults. Confirm your age group in Account & quest preferences to see eligible options.",
     );
   if (
-    (quest.minimumAge ||
+    (minimumAge ||
       quest.adultOnly ||
       quest.requiresVolunteer ||
-      outing.adultContext) &&
+      adultVenueContext) &&
     !outing.adultEligible
   )
     issue(
@@ -200,7 +219,7 @@ export function ineligibilityIssues(
       "Explicit adult eligibility is required for this activity.",
     );
   if (
-    outing.adultContext &&
+    adultVenueContext &&
     (!quest.supportsAdultContext ||
       outing.setting !== "venue" ||
       !outing.venuePermission)
@@ -227,7 +246,7 @@ export function ineligibilityIssues(
     quest.familyId === "street_meal_choice"
   )
     conflicts.push("food_challenges");
-  if (exclusions.includes("adult_venues") && outing.adultContext)
+  if (exclusions.includes("adult_venues") && adultVenueContext)
     conflicts.push("adult_venues");
   // No catalog variant requires alcohol. A sober adult-venue visit remains possible if otherwise explicitly eligible.
   if (

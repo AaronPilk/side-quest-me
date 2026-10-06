@@ -31,6 +31,9 @@ type EditorialExperience = {
   materials: string[];
   settings?: Setting[];
   minimumPeople?: number;
+  maximumPeople?: number;
+  preparation?: "start_now" | "a_few_things" | "proper_setup";
+  fallback?: string;
   adultOnly?: boolean;
   minimumAge?: 18 | 21;
   nightlife?: boolean;
@@ -65,6 +68,174 @@ export function curatedDiscoveryFallback(
   const bold = outing.intensity === "bold";
   const available = effectiveBudget(outing) - outing.travelCostMinor;
   const options: EditorialExperience[] = [
+    {
+      mechanic: "listening_party",
+      match: /$a/,
+      settings: ["home"],
+      allowed: !full && !bold,
+      minutes: 55,
+      floor: 0,
+      chargePending: false,
+      preparation: "start_now",
+      title: "One Album, One Listening Party",
+      hook: "Give an album you have only heard in fragments a proper first listen, then choose the track you want someone else to hear.",
+      interests: ["music", "shared_discovery"],
+      conflicts: [],
+      setup:
+        "Choose an album under 40 minutes that you can already play legally at no extra cost and have never heard all the way through. If there are two or more of you, agree on one together. Before listening, each person predicts a favorite from the track titles. Settle somewhere comfortable with your own headphones or speaker.",
+      challenge:
+        "Listen in order and keep a short note of three moments you want to revisit. Pause whenever you need to; this is a listening session, not a test. With company, save your verdicts until the album ends so everybody gets their own first impression.",
+      finish:
+        "Replay a short section of your favorite track and explain what changed your prediction. Alone, leave yourself a voice note; with company, compare picks and choose one track for a shared playlist you already use.",
+      requirements: [
+        "Use music you can already access without buying anything. Choose something everyone is comfortable hearing and keep the volume considerate.",
+      ],
+      materials: [
+        "An album you can already play",
+        "Your own headphones or speaker",
+      ],
+      filming: [
+        "Record your own prediction before the music starts; no copyrighted audio is needed in your video.",
+        "Capture your reaction or notes with the music paused, keeping other people out of frame unless they agree.",
+        "Film your final track pick and compare it with the opening prediction in your own words.",
+      ],
+      fallback:
+        "If you cannot access the album, choose another one you already own or can hear free. Do not sign up or spend money to complete this plan.",
+    },
+    {
+      mechanic: "home_cooking",
+      match: /$a/,
+      settings: ["home"],
+      allowed: bold,
+      minutes: 100,
+      floor: 0,
+      chargePending: false,
+      preparation: "a_few_things",
+      title: "Your Kitchen's One-Night Special",
+      hook: "Turn ingredients you already have into a restaurant-style dish you have never cooked, then serve your own one-night special.",
+      interests: ["cooking", "food", "making"],
+      conflicts: [],
+      setup:
+        "Check your actual ingredients, equipment and dietary needs. Choose one unfamiliar recipe from a source you trust that uses what you already have and takes at most 60 minutes including preparation. Pick the dish before starting; no shopping or special equipment is part of this plan. With company, agree who handles each cooking task.",
+      challenge:
+        "Follow the recipe and make the dish from start to finish. Give one component your full attention: a properly cooked sauce, crisp texture or careful plating. If you are cooking together, hand off tasks clearly. Take photos only while knives and hot pans are put down.",
+      finish:
+        "Plate and name your one-night special, sit down to eat it, and decide what you would change on a second attempt. Compare the actual result with the recipe honestly; finish by clearing the kitchen together or on your own.",
+      requirements: [
+        "Proceed only with a recipe that fits your ingredients, equipment, allergies and skill. Follow its food-safety instructions; tasting is always optional.",
+      ],
+      materials: [
+        "Ingredients and kitchen equipment you already own",
+        "A suitable recipe",
+      ],
+      filming: [
+        "Show the ingredients and name the dish you have never made before.",
+        "Capture one stationary progress shot with hot equipment and knives safely set down.",
+        "Reveal your plated dish in the same spot as the opening ingredients, then give your honest verdict.",
+      ],
+      fallback:
+        "If no recipe fits what you already have, choose another experience. This zero-purchase plan does not assume a stocked kitchen or ask you to exceed your budget.",
+    },
+    {
+      mechanic: "neighborhood_photowalk",
+      match:
+        /\b(?:park|garden|greenway|promenade|waterfront|historic district)\b/i,
+      settings: ["outside"],
+      allowed: !full && !bold,
+      minutes: 45,
+      floor: 0,
+      chargePending: false,
+      preparation: "start_now",
+      title: "Your Neighborhood, Six Frames",
+      hook: "Come back from a short local walk with six photos that make somewhere familiar worth a second look.",
+      interests: ["local_knowledge", "making", "shared_discovery"],
+      conflicts: [],
+      setup:
+        "Choose a free public route with a comfortable return within 30 minutes. Check access, opening hours, weather and lighting; stay within your selected area. Pick one theme you can spot along the way, such as unusual doorways, reflections or signs of the season.",
+      challenge:
+        "Follow the route at your own pace and take six photos connected by your theme. With company, divide the six frames between you; solo, choose all six yourself. Stop somewhere accessible for each shot. Keep people, private homes and sensitive details out of the pictures.",
+      finish:
+        "Return to the starting point, put the six frames in a deliberate order and give the set a title. Choose the one detail you would otherwise have walked past. Save the set privately or share only the images you want to.",
+      requirements: [
+        "Use free, open public paths within everyone's access needs. No climbing, entering private property or photographing unwilling people.",
+      ],
+      materials: ["Your phone camera", "Weather-appropriate clothing"],
+      filming: [
+        "Show your chosen theme and starting point without revealing a home address.",
+        "Record a stationary glimpse of one detail before taking its photo.",
+        "Reveal the six-frame sequence and return to the detail from your opening shot.",
+      ],
+      fallback:
+        "If the route is closed or conditions do not suit the outing, use another accessible public route within the same time and area, or pause the plan. No free access is assumed from a place listing.",
+    },
+    {
+      mechanic: "geocache_hunt",
+      match: /\b(?:park|trail|greenway)\b/i,
+      settings: ["outside"],
+      allowed: bold && !exclusions.has("physical_challenges"),
+      minutes: 90,
+      floor: 0,
+      chargePending: false,
+      preparation: "a_few_things",
+      title: "Find Your First Hidden Cache",
+      hook: "Follow a real local geocache listing, work out its hiding place and leave your name in the logbook if you find it.",
+      interests: ["local_knowledge", "adventure", "games"],
+      conflicts: ["physical_challenges"],
+      setup:
+        "Use a current geocache listing available to you for free. Choose an easy, well-reviewed cache in your selected area with recent successful finds and a public approach that fits a 60-minute return walk. Read the terrain, access and opening restrictions before leaving. A park listing alone does not prove a cache is there.",
+      challenge:
+        "Follow the listed coordinates and clues while staying on permitted public access. With company, take turns reading the clue and checking the location; solo, compare each clue with what is actually around you. Search gently without moving fixtures, damaging plants or entering water. Use the official hint if needed and turn back at your planned time.",
+      finish:
+        "If you find it, sign the logbook with a nickname, return the container exactly as found and record your find on the listing. If you do not, log the honest attempt and your best theory. Keep the hiding place and coordinates out of any public video so the next person can solve it.",
+      requirements: [
+        "Only start after verifying a suitable free listing and lawful public access. No climbing, digging, trespass or purchases are required.",
+      ],
+      materials: [
+        "Your phone with a current free cache listing",
+        "A pen",
+        "Weather-appropriate clothing",
+      ],
+      filming: [
+        "Film your prediction about the clue without showing the coordinates.",
+        "Record your own search reaction from a safe stationary spot, not the exact hiding place.",
+        "Reveal whether you found the cache and return to your original theory; preserve the location for future hunters.",
+      ],
+      fallback:
+        "If no suitable free cache listing is current and accessible within your time, choose another experience. Never improvise a cache location or pay for access to make this plan fit.",
+    },
+    {
+      mechanic: "immersive_horror",
+      match:
+        /(?:immersive horror|live[- ]actor|horror escape|haunted attraction)/i,
+      allowed: full && !exclusions.has("being_surprised"),
+      minutes: 120,
+      floor: 5000,
+      minimumPeople: 2,
+      maximumPeople: 8,
+      title: "Step Inside the Horror Story",
+      hook: "Book a live-actor immersive horror experience and find out which of you can stay in character when the story starts happening around you.",
+      interests: ["adventure", "mystery", "shared_discovery"],
+      conflicts: ["being_surprised"],
+      setup:
+        "Find a staffed live-actor horror attraction with an immersive story, not an ordinary puzzle room. Confirm that the experience includes actors interacting with your group, runs at most 75 minutes and has a real slot for everyone. Check the complete group price, age limits, content warnings, access needs and exit procedure before booking. Everyone must actively choose this level of scares.",
+      challenge:
+        "Enter the booked immersive story together, take the roles the attraction actually assigns and respond to its actors and tasks as the story unfolds. Let each person make their own choices instead of appointing one spokesperson. Stay within the provider's rules; use its stop signal or exit whenever needed, with no penalty from your group.",
+      finish:
+        "After leaving the attraction, each person reveals the moment that broke their composure and the choice they would make differently. Compare your accounts to reconstruct the story you actually experienced, including an early exit if anyone chose one.",
+      requirements: [
+        "Confirm a genuine live-actor format, current slot and every participant's age and content eligibility. A generic escape-room listing is not evidence of this experience.",
+        "Follow the attraction's contact, filming and health rules. Do not arrive impaired; film reactions afterward if recording inside is prohibited.",
+      ],
+      materials: [
+        "Confirmed group reservation",
+        "Provider-required clothing and ID",
+      ],
+      filming: [
+        "Outside the attraction, record which kind of scare each willing participant expects to handle best.",
+        "Follow the actual no-filming rules. If cameras are prohibited, capture your own first reaction after leaving instead.",
+        "Return to the opening predictions and reveal what actually happened, without exposing the attraction's surprises or other guests.",
+      ],
+    },
     {
       mechanic: "nightlife_competition",
       match: /\b(?:bar|pub|lounge|tavern)\b/i,
@@ -136,9 +307,8 @@ export function curatedDiscoveryFallback(
       title: "The Group Chat Checks In",
       hook: "Tonight stops being another maybe: pick a local hotel, book the crew's rooms and turn your own city into an overnight trip.",
       interests: ["spontaneous", "adventure", "shared_discovery"],
-      conflicts: outing.adultContext ? ["adult_venues"] : [],
+      conflicts: [],
       adultOnly: true,
-      nightlife: true,
       minimumPeople: 2,
       setup:
         "Pick a local hotel everyone can afford and confirm room occupancy, minimum check-in age, an actual available room, taxes and deposit holds. Price the entire stay plus dinner, one nearby evening activity and transport before anyone books. Everyone must be free overnight into tomorrow; the outing needs Unlimited time.",
@@ -162,26 +332,19 @@ export function curatedDiscoveryFallback(
       allowed:
         adventurous &&
         friends &&
-        (full || bold) &&
-        !exclusions.has("being_surprised") &&
-        (!outing.adultContext || nightlife),
-      minutes: full ? 240 : 150,
-      floor: full ? 8000 : 4500,
-      title: full ? "The Tickets Decide Tonight" : "The Unknown Headliner",
+        bold &&
+        !exclusions.has("being_surprised"),
+      minutes: 150,
+      floor: 4500,
+      title: "The Unknown Headliner",
       hook: "Pick a show none of you planned to see, commit to the real tickets and find out who becomes a fan by the final song.",
       interests: ["music", "spontaneous", "shared_discovery"],
-      conflicts: [
-        "being_surprised",
-        ...(outing.adultContext ? ["adult_venues" as const] : []),
-      ],
-      adultOnly: outing.adultContext,
-      nightlife: true,
+      conflicts: ["being_surprised"],
       minimumPeople: 2,
       setup:
         "Check official venue or ticket pages for an actual show with seats for your whole group during your available time. Put two affordable unfamiliar acts to a group vote. Verify age rules, ticket fees, start/end times and transport before buying; an Apple Maps listing alone is not an event listing.",
-      challenge: full
-        ? "Buy the agreed tickets, go for a pre-show meal within the same budget, then attend the complete headline performance. Before the set, each friend predicts the song or moment that will win them over. Let the real show settle the predictions; follow its recording rules."
-        : "Buy the agreed tickets and attend the booked performance together. Before the set, each friend predicts what the act will sound like; compare that guess with the real set after it ends.",
+      challenge:
+        "Buy the agreed tickets and attend the booked performance together. Before the set, each friend predicts what the act will sound like; compare that guess with the real set after it ends.",
       finish:
         "After the show, each friend nominates the moment that changed their mind. Name the biggest new fan and share only your own permitted footage; a show you disliked is still a valid result.",
       requirements: [
@@ -333,8 +496,9 @@ export function curatedDiscoveryFallback(
     {
       mechanic: "adrenaline",
       match: /(?:go[- ]?kart|karting|kart track)/i,
-      allowed: !exclusions.has("physical_challenges"),
+      allowed: (full || bold) && !exclusions.has("physical_challenges"),
       minutes: full ? 90 : 60,
+      minimumPeople: full ? 2 : 1,
       floor: 2500,
       title: full
         ? "The Crew's Karting Grand Prix"
@@ -361,7 +525,7 @@ export function curatedDiscoveryFallback(
     {
       mechanic: "skill_challenge",
       match: /(?:climbing|climb gym|bouldering)/i,
-      allowed: !exclusions.has("physical_challenges"),
+      allowed: (full || bold) && !exclusions.has("physical_challenges"),
       minutes: full ? 120 : 90,
       floor: 2000,
       title: full ? "The First Big Wall" : "The Climbing Route Challenge",
@@ -387,18 +551,17 @@ export function curatedDiscoveryFallback(
     {
       mechanic: "competition",
       match: /(?:escape room|escape game|escape adventure)/i,
-      allowed: true,
-      minutes: full ? 100 : 90,
+      allowed: bold,
+      minutes: 90,
       floor: 2500,
-      title: full ? "The Hardest Room We Dare Book" : "The Mystery Room Pact",
+      title: "The Mystery Room Pact",
       hook: "Commit the whole group to a real timed escape room and find out who becomes the leader under pressure.",
       interests: ["competitive", "games", "mystery"],
       conflicts: [],
       setup:
-        "Find a staffed escape-room venue with a room that fits your exact group size. Ask for the hardest suitable room for Full Send, or an introductory mystery for Bold. Confirm its real time slot, duration and complete group price before accepting.",
-      challenge: full
-        ? "Enter the booked room without reading spoilers. Assign a clue tracker, object organizer and timekeeper, rotating when useful. Attempt the venue's full challenge under its normal time limit; agree to try the first ten minutes without hints, then use its hint system when stuck. Follow staff rules and never force props."
-        : "Enter the booked room without spoilers. Share every clue aloud, keep solved objects separate and use the venue's hint system when you need it. Attempt the actual timed challenge together and follow every staff rule.",
+        "Find a staffed escape-room venue with a room that fits your exact group size and a suitable introductory mystery. Confirm its real time slot, duration and complete group price before accepting.",
+      challenge:
+        "Enter the booked room without spoilers. Share every clue aloud if you have company, keep solved objects separate and use the venue's hint system when you need it. Attempt the actual timed challenge and follow every staff rule.",
       finish:
         "Ask staff for the actual escape time or furthest stage reached. Reveal which clue fooled the group and give everyone credit for one useful contribution; failure to escape counts as a real attempt.",
       requirements: [
@@ -434,7 +597,7 @@ export function curatedDiscoveryFallback(
       option.allowed &&
       (option.settings ?? ["venue"]).includes(outing.setting) &&
       outing.participants >= (option.minimumPeople ?? 1) &&
-      (!outing.adultContext || option.nightlife === true) &&
+      outing.participants <= (option.maximumPeople ?? 100) &&
       (!option.adultOnly || adult) &&
       !option.conflicts.some((conflict) => exclusions.has(conflict)) &&
       !previousExperiences.some(
@@ -482,13 +645,13 @@ export function curatedDiscoveryFallback(
       venueCostUnknown: option.chargePending !== false,
       note:
         option.chargePending === false
-          ? "No purchase is required. Optional friend-funded treats must stay within the agreed group budget and are never a required stake."
+          ? "No purchase is required; use equipment and materials you already have. Any optional spending must stay within the agreed budget."
           : "Current pricing is unconfirmed. Confirm one complete group charge including every required booking, rental, admission, tax and fee before accepting. It must fit your remaining budget; no separate purchase is assumed.",
     },
     settings: [outing.setting],
     interests: option.interests,
     roles: ["main_character", "mastermind", "camera_person", "rotate"],
-    preparation: "proper_setup",
+    preparation: option.preparation ?? "proper_setup",
     conflicts: option.conflicts,
     venuePermissionRequired: false,
     arrangementRequired: option.chargePending !== false,
@@ -533,9 +696,10 @@ export function curatedDiscoveryFallback(
       "Did you follow the venue's rules and obtain agreement from anyone filmed?",
     ],
     fallback:
-      option.chargePending === false
+      option.fallback ??
+      (option.chargePending === false
         ? "If someone changes their mind, keep their phone and contacts out of the game. An unsent draft and an honest decision not to proceed are valid outcomes."
-        : "If there is no suitable slot or the confirmed total price exceeds your plan, do not accept this proposal. Find a different suitable provider and request a fresh suggestion; no availability is promised.",
+        : "If there is no suitable slot or the confirmed total price exceeds your plan, do not accept this proposal. Find a different suitable provider and request a fresh suggestion; no availability is promised."),
     privateGenerated: true,
     award: { xp: 0, points: 0 },
     cooldownDays: 30,

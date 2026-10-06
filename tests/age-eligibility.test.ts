@@ -171,4 +171,125 @@ describe("private self-reported age routing", () => {
       ),
     ).toEqual([]);
   });
+  it("keeps ordinary private experiences unrestricted when nightlife was merely allowed", () => {
+    const ordinary = {
+      ...adultQuest,
+      privateGenerated: true as const,
+      adultOnly: false,
+      minimumAge: undefined,
+      supportsAdultContext: false,
+      requiresVolunteer: false,
+      venuePermissionRequired: false,
+      settings: ["venue" as const],
+      conflicts: [],
+      cost: { ...adultQuest.cost, venueCostUnknown: false },
+    };
+    const optedIn = {
+      ...outing,
+      setting: "venue" as const,
+      adultContext: true,
+      adultEligible: false,
+    };
+    for (const ageBand of ["18_20", "21_plus"] as const) {
+      expect(ineligibilityIssues(ordinary, optedIn, prefs(ageBand))).toEqual(
+        [],
+      );
+      expect(discoveryEligibility(ordinary, optedIn, prefs(ageBand))).toEqual({
+        blocking: [],
+        requirements: [],
+      });
+    }
+  });
+
+  it("keeps actual alcohol eligibility and permission even when older clients reset the discovery opt-in", () => {
+    const cocktails = {
+      ...adultQuest,
+      privateGenerated: true as const,
+      adultOnly: false,
+      minimumAge: 18 as const,
+      supportsAdultContext: true,
+      requiresVolunteer: false,
+      settings: ["venue" as const],
+      conflicts: ["alcohol" as const],
+      venuePermissionRequired: false,
+      cost: { ...adultQuest.cost, venueCostUnknown: false },
+    };
+    const confirmedNight = {
+      ...outing,
+      setting: "venue" as const,
+      adultContext: true,
+      venuePermission: true,
+    };
+    expect(
+      ineligibilityIssues(cocktails, confirmedNight, prefs("21_plus")),
+    ).toEqual([]);
+    for (const ageBand of ["18_20", "under_18", null] as const) {
+      expect(
+        discoveryEligibility(cocktails, confirmedNight, prefs(ageBand))
+          .blocking,
+      ).toContainEqual(
+        expect.objectContaining({
+          code: "age",
+          reason: expect.stringContaining("21+"),
+        }),
+      );
+    }
+    const olderClient = { ...confirmedNight, adultContext: false };
+    expect(
+      ineligibilityIssues(cocktails, olderClient, prefs("21_plus")),
+    ).toEqual([]);
+    expect(
+      ineligibilityIssues(
+        cocktails,
+        { ...olderClient, venuePermission: false },
+        prefs("21_plus"),
+      ),
+    ).toContainEqual(expect.objectContaining({ code: "adult_context" }));
+    expect(
+      discoveryEligibility(
+        cocktails,
+        { ...olderClient, venuePermission: false },
+        prefs("21_plus"),
+      ).requirements,
+    ).toContainEqual(expect.objectContaining({ code: "venue_permission" }));
+    expect(
+      discoveryEligibility(
+        cocktails,
+        { ...confirmedNight, venuePermission: false },
+        prefs("21_plus"),
+      ).requirements,
+    ).toContainEqual(expect.objectContaining({ code: "venue_permission" }));
+  });
+
+  it("keeps age-restricted private activities separate from nightlife permission", () => {
+    const ageRestricted = {
+      ...adultQuest,
+      privateGenerated: true as const,
+      supportsAdultContext: false,
+      requiresVolunteer: false,
+      venuePermissionRequired: false,
+      settings: ["venue" as const],
+      conflicts: [],
+      cost: { ...adultQuest.cost, venueCostUnknown: false },
+    };
+    const selected = {
+      ...outing,
+      setting: "venue" as const,
+      adultContext: true,
+      venuePermission: false,
+    };
+    expect(
+      ineligibilityIssues(ageRestricted, selected, prefs("21_plus")),
+    ).toEqual([]);
+    expect(
+      ineligibilityIssues(
+        ageRestricted,
+        { ...selected, adultEligible: false },
+        prefs("21_plus"),
+      ),
+    ).toEqual([expect.objectContaining({ code: "adults" })]);
+    expect(
+      ineligibilityIssues(ageRestricted, selected, prefs("under_18")),
+    ).toEqual([expect.objectContaining({ code: "age" })]);
+  });
 });

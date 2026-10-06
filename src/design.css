@@ -41,7 +41,7 @@ h3 {
 .page-title {
   margin-bottom: 28px;
 }
-.page-title p {
+.page-title-description {
   font-size: 0.9375rem;
   line-height: 1.6;
 }
@@ -130,7 +130,7 @@ label {
   border-radius: 20px;
   color: var(--secondary);
 }
-.empty p {
+.empty-description {
   max-width: 360px;
   margin-inline: auto;
 }
@@ -854,7 +854,7 @@ main {
 .creator-section .empty h2 {
   font-size: 1.0625rem;
 }
-.creator-section .empty p {
+.creator-section .empty-description {
   font-size: 0.875rem;
 }
 .creator-drafts {

@@ -110,6 +110,99 @@ afterEach(() => {
 });
 
 describe("provider selection and transport isolation", () => {
+  it("logs only safe usage counters and timing, never provider text or context", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    const send = vi.fn().mockResolvedValue(
+      Response.json({
+        status: "completed",
+        id: "private-provider-id",
+        usage: {
+          input_tokens: 120,
+          output_tokens: 42,
+          output_tokens_details: { reasoning_tokens: 9 },
+          private: "secret-provider-text",
+        },
+        output: [
+          {
+            type: "message",
+            content: [
+              { type: "output_text", text: '{"result":"private-result"}' },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(
+      await requestAiJson(
+        questAiProvider(keys)!,
+        "private-instructions",
+        { secret: "private-context" },
+        {},
+        "experience_review",
+        send,
+      ),
+    ).toEqual({ result: "private-result" });
+    expect(log).toHaveBeenCalledWith({
+      event: "ai_provider_request",
+      provider: "openai",
+      operation: "experience_review",
+      outcome: "completed",
+      elapsedMs: expect.any(Number),
+      timeoutMs: 30000,
+      httpStatus: 200,
+      inputTokens: 120,
+      outputTokens: 42,
+      reasoningTokens: 9,
+    });
+    const logged = JSON.stringify(log.mock.calls);
+    for (const secret of [
+      "private-",
+      "secret-provider-text",
+      keys.OPENAI_API_KEY,
+    ])
+      expect(logged).not.toContain(secret);
+  });
+  it.each([undefined, 12000, 70000, 100000])(
+    "aborts at the bounded provider deadline %s and does not retry",
+    async (requested) => {
+      vi.useFakeTimers();
+      const log = vi.spyOn(console, "info").mockImplementation(() => {});
+      const send = vi.fn(
+        (_input: unknown, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init!.signal!.addEventListener("abort", () =>
+              reject(new Error("private transport error")),
+            );
+          }),
+      );
+      const pending = requestAiJson(
+        questAiProvider(keys)!,
+        "instructions",
+        {},
+        {},
+        "experience_comparison_proposal",
+        send,
+        8500,
+        { timeoutMs: requested },
+      );
+      const rejection = expect(pending).rejects.toMatchObject({
+        kind: "timeout",
+      });
+      const limit = Math.min(requested ?? 30000, 70000);
+      await vi.advanceTimersByTimeAsync(limit - 1);
+      expect(log).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await rejection;
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcome: "timeout",
+          timeoutMs: limit,
+          elapsedMs: limit,
+        }),
+      );
+    },
+  );
   it("uses only the explicitly selected provider key and never falls back to another account", () => {
     expect(questAiProvider(keys)).toMatchObject({
       provider: "openai",
@@ -787,7 +880,7 @@ describe("new quest draft validation and privacy", () => {
       );
       const reviewContext = JSON.parse(reviewBody.input[0].content[0].text);
       expect(reviewContext.proposal.beats[0].action).toBe(action);
-      expect(reviewContext.selectedConcept).not.toHaveProperty("scores");
+      expect(reviewContext).not.toHaveProperty("selectedConcept");
       expect(reviewContext.proposal).not.toHaveProperty("id");
       expect(reviewContext.proposal).not.toHaveProperty("award");
     },

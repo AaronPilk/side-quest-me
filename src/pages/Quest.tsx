@@ -11,7 +11,11 @@ import type {
   ExperienceDiscoveryRequest,
   ExperienceDiscoveryResult,
 } from "../../shared/experience-discovery";
-import { estimateCost, ineligibilityIssues } from "../../shared/recommend";
+import {
+  estimateCost,
+  ineligibilityIssues,
+  usesAdultVenueContext,
+} from "../../shared/recommend";
 import { selectedPlaceContext } from "../lib/place-context";
 import { useState, useEffect, useRef } from "react";
 import { QuestWizard, editQuestPlans } from "../components/QuestWizard";
@@ -453,6 +457,7 @@ export default function Quest() {
         {proposal && (
           <GeneratedQuestChecks
             proposal={proposal}
+            quest={selected}
             outing={outing}
             onChange={(patch) => setOuting((value) => ({ ...value, ...patch }))}
             pending={pending}
@@ -821,11 +826,13 @@ export default function Quest() {
 
 function GeneratedQuestChecks({
   proposal,
+  quest,
   outing,
   onChange,
   pending,
 }: {
   proposal: DiscoveryProposal;
+  quest: Candidate;
   outing: Outing;
   onChange: (patch: Partial<Outing>) => void;
   pending: ReturnType<typeof ineligibilityIssues>;
@@ -835,6 +842,19 @@ function GeneratedQuestChecks({
       (requirement) => requirement.code,
     ),
   );
+  // A checked confirmation must remain visible and reversible. Some choices
+  // were confirmed for discovery, then reset for this specific experience, so
+  // they may be absent from the server's original pending-requirement list.
+  const adultVenueContext = usesAdultVenueContext(quest, outing);
+  if (
+    quest.minimumAge ||
+    quest.adultOnly ||
+    quest.requiresVolunteer ||
+    adultVenueContext
+  )
+    codes.add("adults");
+  if (adultVenueContext && outing.setting === "venue")
+    codes.add("venue_permission");
   return (
     <section
       className="quest-generated-plan"

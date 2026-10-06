@@ -16,15 +16,14 @@ import Perks from "./Perks";
 import "../rewards-design.css";
 
 const tabs = [
-  { id: "earnings", label: "Earnings" },
   { id: "perks", label: "Perks" },
+  { id: "earnings", label: "Earnings" },
   { id: "offers", label: "Brand offers" },
 ] as const;
 
 export default function Rewards() {
   const [params, setParams] = useSearchParams();
-  const tab =
-    tabs.find((item) => item.id === params.get("tab"))?.id || "earnings";
+  const tab = tabs.find((item) => item.id === params.get("tab"))?.id || "perks";
   const me = useCommunity("me", {}, tab !== "perks");
   const ledger = me.data
     ? creatorEarnings(me.data.offers, me.data.userId!, DEMO)

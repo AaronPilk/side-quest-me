@@ -27,10 +27,15 @@ export async function runPrivateExperienceTests(sql) {
   const owner = await user(),
     other = await user(),
     key = randomUUID();
-  assert.deepEqual(
-    await rpc("sq_reserve_experience_discovery", owner, {}, key, "one"),
-    { acquired: true },
+  const initialLease = await rpc(
+    "sq_reserve_experience_discovery",
+    owner,
+    {},
+    key,
+    "one",
   );
+  assert.equal(initialLease.acquired, true);
+  assert.ok(Number.isFinite(Date.parse(initialLease.leaseUntil)));
   assert.deepEqual(
     await rpc("sq_reserve_experience_discovery", owner, {}, key, "one"),
     { acquired: false },
@@ -62,6 +67,104 @@ export async function runPrivateExperienceTests(sql) {
   );
   assert.equal(replay.response.proposals[0].location.name, "Listed venue");
   assert.equal(replay.response.proposals[0].location.latitude, undefined);
+  assert.deepEqual(
+    await rpc(
+      "sq_release_experience_discovery",
+      owner,
+      initialLease,
+      key,
+      "one",
+    ),
+    { released: false },
+    "A late failure never clears a completed response",
+  );
+  assert.deepEqual(
+    await rpc("sq_reserve_experience_discovery", owner, {}, key, "one"),
+    replay,
+  );
+  const retryKey = randomUUID();
+  const failedLease = await rpc(
+    "sq_reserve_experience_discovery",
+    owner,
+    {},
+    retryKey,
+    "retry",
+  );
+  await assert.rejects(
+    () =>
+      rpc(
+        "sq_release_experience_discovery",
+        other,
+        failedLease,
+        retryKey,
+        "retry",
+      ),
+    /idempotency_conflict/,
+  );
+  await assert.rejects(
+    () =>
+      rpc(
+        "sq_release_experience_discovery",
+        owner,
+        failedLease,
+        retryKey,
+        "changed",
+      ),
+    /idempotency_conflict/,
+  );
+  assert.deepEqual(
+    await rpc("sq_release_experience_discovery", owner, {}, retryKey, "retry"),
+    { released: false },
+    "The service must present its exact lease receipt",
+  );
+  assert.deepEqual(
+    await rpc(
+      "sq_release_experience_discovery",
+      owner,
+      failedLease,
+      retryKey,
+      "retry",
+    ),
+    { released: true },
+  );
+  const retriedLease = await rpc(
+    "sq_reserve_experience_discovery",
+    owner,
+    {},
+    retryKey,
+    "retry",
+  );
+  assert.equal(
+    retriedLease.acquired,
+    true,
+    "Known failures can retry immediately",
+  );
+  assert.notEqual(retriedLease.leaseUntil, failedLease.leaseUntil);
+  assert.deepEqual(
+    await rpc(
+      "sq_release_experience_discovery",
+      owner,
+      failedLease,
+      retryKey,
+      "retry",
+    ),
+    { released: false },
+    "An old worker cannot unlock the newer attempt",
+  );
+  assert.deepEqual(
+    await rpc("sq_reserve_experience_discovery", owner, {}, retryKey, "retry"),
+    { acquired: false },
+  );
+  for (const role of ["anon", "authenticated"]) {
+    await assert.rejects(
+      () =>
+        sql(
+          `select public.sq_release_experience_discovery(${quote(owner)},${json(retriedLease)},${quote(retryKey)},'retry');`,
+          role,
+        ),
+      /permission denied/,
+    );
+  }
   const q = JSON.parse(
     await sql(
       "select content from public.quest_templates where published and intensity='full_send' order by id limit 1;",
@@ -374,4 +477,113 @@ export async function runPrivateExperienceTests(sql) {
   assert.equal(outdoorRun.run.outing.confirmedVenueCostMinor, 9500);
   assert.equal(outdoorRun.run.snapshot.reward_policy.points, 0);
   await rpc("sq_abandon_run", outdoorOwner, { run_id: outdoorRun.run.id });
+  // Opting into nightlife allows adult ideas; ordinary generated content does
+  // not inherit adult-venue permission. Test the real acceptance transaction.
+  const ordinaryOwner = await user();
+  const optionalNightlife = {
+    ...outing,
+    adultContext: true,
+    adultEligible: true,
+    arrangementConfirmed: true,
+    confirmedVenueCostMinor: 1000,
+  };
+  const ordinaryQuest = {
+    ...quest,
+    adultOnly: false,
+    minimumAge: undefined,
+    supportsAdultContext: false,
+    venuePermissionRequired: false,
+    conflicts: [],
+  };
+  const ordinaryStored = await rpc("sq_store_private_proposal", ordinaryOwner, {
+    ...input,
+    quest: ordinaryQuest,
+    outing: optionalNightlife,
+  });
+  const ordinaryRun = await rpc("sq_accept_private_run", ordinaryOwner, {
+    template_id: ordinaryStored.quest.id,
+    outing: optionalNightlife,
+    expected_campaign: null,
+  });
+  assert.equal(ordinaryRun.run.outing.venuePermission, false);
+  assert.equal(ordinaryRun.run.snapshot.template.adultOnly, false);
+  assert.equal(ordinaryRun.run.snapshot.template.minimumAge, undefined);
+  await rpc("sq_abandon_run", ordinaryOwner, { run_id: ordinaryRun.run.id });
+
+  // An operator can require adults without being an adult-nightlife venue.
+  // Age eligibility remains required; nightlife permission does not get added.
+  const ageOnlyOwner = await user();
+  const ageOnlyStored = await rpc("sq_store_private_proposal", ageOnlyOwner, {
+    ...input,
+    outing: optionalNightlife,
+    quest: { ...ordinaryQuest, adultOnly: true, minimumAge: 18 },
+  });
+  const ageOnlyAccept = {
+    template_id: ageOnlyStored.quest.id,
+    outing: optionalNightlife,
+    expected_campaign: null,
+  };
+  await assert.rejects(
+    () =>
+      rpc("sq_accept_private_run", ageOnlyOwner, {
+        ...ageOnlyAccept,
+        outing: { ...optionalNightlife, adultEligible: false },
+      }),
+    /private_requirements_pending/,
+  );
+  const ageOnlyRun = await rpc(
+    "sq_accept_private_run",
+    ageOnlyOwner,
+    ageOnlyAccept,
+  );
+  assert.equal(ageOnlyRun.run.outing.venuePermission, false);
+  assert.equal(ageOnlyRun.run.snapshot.template.minimumAge, 18);
+  await rpc("sq_abandon_run", ageOnlyOwner, { run_id: ageOnlyRun.run.id });
+
+  const adultOwner = await user();
+  const adultStored = await rpc("sq_store_private_proposal", adultOwner, {
+    ...input,
+    outing: optionalNightlife,
+    quest: {
+      ...ordinaryQuest,
+      adultOnly: true,
+      minimumAge: 21,
+      supportsAdultContext: true,
+      conflicts: ["alcohol", "adult_venues"],
+    },
+  });
+  const adultAccept = {
+    template_id: adultStored.quest.id,
+    expected_campaign: null,
+    outing: { ...optionalNightlife, venuePermission: true },
+  };
+  for (const missing of [
+    { venuePermission: false },
+    { adultEligible: false },
+  ]) {
+    await assert.rejects(
+      () =>
+        rpc("sq_accept_private_run", adultOwner, {
+          ...adultAccept,
+          outing: { ...adultAccept.outing, ...missing },
+        }),
+      /private_requirements_pending/,
+    );
+  }
+  // Build 15 clears the discovery preference at selection; its explicit
+  // confirmations for this selected experience still authorize acceptance.
+  const adultRun = await rpc("sq_accept_private_run", adultOwner, {
+    ...adultAccept,
+    outing: { ...adultAccept.outing, adultContext: false },
+  });
+  assert.equal(adultRun.run.snapshot.template.minimumAge, 21);
+  await rpc("sq_abandon_run", adultOwner, { run_id: adultRun.run.id });
+  await assert.rejects(
+    () =>
+      sql(
+        `select public.sq_accept_private_run(${quote(adultOwner)},${json(adultAccept)},'no-access','hash');`,
+        "authenticated",
+      ),
+    /permission denied/,
+  );
 }

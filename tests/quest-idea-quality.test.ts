@@ -20,6 +20,7 @@ import {
   acceptsQuestQuality,
   chooseQuestConcept,
   hasCompleteQuestText,
+  QUEST_IDEA_RUBRIC,
   questConceptsSchema,
   questQualityReviewSchema,
 } from "../worker/quest-idea-quality";
@@ -102,6 +103,65 @@ describe("bounded concept comparison and independent quality review", () => {
     expect(chooseQuestConcept(candidates).id).toBe("B");
   });
 
+  it("prioritizes the larger experience over an easier familiar option for Full Send", () => {
+    const candidates = questConceptsSchema
+      .parse(questConceptsFixture(fitting))
+      .candidates.slice(0, 2);
+    candidates[0].scores = {
+      playability: 5,
+      goal: 5,
+      originality: 2,
+      audienceIntensity: 4,
+      filmability: 5,
+    };
+    candidates[1].scores = {
+      playability: 4,
+      goal: 4,
+      originality: 3,
+      audienceIntensity: 5,
+      filmability: 4,
+    };
+    expect(chooseQuestConcept(candidates, "bold").id).toBe("A");
+    expect(chooseQuestConcept(candidates, "full_send").id).toBe("B");
+  });
+
+  it.each(["missing", "ordinary", "padded"])(
+    "rejects %s Full Send contrast even when every score and approval flag is high",
+    (problem) => {
+      const review = questQualityReviewSchema.parse(
+        approvedQuestQualityFixture(),
+      );
+      review.fullSendAssessment =
+        problem === "missing"
+          ? null
+          : {
+              ordinaryVersion: "Play a few games of bowling with friends.",
+              actualDifference:
+                "Play four games with rotating partners and a final singles game.",
+              changesExperience: problem !== "ordinary",
+              paddingOnly: problem === "padded",
+            };
+      expect(acceptsQuestQuality(review, "full_send")).toBe(false);
+      expect(acceptsQuestQuality(review, "bold")).toBe(true);
+    },
+  );
+
+  it("accepts an independently described Full Send commitment without a novelty minimum", () => {
+    const review = questQualityReviewSchema.parse(
+      approvedQuestQualityFixture(),
+    );
+    review.scores.originality = 1;
+    review.scores.filmability = 1;
+    review.fullSendAssessment = {
+      ordinaryVersion: "Go out for dinner and come home.",
+      actualDifference:
+        "Make a spontaneous overnight trip with a group-selected destination and a booked operator-led excursion.",
+      changesExperience: true,
+      paddingOnly: false,
+    };
+    expect(acceptsQuestQuality(review, "full_send")).toBe(true);
+  });
+
   it("uses strict portable schemas with no omitted review checks", () => {
     const visit = (schema: Record<string, unknown>) => {
       if (schema.type === "object") {
@@ -130,7 +190,7 @@ describe("bounded concept comparison and independent quality review", () => {
     const accepted = questQualityReviewSchema.parse(
       approvedQuestQualityFixture(),
     );
-    expect(acceptsQuestQuality(accepted)).toBe(true);
+    expect(acceptsQuestQuality(accepted, "full_send")).toBe(true);
     for (const field of [
       "playable",
       "coherent",
@@ -139,19 +199,24 @@ describe("bounded concept comparison and independent quality review", () => {
       "metadataHonest",
       "audienceExperienceFits",
     ] as const)
-      expect(acceptsQuestQuality({ ...accepted, [field]: false })).toBe(false);
+      expect(
+        acceptsQuestQuality({ ...accepted, [field]: false }, "full_send"),
+      ).toBe(false);
     expect(
-      acceptsQuestQuality({
-        ...accepted,
-        findings: [
-          {
-            code: "misleading_metadata",
-            severity: "blocking",
-            evidence: "Buy four admission tickets",
-            reason: "The proposal claims a free two-person activity.",
-          },
-        ],
-      }),
+      acceptsQuestQuality(
+        {
+          ...accepted,
+          findings: [
+            {
+              code: "misleading_metadata",
+              severity: "blocking",
+              evidence: "Buy four admission tickets",
+              reason: "The proposal claims a free two-person activity.",
+            },
+          ],
+        },
+        "full_send",
+      ),
     ).toBe(false);
   });
 
@@ -174,7 +239,7 @@ describe("bounded concept comparison and independent quality review", () => {
         },
       ],
     });
-    expect(acceptsQuestQuality(reviewed)).toBe(true);
+    expect(acceptsQuestQuality(reviewed, "full_send")).toBe(true);
   });
 
   it.each(["weak_twist", "unfilmable"] as const)(
@@ -194,7 +259,7 @@ describe("bounded concept comparison and independent quality review", () => {
           },
         ],
       });
-      expect(acceptsQuestQuality(reviewed)).toBe(true);
+      expect(acceptsQuestQuality(reviewed, "full_send")).toBe(true);
     },
   );
 
@@ -222,6 +287,7 @@ describe("bounded concept comparison and independent quality review", () => {
               },
             ],
           }),
+          "full_send",
         ),
       ).toBe(false);
     },
@@ -234,10 +300,13 @@ describe("bounded concept comparison and independent quality review", () => {
         approvedQuestQualityFixture(),
       );
       expect(
-        acceptsQuestQuality({
-          ...review,
-          scores: { ...review.scores, [criterion]: 3 },
-        }),
+        acceptsQuestQuality(
+          {
+            ...review,
+            scores: { ...review.scores, [criterion]: 3 },
+          },
+          "full_send",
+        ),
       ).toBe(false);
     },
   );
@@ -263,6 +332,7 @@ describe("bounded concept comparison and independent quality review", () => {
             },
           ],
         }),
+        "full_send",
       ),
     ).toBe(false);
   });
@@ -275,6 +345,7 @@ describe("bounded concept comparison and independent quality review", () => {
           decision: "reject",
           findings: [],
         }),
+        "full_send",
       ),
     ).toBe(false);
   });
@@ -300,7 +371,7 @@ describe("bounded concept comparison and independent quality review", () => {
       intensityEvidence:
         "Finding six shades of gray is ordinary observation, regardless of added rounds.",
     });
-    expect(acceptsQuestQuality(inflated)).toBe(false);
+    expect(acceptsQuestQuality(inflated, "full_send")).toBe(false);
     const { audienceExperienceFits: _fit, ...oldReview } = inflated;
     expect(questQualityReviewSchema.safeParse(oldReview).success).toBe(false);
     expect(
@@ -367,10 +438,11 @@ describe("three-call quest drafting budget and semantic gate", () => {
       (send.mock.calls[2] as unknown as [string, RequestInit])[1],
     );
     expect(expanded.selectedConcept.id).toBe("B");
-    expect(reviewed.selectedConcept).not.toHaveProperty("scores");
+    expect(reviewed).not.toHaveProperty("selectedConcept");
     expect(reviewed.proposal).toEqual({ ...proposal, minimumAge: null });
     expect(reviewed).not.toHaveProperty("candidates");
     for (const body of bodies) {
+      expect(body.instructions).toContain(QUEST_IDEA_RUBRIC);
       const context = JSON.parse(body.input[0].content[0].text);
       expect(context.experience_routing).toEqual(
         buildQuestRoutingBrief(DEFAULT_PREFERENCES, outing),

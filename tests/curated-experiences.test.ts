@@ -95,12 +95,15 @@ describe("adult editorial experience alternatives", () => {
   });
 
   it("does not call more rock-paper-scissors rounds Full Send", () => {
-    expect(
-      curatedDiscoveryFallback(
-        adult,
-        request({ adultContext: true, durationMinutes: 180 }, [place("Bar")]),
-      ),
-    ).toBeNull();
+    const result = curatedDiscoveryFallback(
+      adult,
+      request({ adultContext: true, durationMinutes: 180 }, [place("Bar")]),
+    )!;
+    expect(result.quest.title).toBe("Step Inside the Horror Story");
+    expect(result.quest.beats[1].action).toContain("actors");
+    expect(result.quest.adultOnly).toBe(false);
+    expect(result.quest.supportsAdultContext).toBe(false);
+    expect(result.location).toBeNull();
   });
 
   it("rechecks the age requirement of a saved bar plan against the current profile", () => {
@@ -198,16 +201,67 @@ describe("adult editorial experience alternatives", () => {
   });
 
   it("does not claim live tickets and rotates to a distinct experience after a rejected direction", () => {
-    const input = request({ durationMinutes: 300 }, [place("Music venue")]);
+    const input = request({ intensity: "bold", durationMinutes: 300 }, [
+      place("Music venue"),
+    ]);
     const show = curatedDiscoveryFallback(adult, input)!;
-    expect(show.quest.title).toBe("The Tickets Decide Tonight");
+    expect(show.quest.title).toBe("The Unknown Headliner");
     expect(show.quest.beats[0].action).toContain("official");
     expect(show.quest.beats[0].action).toContain("not an event listing");
     const next = curatedDiscoveryFallback(adult, input, [history(show)])!;
     expect(next.quest.title).not.toBe(show.quest.title);
     expect(next.location).toBeNull();
-    expect(next.quest.intensity).toBe("full_send");
+    expect(next.quest.intensity).toBe("bold");
   });
+
+  it("does not relabel ordinary concert attendance as Full Send", () => {
+    const result = curatedDiscoveryFallback(
+      adult,
+      request({ durationMinutes: 300 }, [place("Music venue")]),
+    )!;
+    expect(result.mechanic).not.toBe("live_show");
+    expect(result.location).toBeNull();
+  });
+
+  it.each([false, true])(
+    "does not turn a concert into adult content when nightlife opt-in is %s",
+    (adultContext) => {
+      const input = request(
+        { intensity: "bold", durationMinutes: 180, adultContext },
+        [place("Music venue")],
+      );
+      const result = curatedDiscoveryFallback(adult, input)!;
+      expect(result.mechanic).toBe("live_show");
+      expect(result.quest.adultOnly).toBe(false);
+      expect(result.quest.minimumAge).toBeUndefined();
+      expect(result.quest.supportsAdultContext).toBe(false);
+      expect(result.quest.conflicts).toEqual(["being_surprised"]);
+      const requirements = discoveryEligibility(
+        result.quest,
+        input.outing,
+        adult,
+      ).requirements.map(({ code }) => code);
+      expect(requirements).not.toContain("age");
+      expect(requirements).not.toContain("venue_permission");
+    },
+  );
+
+  it.each([false, true])(
+    "keeps hotel booking age separate from nightlife when opt-in is %s",
+    (adultContext) => {
+      const input = request({ adultContext }, [place("Hotel")]);
+      const result = curatedDiscoveryFallback(adult, input)!;
+      expect(result.mechanic).toBe("spontaneous_staycation");
+      expect(result.quest.adultOnly).toBe(true);
+      expect(result.quest.minimumAge).toBe(18);
+      expect(result.quest.supportsAdultContext).toBe(false);
+      expect(result.quest.conflicts).toEqual([]);
+      expect(
+        discoveryEligibility(result.quest, input.outing, adult).requirements
+          .map(({ code }) => code),
+      ).not.toContain("venue_permission");
+    },
+  );
 
   it("checks the complete group budget and travel before proposing a paid itinerary", () => {
     const input = request(
@@ -226,7 +280,11 @@ describe("adult editorial experience alternatives", () => {
         place("Bar"),
       ]),
     );
-    expect(solo).toBeNull();
+    expect(solo?.quest.allowedGroups).toEqual(["solo"]);
+    expect(solo?.quest.minParticipants).toBe(1);
+    expect(solo?.quest.adultOnly).toBe(false);
+    expect(solo?.quest.title).not.toMatch(/Bars|Menu Is Classified|Crew/);
+    expect(solo?.location).toBeNull();
   });
 
   it("makes the fishing rivalry real while keeping its result out of the water", () => {
@@ -276,6 +334,198 @@ describe("adult editorial experience alternatives", () => {
         profile,
         request({ ...input.outing, intensity: "full_send" }),
       ),
+    ).toBeNull();
+  });
+});
+
+describe("fallback coverage without changing the user's plan", () => {
+  it.each([
+    ["solo", 1, "home", "chill", 60, "One Album, One Listening Party"],
+    ["couple", 2, "home", "chill", 60, "One Album, One Listening Party"],
+    ["solo", 1, "home", "bold", 120, "Your Kitchen's One-Night Special"],
+    ["couple", 2, "home", "bold", 120, "Your Kitchen's One-Night Special"],
+    ["solo", 1, "outside", "chill", 60, "Your Neighborhood, Six Frames"],
+    ["couple", 2, "outside", "chill", 60, "Your Neighborhood, Six Frames"],
+    ["solo", 1, "outside", "bold", 120, "Find Your First Hidden Cache"],
+    ["couple", 2, "outside", "bold", 120, "Find Your First Hidden Cache"],
+  ] as const)(
+    "%s %s %s %s has a coherent free fallback within %s minutes",
+    (group, participants, setting, intensity, durationMinutes, title) => {
+      const input = request({
+        category: group === "couple" ? "date_night" : "daytime",
+        group,
+        participants,
+        setting,
+        intensity,
+        durationMinutes,
+        budgetMinor: 0,
+        adultEligible: false,
+      });
+      const result = curatedDiscoveryFallback(DEFAULT_PREFERENCES, input)!;
+      expect(result.quest.title).toBe(title);
+      expect(result.quest.category).toBe(input.outing.category);
+      expect(result.quest.intensity).toBe(intensity);
+      expect(result.quest.allowedGroups).toEqual([group]);
+      expect(result.quest.minParticipants).toBe(participants);
+      expect(result.quest.maxParticipants).toBe(participants);
+      expect(result.quest.settings).toEqual([setting]);
+      expect(result.quest.durationMinutes).toBeLessThanOrEqual(durationMinutes);
+      expect(result.quest.cost.venueCostUnknown).toBe(false);
+      expect(result.quest.arrangementRequired).toBe(false);
+      expect(result.quest.adultOnly).toBe(false);
+      expect(result.location).toBeNull();
+      expect(
+        discoveryEligibility(result.quest, input.outing, DEFAULT_PREFERENCES),
+      ).toEqual({
+        blocking: [],
+        requirements: [],
+      });
+      expect(result.quest.fallback).not.toContain("phone and contacts");
+    },
+  );
+
+  it("keeps a free photowalk inside actual time, travel and area boundaries", () => {
+    const input = request(
+      {
+        category: "daytime",
+        group: "solo",
+        participants: 1,
+        setting: "outside",
+        intensity: "chill",
+        durationMinutes: 60,
+        travelMinutes: 15,
+        budgetMinor: 0,
+      },
+      [place("Park")],
+    );
+    const preferences: Preferences = {
+      ...DEFAULT_PREFERENCES,
+      exclusions: ["physical_challenges", "strangers"],
+    };
+    const result = curatedDiscoveryFallback(preferences, input)!;
+    expect(result.quest.title).toBe("Your Neighborhood, Six Frames");
+    expect(result.location?.category).toBe("Park");
+    expect(result.quest.beats[0].action).toContain("selected area");
+    expect(result.quest.beats[0].action).toContain("Check access");
+    expect(
+      curatedDiscoveryFallback(
+        {
+          ...preferences,
+          exclusions: ["travel_outside_area"],
+        },
+        input,
+      ),
+    ).toBeNull();
+    expect(
+      curatedDiscoveryFallback(preferences, {
+        ...input,
+        outing: { ...input.outing, travelMinutes: 16 },
+      }),
+    ).toBeNull();
+    expect(
+      curatedDiscoveryFallback(preferences, {
+        ...input,
+        outing: { ...input.outing, travelCostMinor: 100 },
+      }),
+    ).toBeNull();
+  });
+
+  it("does not invent a real cache from a park listing or ignore a physical exclusion", () => {
+    const input = request(
+      {
+        group: "couple",
+        participants: 2,
+        setting: "outside",
+        intensity: "bold",
+        durationMinutes: 90,
+        budgetMinor: 0,
+      },
+      [place("Park")],
+    );
+    const result = curatedDiscoveryFallback(DEFAULT_PREFERENCES, input)!;
+    expect(result.quest.beats[0].action).toContain("does not prove a cache");
+    expect(result.quest.requirements.join(" ")).toContain("verifying");
+    expect(
+      curatedDiscoveryFallback(
+        {
+          ...DEFAULT_PREFERENCES,
+          exclusions: ["physical_challenges"],
+        },
+        input,
+      ),
+    ).toBeNull();
+  });
+
+  it.each([120, 180])(
+    "offers a genuine Full Send commitment within a %s-minute eligible nightlife plan",
+    (durationMinutes) => {
+      const input = request(
+        { adultContext: true, durationMinutes, budgetMinor: 20000 },
+        [place("Horror escape")],
+      );
+      const result = curatedDiscoveryFallback(adult, input)!;
+      expect(result.quest.title).toBe("Step Inside the Horror Story");
+      expect(result.quest.beats[0].action).toContain("live-actor");
+      expect(result.quest.beats[0].action).toContain("at most 75 minutes");
+      expect(result.quest.cost.venueCostUnknown).toBe(true);
+      expect(result.quest.adultOnly).toBe(false);
+      expect(result.quest.minimumAge).toBeUndefined();
+      expect(result.quest.supportsAdultContext).toBe(false);
+      const eligibility = discoveryEligibility(
+        result.quest,
+        input.outing,
+        adult,
+      );
+      expect(eligibility.blocking).toEqual([]);
+      expect(eligibility.requirements.map(({ code }) => code)).toEqual([
+        "venue_cost",
+        "arrangements",
+      ]);
+    },
+  );
+
+  it("retains honest no-fit outcomes instead of upgrading mild activities to Full Send", () => {
+    for (const setting of ["home", "outside"] as const) {
+      for (const group of ["solo", "couple"] as const) {
+        expect(
+          curatedDiscoveryFallback(
+            adult,
+            request({
+              group,
+              participants: group === "solo" ? 1 : 2,
+              setting,
+              intensity: "full_send",
+              durationMinutes: 60,
+              budgetMinor: 0,
+            }),
+          ),
+        ).toBeNull();
+      }
+    }
+    const input = request({ adultContext: true, durationMinutes: 120 });
+    expect(
+      curatedDiscoveryFallback(
+        {
+          ...adult,
+          exclusions: ["physical_challenges", "being_surprised"],
+        },
+        input,
+      ),
+    ).toBeNull();
+  });
+
+  it("respects rerolls even when only one fitting free alternative remains", () => {
+    const input = request({
+      group: "solo",
+      participants: 1,
+      setting: "home",
+      intensity: "chill",
+      durationMinutes: 60,
+      budgetMinor: 0,
+    });
+    const first = curatedDiscoveryFallback(DEFAULT_PREFERENCES, input)!;
+    expect(
+      curatedDiscoveryFallback(DEFAULT_PREFERENCES, input, [history(first)]),
     ).toBeNull();
   });
 });

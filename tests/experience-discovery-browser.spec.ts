@@ -1,6 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 import { catalog } from "../shared/catalog";
-import { DEFAULT_OUTING, type Candidate, type Outing } from "../shared/domain";
+import {
+  DEFAULT_OUTING,
+  DEFAULT_PREFERENCES,
+  type Candidate,
+  type Outing,
+} from "../shared/domain";
+import { discoveryEligibility } from "../shared/experience-discovery";
 import type {
   DiscoveryPlace,
   ExperienceDiscoveryRequest,
@@ -353,6 +359,107 @@ async function confirmBooking(page: Page, price = "180") {
       exact: true,
     })
     .check();
+}
+
+for (const adultContent of [false, true]) {
+  test(`nightlife discovery keeps ${adultContent ? "actual adult preflight compatible with older clients" : "unrestricted content free of adult confirmations"}`, async ({
+    page,
+  }) => {
+    const preferences = {
+      ...DEFAULT_PREFERENCES,
+      ageBand: "21_plus" as const,
+      sources: { ageBand: "survey" as const },
+    };
+    await page.addInitScript((preferences) => {
+      localStorage.setItem(
+        "sidequest-demo-v1",
+        JSON.stringify({
+          me: {
+            profile: {
+              accountType: "personal",
+              displayName: "Alex",
+              timezone: "UTC",
+              locale: "en",
+              summary: "",
+              onboardingCompleted: true,
+              preferences,
+            },
+            wallet: { xp: 0, points: 0, version: 0 },
+            roles: [],
+          },
+          runs: [],
+        }),
+      );
+    }, preferences);
+    const plan = { ...venuePlan, adultContext: true, adultEligible: true };
+    await prepare(page, { initialOuting: plan });
+    const suggestion = result(plan, { conditional: false });
+    const quest = suggestion.candidates[0];
+    // No booking or explicit filming-permission flag: an actual adult venue
+    // still carries its permission control through discovery requirements.
+    Object.assign(quest, {
+      minimumAge: adultContent ? 21 : undefined,
+      adultOnly: adultContent,
+      supportsAdultContext: adultContent,
+      conflicts: adultContent ? ["alcohol", "adult_venues"] : [],
+    });
+    suggestion.proposals[0].requirements = discoveryEligibility(
+      quest,
+      plan,
+      preferences,
+    ).requirements;
+    await page.route("**/api/quests/discover", (route) =>
+      route.fulfill({ json: suggestion }),
+    );
+    for (let step = 0; step < 7; step++) await continueStep(page);
+    await page
+      .getByRole("button", { name: "Find my quests", exact: true })
+      .click();
+    await page.locator(".quest-card").click();
+    const accept = page.getByRole("button", {
+      name: "Accept quest",
+      exact: true,
+    });
+    if (adultContent) {
+      await expect(accept).toBeDisabled();
+      await expect(page.getByRole("checkbox")).toHaveCount(2);
+      await page
+        .getByRole("checkbox", {
+          name: "Everyone taking part meets this activity’s age requirement.",
+          exact: true,
+        })
+        .check();
+      await expect(accept).toBeDisabled();
+      await page
+        .getByRole("checkbox", {
+          name: "The venue allows this activity and our filming.",
+          exact: true,
+        })
+        .check();
+      const ageConfirmation = page.getByRole("checkbox", {
+        name: "Everyone taking part meets this activity’s age requirement.",
+        exact: true,
+      });
+      await expect(ageConfirmation).toBeChecked();
+      await ageConfirmation.uncheck();
+      await expect(accept).toBeDisabled();
+      await ageConfirmation.check();
+    } else {
+      await expect(page.getByRole("checkbox")).toHaveCount(0);
+    }
+    await expect(accept).toBeEnabled();
+    await accept.click();
+    await expect(page.getByRole("alert")).toContainText(acceptError);
+    const payloads = await accepted(page);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].outing).toMatchObject({
+      // Build 15 clears the suggestion opt-in on selection. Selecting the
+      // actual proposal and confirming its requirements is the activity opt-in.
+      adultContext: false,
+      adultEligible: adultContent,
+      venuePermission: adultContent,
+    });
+  });
 }
 
 test("normal Find my quests sends the unchanged Down for Anything Full Send outing to OpenAI and checks the chosen private experience before accepting", async ({

@@ -1,0 +1,696 @@
+[
+  {
+    "id": "couple-date-chill-venue-age-unknown",
+    "request": {
+      "outing": {
+        "category": "date_night",
+        "intensity": "chill",
+        "group": "couple",
+        "participants": 2,
+        "budgetMinor": 6000,
+        "budgetScope": "total",
+        "currency": "USD",
+        "durationMinutes": 120,
+        "setting": "venue",
+        "area": "",
+        "transport": "walk",
+        "travelMinutes": 10,
+        "travelCostMinor": 0,
+        "venuePermission": false,
+        "arrangementConfirmed": false,
+        "adultEligible": false,
+        "adultContext": false,
+        "confirmedVenueCostMinor": null
+      },
+      "provider": "openai",
+      "consent": true,
+      "nearbyPlaces": [
+        {
+          "name": "Synthetic Corner Bistro",
+          "category": "Restaurant",
+          "id": "I98760",
+          "address": "Synthetic address",
+          "latitude": 27.77,
+          "longitude": -82.64
+        },
+        {
+          "name": "Synthetic Night Market",
+          "category": "Food hall",
+          "id": "I98761",
+          "address": "Synthetic address",
+          "latitude": 27.78,
+          "longitude": -82.64
+        }
+      ]
+    },
+    "preferencesFields": {
+      "interests": ["cooking"],
+      "approach": "group_only"
+    },
+    "previous": [],
+    "reviewRegression": null
+  },
+  {
+    "id": "couple-date-full-send-outside-no-listings",
+    "request": {
+      "outing": {
+        "category": "date_night",
+        "intensity": "full_send",
+        "group": "couple",
+        "participants": 2,
+        "budgetMinor": 10000,
+        "budgetScope": "total",
+        "currency": "USD",
+        "durationMinutes": 180,
+        "setting": "outside",
+        "area": "",
+        "transport": "transit",
+        "travelMinutes": 20,
+        "travelCostMinor": 800,
+        "venuePermission": false,
+        "arrangementConfirmed": false,
+        "adultEligible": false,
+        "adultContext": false,
+        "confirmedVenueCostMinor": null
+      },
+      "provider": "openai",
+      "consent": true,
+      "nearbyPlaces": []
+    },
+    "preferencesFields": {
+      "ageBand": "21_plus",
+      "interests": ["sports", "music"],
+      "approach": "group_only",
+      "role": "rotate"
+    },
+    "previous": [],
+    "reviewRegression": null
+  },
+  {
+    "id": "couple-late-night-bold-nightlife-alcohol-excluded",
+    "request": {
+      "outing": {
+        "category": "late_night",
+        "intensity": "bold",
+        "group": "couple",
+        "participants": 2,
+        "budgetMinor": 15000,
+        "budgetScope": "total",
+        "currency": "USD",
+        "durationMinutes": 120,
+        "setting": "venue",
+        "area": "",
+        "transport": "transit",
+        "travelMinutes": 15,
+        "travelCostMinor": 2000,
+        "venuePermission": false,
+        "arrangementConfirmed": false,
+        "adultEligible": true,
+        "adultContext": true,
+        "confirmedVenueCostMinor": null
+      },
+      "provider": "openai",
+      "consent": true,
+      "nearbyPlaces": [
+        {
+          "name": "Synthetic Wine Bar",
+          "category": "Wine bar",
+          "id": "I98760",
+          "address": "Synthetic address",
+          "latitude": 27.77,
+          "longitude": -82.64
+        },
+        {
+          "name": "Synthetic Cocktail House",
+          "category": "Cocktail bar",
+          "id": "I98761",
+          "address": "Synthetic address",
+          "latitude": 27.78,
+          "longitude": -82.64
+        },
+        {
+          "name": "Synthetic Comedy Cellar",
+          "category": "Comedy club",
+          "id": "I98762",
+          "address": "Synthetic address",
+          "latitude": 27.79,
+          "longitude": -82.64
+        }
+      ]
+    },
+    "preferencesFields": {
+      "ageBand": "21_plus",
+      "exclusions": ["alcohol"],
+      "interests": ["music", "comedy"],
+      "approach": "group_only"
+    },
+    "previous": [],
+    "reviewRegression": null,
+    "fixtureNote": "Audit used unsupported transport rideshare. Replay uses supported transit, preserving reserved travel time and cost."
+  },
+  {
+    "id": "friends3-demon-full-send-unlimited-nightlife",
+    "request": {
+      "outing": {
+        "category": "demon",
+        "intensity": "full_send",
+        "group": "friends",
+        "participants": 3,
+        "budgetMinor": 90000,
+        "budgetScope": "total",
+        "currency": "USD",
+        "durationMinutes": null,
+        "setting": "venue",
+        "area": "",
+        "transport": "transit",
+        "travelMinutes": 20,
+        "travelCostMinor": 4000,
+        "venuePermission": false,
+        "arrangementConfirmed": false,
+        "adultEligible": true,
+        "adultContext": true,
+        "confirmedVenueCostMinor": null
+      },
+      "provider": "openai",
+      "consent": true,
+      "nearbyPlaces": [
+        {
+          "name": "Synthetic Harbor Hotel",
+          "category": "Hotel",
+          "id": "I98760",
+          "address": "Synthetic address",
+          "latitude": 27.77,
+          "longitude": -82.64
+        },
+        {
+          "name": "Synthetic Dive Bar",
+          "category": "Bar",
+          "id": "I98761",
+          "address": "Synthetic address",
+          "latitude": 27.78,
+          "longitude": -82.64
+        },
+        {
+          "name": "Synthetic Music Room",
+          "category": "Live music venue",
+          "id": "I98762",
+          "address": "Synthetic address",
+          "latitude": 27.79,
+          "longitude": -82.64
+        }
+      ]
+    },
+    "preferencesFields": {
+      "ageBand": "21_plus",
+      "humor": ["absurd", "surprises"],
+      "interests": ["music"],
+      "approach": "group_only",
+      "role": "rotate"
+    },
+    "previous": [],
+    "reviewRegression": {
+      "id": "private_b37e905b-b183-46d1-a9ed-8fb785ede034",
+      "familyId": "private_demon_live_show",
+      "version": 1,
+      "category": "demon",
+      "intensity": "full_send",
+      "title": "Three Friends, One Loud Night",
+      "hook": "Find tonight's loudest mutual yes, get into the room, and make an unfamiliar band's entire headline set your night.",
+      "privateGenerated": true,
+      "minimumAge": 21,
+      "durationMinutes": 180,
+      "minParticipants": 3,
+      "maxParticipants": 3,
+      "allowedGroups": ["friends"],
+      "cost": {
+        "minMinor": 0,
+        "maxMinor": 0,
+        "currency": "USD",
+        "scope": "total",
+        "venueCostUnknown": true,
+        "note": "Current pricing is unconfirmed; zero is a pending-price placeholder, not a free estimate. Confirm one complete group charge covering every required purchase, including any rooms, meals, tickets, rentals, taxes and fees, before accepting. It must fit your remaining activity budget; travel is reserved separately."
+      },
+      "settings": ["venue"],
+      "interests": ["music", "nightlife", "discovery"],
+      "roles": ["rotate"],
+      "preparation": "a_few_things",
+      "conflicts": ["adult_venues", "alcohol"],
+      "venuePermissionRequired": false,
+      "arrangementRequired": true,
+      "adultOnly": true,
+      "supportsAdultContext": true,
+      "requiresVolunteer": false,
+      "beats": [
+        {
+          "label": "Preparation",
+          "action": "Each friend gets one brief listening pick from today's verified Synthetic Music Room bill; choose only a show all three want. Agree on an exit signal, put in hearing protection, and pick a lively viewing spot without pushing through people.",
+          "filming": "Optionally record your three first impressions outside where permitted, keeping other guests out of frame.",
+          "caption": "We picked the band; the night is still a mystery."
+        },
+        {
+          "label": "The challenge",
+          "action": "Give the complete headline set one committed attempt together: listen, dance if you want, and keep phones away unless briefly filming is allowed. Rotate who suggests the next viewing spot between sets; no moshing, crowd-surfing or pressure to stay uncomfortable.",
+          "filming": "Only capture a brief permitted stage clip; do not film identifiable patrons without agreement.",
+          "caption": "Three friends, one full set, no background-music energy."
+        },
+        {
+          "label": "The result",
+          "action": "After the set, each name the moment that landed hardest and decide whether you'd see the act again. A shortened attempt still counts as an honest outing: say when you left and why rather than pretending you finished.",
+          "filming": "Optionally record a quiet after-reaction with only your willing friends in frame.",
+          "caption": "The honest verdict, ringing ears not required."
+        }
+      ],
+      "materials": [
+        "Bring the identification required by the venue.",
+        "Bring music-rated hearing protection for each friend.",
+        "Bring a charged phone for tickets and rideshares."
+      ],
+      "completionQuestions": [
+        "Did all three attend, and how much of the headline set did you experience?",
+        "Which live moment changed your first impression of the act?",
+        "Did anyone need to move or leave, and did the group respect that?"
+      ],
+      "fallback": "If Synthetic Music Room has no suitable bill or three available admissions, check another live-music venue for a high-energy show using the same checks. If none fits today, offer the private karaoke concert instead, with fresh group agreement and a confirmed room quote before booking.",
+      "requirements": [
+        "Pending: check Synthetic Music Room's actual bill, three admissions, age/ID rules, access and set times. Reserve only after all three approve; the listing alone confirms none of these.",
+        "Pending: confirm a complete group price before purchase. Allow 180 minutes for preparation, the performance and wrap-up, plus the separate 20-minute travel reserve; no outing time limit was supplied.",
+        "Agree on sound and crowd comfort before booking. Check recording rules; filming is optional. Drinks are optional with no quota or penalty for declining, and return by rideshare."
+      ],
+      "award": {
+        "xp": 0,
+        "points": 0
+      },
+      "cooldownDays": 30
+    },
+    "fixtureNote": "Audit used unsupported transport rideshare. Replay uses supported transit, preserving reserved travel time and cost."
+  },
+  {
+    "id": "friends4-late-night-full-send-nightlife-REROLL",
+    "request": {
+      "outing": {
+        "category": "late_night",
+        "intensity": "full_send",
+        "group": "friends",
+        "participants": 4,
+        "budgetMinor": 40000,
+        "budgetScope": "total",
+        "currency": "USD",
+        "durationMinutes": 240,
+        "setting": "venue",
+        "area": "",
+        "transport": "transit",
+        "travelMinutes": 15,
+        "travelCostMinor": 3000,
+        "venuePermission": false,
+        "arrangementConfirmed": false,
+        "adultEligible": true,
+        "adultContext": true,
+        "confirmedVenueCostMinor": null
+      },
+      "provider": "openai",
+      "consent": true,
+      "nearbyPlaces": [
+        {
+          "name": "Synthetic Cocktail House",
+          "category": "Cocktail bar",
+          "id": "I98760",
+          "address": "Synthetic address",
+          "latitude": 27.77,
+          "longitude": -82.64
+        },
+        {
+          "name": "Synthetic Dive Bar",
+          "category": "Bar",
+          "id": "I98761",
+          "address": "Synthetic address",
+          "latitude": 27.78,
+          "longitude": -82.64
+        },
+        {
+          "name": "Synthetic Lanes",
+          "category": "Bowling alley",
+          "id": "I98762",
+          "address": "Synthetic address",
+          "latitude": 27.79,
+          "longitude": -82.64
+        }
+      ]
+    },
+    "preferencesFields": {
+      "ageBand": "21_plus",
+      "humor": ["absurd"],
+      "interests": ["games"],
+      "approach": "group_only",
+      "role": "rotate"
+    },
+    "previous": [
+      {
+        "title": "Four Games, No Hiding",
+        "activity": "Play three standard games using those pairings; the higher combined score wins each game, with ties shared. Then reset for a singles finale, rotate scorekeeping each game and follow normal bowling rules without trick throws.",
+        "mechanic": "competition"
+      }
+    ],
+    "reviewRegression": null,
+    "fixtureNote": "Audit used unsupported transport rideshare. Replay uses supported transit, preserving reserved travel time and cost."
+  },
+  {
+    "id": "friends4-late-night-full-send-nightlife-alcohol-ok",
+    "request": {
+      "outing": {
+        "category": "late_night",
+        "intensity": "full_send",
+        "group": "friends",
+        "participants": 4,
+        "budgetMinor": 40000,
+        "budgetScope": "total",
+        "currency": "USD",
+        "durationMinutes": 240,
+        "setting": "venue",
+        "area": "",
+        "transport": "transit",
+        "travelMinutes": 15,
+        "travelCostMinor": 3000,
+        "venuePermission": false,
+        "arrangementConfirmed": false,
+        "adultEligible": true,
+        "adultContext": true,
+        "confirmedVenueCostMinor": null
+      },
+      "provider": "openai",
+      "consent": true,
+      "nearbyPlaces": [
+        {
+          "name": "Synthetic Cocktail House",
+          "category": "Cocktail bar",
+          "id": "I98760",
+          "address": "Synthetic address",
+          "latitude": 27.77,
+          "longitude": -82.64
+        },
+        {
+          "name": "Synthetic Dive Bar",
+          "category": "Bar",
+          "id": "I98761",
+          "address": "Synthetic address",
+          "latitude": 27.78,
+          "longitude": -82.64
+        },
+        {
+          "name": "Synthetic Lanes",
+          "category": "Bowling alley",
+          "id": "I98762",
+          "address": "Synthetic address",
+          "latitude": 27.79,
+          "longitude": -82.64
+        }
+      ]
+    },
+    "preferencesFields": {
+      "ageBand": "21_plus",
+      "humor": ["absurd"],
+      "interests": ["games"],
+      "approach": "group_only",
+      "role": "rotate"
+    },
+    "previous": [],
+    "reviewRegression": {
+      "id": "private_98898a45-5327-4e59-997f-c12acda1a0a6",
+      "familyId": "private_late_night_competition",
+      "version": 1,
+      "category": "late_night",
+      "intensity": "full_send",
+      "title": "Four Games, No Hiding",
+      "hook": "Three games to turn every friend into your teammate. One singles finale to settle the lane bragging rights.",
+      "privateGenerated": true,
+      "minimumAge": 21,
+      "durationMinutes": 225,
+      "minParticipants": 4,
+      "maxParticipants": 4,
+      "allowedGroups": ["friends"],
+      "cost": {
+        "minMinor": 0,
+        "maxMinor": 0,
+        "currency": "USD",
+        "scope": "total",
+        "venueCostUnknown": true,
+        "note": "Current pricing is unconfirmed; zero is a pending-price placeholder, not a free estimate. Confirm one complete group charge covering every required purchase, including any rooms, meals, tickets, rentals, taxes and fees, before accepting. It must fit your remaining activity budget; travel is reserved separately."
+      },
+      "settings": ["venue"],
+      "interests": ["games", "absurd humor", "nightlife"],
+      "roles": ["rotate"],
+      "preparation": "a_few_things",
+      "conflicts": ["physical_challenges"],
+      "venuePermissionRequired": false,
+      "arrangementRequired": true,
+      "adultOnly": true,
+      "supportsAdultContext": true,
+      "requiresVolunteer": false,
+      "beats": [
+        {
+          "label": "Preparation",
+          "action": "At Synthetic Lanes, fit your shoes, choose ridiculous bowling aliases and assign yourselves numbers one through four. Record the pairings: 1+2 versus 3+4, then 1+3 versus 2+4, then 1+4 versus 2+3.",
+          "filming": "Optionally capture your own shoes and consenting friends introducing their aliases, if venue rules allow.",
+          "caption": "Tonight's deeply unserious bowling delegation."
+        },
+        {
+          "label": "The challenge",
+          "action": "Play three standard games using those pairings; the higher combined score wins each game, with ties shared. Then reset for a singles finale, rotate scorekeeping each game and follow normal bowling rules without trick throws.",
+          "filming": "Optionally film consenting friends' deliveries from behind your own lane, keeping other patrons out of frame.",
+          "caption": "Every teammate becomes the opposition."
+        },
+        {
+          "label": "The result",
+          "action": "The highest singles score earns bragging rights; ties share the title, and each friend names their best recovery or funniest gutter ball. Stop before the 225-minute activity limit; if the finale is unfinished, record the attempt honestly without declaring a singles champion.",
+          "filming": "Capture an optional four-person reaction after play; a missed shot is as legitimate as a strike.",
+          "caption": "Four friends, one lane, absolutely no guaranteed glory."
+        }
+      ],
+      "materials": [
+        "Bring suitable socks.",
+        "Obtain venue-approved bowling shoes and balls.",
+        "Bring a phone or paper for pairings and results.",
+        "Bring any identification required by the venue."
+      ],
+      "completionQuestions": [
+        "How many games did all four friends complete?",
+        "Did the singles finale finish, and what was the honest result?",
+        "Which shot or comeback would your group talk about tomorrow?"
+      ],
+      "fallback": "If Synthetic Lanes cannot accommodate the session, check another bowling venue for the same four-person format within the travel allowance. Confirm its complete price and slot first; if none fits, postpone rather than pretend the championship is booked.",
+      "requirements": [
+        "Confirm today's late-night hours, entry rules and a lane slot at Synthetic Lanes. Allow preparation and wrap-up inside 225 minutes; travel has a separate 15-minute allowance.",
+        "Ask whether four games for four players fit the available slot, and confirm one complete group charge covering lane use, shoe hire, admission if applicable and all mandatory fees before payment.",
+        "Confirm all four friends want the bowling session and can participate comfortably. Follow lane safety rules; filming is optional and subject to venue rules and each person's agreement."
+      ],
+      "award": {
+        "xp": 0,
+        "points": 0
+      },
+      "cooldownDays": 30
+    },
+    "fixtureNote": "Audit used unsupported transport rideshare. Replay uses supported transit, preserving reserved travel time and cost."
+  },
+  {
+    "id": "friends6-street-bold-outside-per-person",
+    "request": {
+      "outing": {
+        "category": "street_challenges",
+        "intensity": "bold",
+        "group": "friends",
+        "participants": 6,
+        "budgetMinor": 3000,
+        "budgetScope": "per_person",
+        "currency": "USD",
+        "durationMinutes": 180,
+        "setting": "outside",
+        "area": "",
+        "transport": "walk",
+        "travelMinutes": 10,
+        "travelCostMinor": 0,
+        "venuePermission": false,
+        "arrangementConfirmed": false,
+        "adultEligible": false,
+        "adultContext": false,
+        "confirmedVenueCostMinor": null
+      },
+      "provider": "openai",
+      "consent": true,
+      "nearbyPlaces": [
+        {
+          "name": "Synthetic Riverside Park",
+          "category": "Park",
+          "id": "I98760",
+          "address": "Synthetic address",
+          "latitude": 27.77,
+          "longitude": -82.64
+        }
+      ]
+    },
+    "preferencesFields": {
+      "humor": ["friendly_awkward"],
+      "interests": ["local_knowledge"],
+      "exclusions": ["strangers"],
+      "approach": "group_only"
+    },
+    "previous": [],
+    "reviewRegression": null
+  },
+  {
+    "id": "solo-daytime-bold-home-free",
+    "request": {
+      "outing": {
+        "category": "daytime",
+        "intensity": "bold",
+        "group": "solo",
+        "participants": 1,
+        "budgetMinor": 0,
+        "budgetScope": "total",
+        "currency": "USD",
+        "durationMinutes": 60,
+        "setting": "home",
+        "area": "",
+        "transport": "none",
+        "travelMinutes": 0,
+        "travelCostMinor": 0,
+        "venuePermission": false,
+        "arrangementConfirmed": false,
+        "adultEligible": false,
+        "adultContext": false,
+        "confirmedVenueCostMinor": null
+      },
+      "provider": "openai",
+      "consent": true,
+      "nearbyPlaces": []
+    },
+    "preferencesFields": {
+      "ageBand": "18_20",
+      "interests": ["cooking", "comedy"],
+      "skills": ["none"]
+    },
+    "previous": [],
+    "reviewRegression": null
+  },
+  {
+    "id": "under18-friends4-demon-full-send-venue",
+    "request": {
+      "outing": {
+        "category": "demon",
+        "intensity": "full_send",
+        "group": "friends",
+        "participants": 4,
+        "budgetMinor": 20000,
+        "budgetScope": "total",
+        "currency": "USD",
+        "durationMinutes": 180,
+        "setting": "venue",
+        "area": "",
+        "transport": "transit",
+        "travelMinutes": 15,
+        "travelCostMinor": 1000,
+        "venuePermission": false,
+        "arrangementConfirmed": false,
+        "adultEligible": false,
+        "adultContext": false,
+        "confirmedVenueCostMinor": null
+      },
+      "provider": "openai",
+      "consent": true,
+      "nearbyPlaces": [
+        {
+          "name": "Synthetic Trampoline Park",
+          "category": "Trampoline park",
+          "id": "I98760",
+          "address": "Synthetic address",
+          "latitude": 27.77,
+          "longitude": -82.64
+        },
+        {
+          "name": "Synthetic Game Hall",
+          "category": "Arcade",
+          "id": "I98761",
+          "address": "Synthetic address",
+          "latitude": 27.78,
+          "longitude": -82.64
+        }
+      ]
+    },
+    "preferencesFields": {
+      "ageBand": "under_18",
+      "humor": ["absurd", "competitive"],
+      "interests": ["games", "sports"],
+      "approach": "group_only",
+      "role": "rotate"
+    },
+    "previous": [],
+    "reviewRegression": null
+  },
+  {
+    "id": "friends4-full-send-after-horror",
+    "request": {
+      "outing": {
+        "category": "late_night",
+        "intensity": "full_send",
+        "group": "friends",
+        "participants": 4,
+        "budgetMinor": 40000,
+        "budgetScope": "total",
+        "currency": "USD",
+        "durationMinutes": 240,
+        "setting": "venue",
+        "area": "",
+        "transport": "transit",
+        "travelMinutes": 15,
+        "travelCostMinor": 3000,
+        "venuePermission": false,
+        "arrangementConfirmed": false,
+        "adultEligible": true,
+        "adultContext": true,
+        "confirmedVenueCostMinor": null
+      },
+      "provider": "openai",
+      "consent": true,
+      "nearbyPlaces": [
+        {
+          "name": "Synthetic Cocktail House",
+          "category": "Cocktail bar",
+          "id": "I98760",
+          "address": "Synthetic address",
+          "latitude": 27.77,
+          "longitude": -82.64
+        },
+        {
+          "name": "Synthetic Dive Bar",
+          "category": "Bar",
+          "id": "I98761",
+          "address": "Synthetic address",
+          "latitude": 27.78,
+          "longitude": -82.64
+        },
+        {
+          "name": "Synthetic Lanes",
+          "category": "Bowling alley",
+          "id": "I98762",
+          "address": "Synthetic address",
+          "latitude": 27.79,
+          "longitude": -82.64
+        }
+      ]
+    },
+    "preferencesFields": {
+      "ageBand": "21_plus",
+      "humor": ["absurd"],
+      "interests": ["games"],
+      "approach": "group_only",
+      "role": "rotate"
+    },
+    "previous": [
+      {
+        "title": "Four In, Lights Out",
+        "activity": "Take one full attempt at the booked scenario: search permitted areas, share clues and solve toward its ending while the cast delivers the advertised scares. Follow operator rules, never touch actors or force props, and use hints or the stop signal without penalty.",
+        "mechanic": "adrenaline"
+      }
+    ],
+    "reviewRegression": null,
+    "fixtureNote": "Additional regression derived from the current live horror result, not one of Claude\u2019s nine audit cases. Tests whether another request explores a materially different experience."
+  }
+]
